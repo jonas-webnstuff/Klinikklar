@@ -414,6 +414,7 @@ export default function WorkspacePage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        plan: activePlan,
         clinicName: profile.clinicName,
         municipality: profile.municipality,
         careScope: answers.care_scope.answer,
@@ -425,10 +426,11 @@ export default function WorkspacePage() {
     });
 
     if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
       setGenerated((prev) => ({
         ...prev,
         [kind]: {
-          content: "Kunde inte generera innehåll. Försök igen.",
+          content: data.error || "Kunde inte generera innehåll. Försök igen.",
           approved: false,
           isLoading: false,
         },

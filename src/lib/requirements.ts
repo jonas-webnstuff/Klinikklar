@@ -55,10 +55,10 @@ export const complianceRequirements: ComplianceRequirement[] = [
   },
   {
     code: "R-05",
-    title: "Egenkontroll",
+    title: "Internkontroll",
     description: "Plan för löpande internkontroll och förbättring.",
     documentKind: "egenkontroll",
-    availableFrom: "step2",
+    availableFrom: "step3",
   },
 ];
 

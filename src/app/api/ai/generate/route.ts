@@ -10,9 +10,9 @@ const planRank = {
 } as const;
 
 const planLabels = {
-  step1: "Bli klinikklar",
-  step2: "Driv kliniken rätt",
-  step3: "Var alltid redo",
+  step1: "Klinikklar Start",
+  step2: "Klinikklar Drift",
+  step3: "Klinikklar Premium",
 } as const;
 
 const bodySchema = z.object({

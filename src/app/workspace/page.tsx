@@ -37,9 +37,15 @@ type HelpEntry = {
 type PlanLevel = "step1" | "step2" | "step3";
 
 const planLabels: Record<PlanLevel, string> = {
-  step1: "Bli klinikklar",
-  step2: "Driv kliniken rätt",
-  step3: "Var alltid redo",
+  step1: "Klinikklar Start",
+  step2: "Klinikklar Drift",
+  step3: "Klinikklar Premium",
+};
+
+const planFeatureMap: Record<PlanLevel, string[]> = {
+  step1: ["IVO", "Ledningssystem", "Dokument", "AI", "Checklistor", "Support"],
+  step2: ["Uppdateringar", "Avvikelser", "Rutiner", "Riskanalyser", "Årshjul"],
+  step3: ["AI Compliance Officer", "Regelbevakning", "AI-förslag", "Revision", "Internkontroll"],
 };
 
 const planAccessRank: Record<PlanLevel, number> = {
@@ -123,6 +129,13 @@ const ledningssystemModules = [
     description: "Ansvar, processer och styrande dokument hålls uppdaterade.",
   },
   {
+    key: "routine_updates",
+    title: "Rutiner och uppdateringar",
+    availableFrom: "step2" as PlanLevel,
+    cadence: "Löpande",
+    description: "Versionera rutiner och förändringar i driftarbetet.",
+  },
+  {
     key: "incident_management",
     title: "Avvikelsehantering",
     availableFrom: "step2" as PlanLevel,
@@ -131,24 +144,45 @@ const ledningssystemModules = [
   },
   {
     key: "risk_register",
-    title: "Riskregister",
+    title: "Riskanalyser",
     availableFrom: "step2" as PlanLevel,
     cadence: "Kvartalsvis genomgång",
     description: "Följ risknivå, åtgärdsägare och status över tid.",
   },
   {
-    key: "self_monitoring",
-    title: "Egenkontroll",
+    key: "year_wheel",
+    title: "Årshjul",
     availableFrom: "step2" as PlanLevel,
+    cadence: "Planering per period",
+    description: "Schemalägg kontroller, genomgångar och uppföljning över året.",
+  },
+  {
+    key: "self_monitoring",
+    title: "Internkontroll",
+    availableFrom: "step3" as PlanLevel,
     cadence: "Vecko- och månadspunkter",
     description: "Planera och stäng kontroller med tydliga deadlines.",
   },
   {
-    key: "improvement_plans",
-    title: "Förbättringsplaner",
-    availableFrom: "step2" as PlanLevel,
-    cadence: "Uppföljning varannan vecka",
-    description: "Knyt åtgärder till rotorsaker och verifiera effekt.",
+    key: "ai_officer",
+    title: "AI Compliance Officer",
+    availableFrom: "step3" as PlanLevel,
+    cadence: "Löpande assistans",
+    description: "Få AI-stöd för prioritering, dokumentgranskning och nästa steg.",
+  },
+  {
+    key: "ai_suggestions",
+    title: "AI-förslag",
+    availableFrom: "step3" as PlanLevel,
+    cadence: "Efter varje uppdatering",
+    description: "Förslag på åtgärder utifrån risker, avvikelser och uppföljning.",
+  },
+  {
+    key: "revision_readiness",
+    title: "Revision",
+    availableFrom: "step3" as PlanLevel,
+    cadence: "Införsyn + intern revision",
+    description: "Samla underlag och kontrollpunkter för intern och extern granskning.",
   },
   {
     key: "regulation_watch",
@@ -294,6 +328,14 @@ export default function WorkspacePage() {
   const availableModules = ledningssystemModules.filter(
     (module) => planAccessRank[module.availableFrom] <= planAccessRank[activePlan]
   );
+
+  const activePlanFeatures = useMemo(() => {
+    const orderedPlans: PlanLevel[] = ["step1", "step2", "step3"];
+
+    return orderedPlans
+      .filter((plan) => planAccessRank[plan] <= planAccessRank[activePlan])
+      .flatMap((plan) => planFeatureMap[plan]);
+  }, [activePlan]);
 
   const hasPlanAccess = (requiredPlan: PlanLevel) =>
     planAccessRank[activePlan] >= planAccessRank[requiredPlan];
@@ -497,6 +539,21 @@ export default function WorkspacePage() {
         <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
           Aktiv nivå: {planLabels[activePlan]}
         </p>
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--muted)]">
+            Aktiva funktioner i din plan
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {activePlanFeatures.map((feature) => (
+              <span
+                key={feature}
+                className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+              >
+                {feature}
+              </span>
+            ))}
+          </div>
+        </div>
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
             onClick={saveWorkspace}

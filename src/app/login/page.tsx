@@ -4,6 +4,24 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
+function formatAuthErrorMessage(rawMessage: string) {
+  const message = rawMessage.toLowerCase();
+
+  if (message.includes("invalid login credentials")) {
+    return "Fel e-post eller lösenord.";
+  }
+
+  if (message.includes("over_email_send_rate_limit") || message.includes("email rate limit exceeded")) {
+    return "För många försök på kort tid. Vänta en stund och försök igen.";
+  }
+
+  if (message.includes("email address") && message.includes("invalid")) {
+    return "Ogiltig e-postadress. Kontrollera formatet och försök igen.";
+  }
+
+  return rawMessage;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [nextPath, setNextPath] = useState("/workspace");
@@ -54,7 +72,7 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setMessage(error.message);
+      setMessage(formatAuthErrorMessage(error.message));
       setIsOAuthLoading(false);
     }
   }
@@ -75,7 +93,7 @@ export default function LoginPage() {
       setIsLoading(false);
 
       if (error) {
-        setMessage(error.message);
+        setMessage(formatAuthErrorMessage(error.message));
         return;
       }
 
@@ -92,7 +110,7 @@ export default function LoginPage() {
     setIsLoading(false);
 
     if (error) {
-      setMessage(error.message);
+      setMessage(formatAuthErrorMessage(error.message));
       return;
     }
 

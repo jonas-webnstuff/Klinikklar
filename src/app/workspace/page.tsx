@@ -34,6 +34,20 @@ type HelpEntry = {
   ivoUrl: string;
 };
 
+type PlanLevel = "step1" | "step2" | "step3";
+
+const planLabels: Record<PlanLevel, string> = {
+  step1: "Bli klinikklar",
+  step2: "Driv kliniken rätt",
+  step3: "Var alltid redo",
+};
+
+const planAccessRank: Record<PlanLevel, number> = {
+  step1: 1,
+  step2: 2,
+  step3: 3,
+};
+
 const initialProfile: ProfileState = {
   clinicName: "",
   orgNumber: "",
@@ -104,36 +118,50 @@ const ledningssystemModules = [
   {
     key: "management_system",
     title: "Ledningssystem",
+    availableFrom: "step1" as PlanLevel,
     cadence: "Månatlig uppföljning",
     description: "Ansvar, processer och styrande dokument hålls uppdaterade.",
   },
   {
     key: "incident_management",
     title: "Avvikelsehantering",
+    availableFrom: "step2" as PlanLevel,
     cadence: "Löpande",
     description: "Registrera händelser, åtgärder och återkoppling till teamet.",
   },
   {
     key: "risk_register",
     title: "Riskregister",
+    availableFrom: "step2" as PlanLevel,
     cadence: "Kvartalsvis genomgång",
     description: "Följ risknivå, åtgärdsägare och status över tid.",
   },
   {
     key: "self_monitoring",
     title: "Egenkontroll",
+    availableFrom: "step2" as PlanLevel,
     cadence: "Vecko- och månadspunkter",
     description: "Planera och stäng kontroller med tydliga deadlines.",
   },
   {
     key: "improvement_plans",
     title: "Förbättringsplaner",
+    availableFrom: "step2" as PlanLevel,
     cadence: "Uppföljning varannan vecka",
     description: "Knyt åtgärder till rotorsaker och verifiera effekt.",
+  },
+  {
+    key: "regulation_watch",
+    title: "Regelbevakning (AI)",
+    availableFrom: "step3" as PlanLevel,
+    cadence: "Löpande monitorering",
+    description: "Identifiera förändringar i kravbild och få prioriterade åtgärdsförslag.",
   },
 ];
 
 export default function WorkspacePage() {
+  const [activePlan, setActivePlan] = useState<PlanLevel>("step2");
+
   const [profile, setProfile] = useState<ProfileState>(initialProfile);
   const [answers, setAnswers] = useState<AnswersState>(initialAnswers);
   const [generated, setGenerated] = useState<GeneratedState>({});
@@ -142,6 +170,15 @@ export default function WorkspacePage() {
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
   const [hasHydratedWorkspace, setHasHydratedWorkspace] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState<string>("");
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const plan = query.get("plan");
+
+    if (plan === "step1" || plan === "step2" || plan === "step3") {
+      setActivePlan(plan);
+    }
+  }, []);
 
   const helpEntries: HelpEntry[] = [
     ...clinicProfileHelp,
@@ -254,6 +291,13 @@ export default function WorkspacePage() {
   const completeRequirements = Array.from(completionMap.values()).filter(Boolean).length;
   const progressPercent = Math.round((completeRequirements / totalRequirements) * 100);
 
+  const availableModules = ledningssystemModules.filter(
+    (module) => planAccessRank[module.availableFrom] <= planAccessRank[activePlan]
+  );
+
+  const hasPlanAccess = (requiredPlan: PlanLevel) =>
+    planAccessRank[activePlan] >= planAccessRank[requiredPlan];
+
   const canGenerate =
     profile.clinicName.trim() &&
     profile.municipality.trim() &&
@@ -352,6 +396,11 @@ export default function WorkspacePage() {
   }
 
   async function generateDocument(kind: DocumentKind) {
+    const requirement = complianceRequirements.find((item) => item.documentKind === kind);
+    if (requirement && !hasPlanAccess(requirement.availableFrom)) {
+      return;
+    }
+
     setGenerated((prev) => ({
       ...prev,
       [kind]: {
@@ -443,6 +492,9 @@ export default function WorkspacePage() {
           Arbeta löpande med kvalitet, risk, avvikelse och egenkontroll i samma flöde.
           IVO-underlag genereras från ert dagliga ledningsarbete.
         </p>
+        <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+          Aktiv nivå: {planLabels[activePlan]}
+        </p>
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
             onClick={saveWorkspace}
@@ -477,7 +529,7 @@ export default function WorkspacePage() {
           <p className="text-sm text-[color:var(--muted)]">Fokus: återkommande efterlevnad</p>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {ledningssystemModules.map((module) => (
+          {availableModules.map((module) => (
             <article
               key={module.key}
               className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
@@ -763,6 +815,7 @@ export default function WorkspacePage() {
           {complianceRequirements.map((requirement) => {
             const kind = requirement.documentKind;
             const state = generated[kind];
+            const isLocked = !hasPlanAccess(requirement.availableFrom);
             return (
               <article
                 key={requirement.code}
@@ -776,10 +829,15 @@ export default function WorkspacePage() {
                     <h3 className="text-base font-semibold text-[color:var(--ink)]">
                       {requirement.title}
                     </h3>
+                    {isLocked ? (
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">
+                        Låst - ingår från {planLabels[requirement.availableFrom]}
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     onClick={() => generateDocument(kind)}
-                    disabled={!canGenerate || state?.isLoading}
+                    disabled={!canGenerate || state?.isLoading || isLocked}
                     className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
                   >
                     {state?.isLoading ? "Genererar..." : "Generera"}
@@ -798,8 +856,13 @@ export default function WorkspacePage() {
                       },
                     }))
                   }
-                  placeholder="Genererat innehåll visas här"
+                  placeholder={
+                    isLocked
+                      ? `Uppgradera till ${planLabels[requirement.availableFrom]} för att skapa detta dokument.`
+                      : "Genererat innehåll visas här"
+                  }
                   rows={8}
+                  disabled={isLocked}
                   className="mt-3 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                 />
 
@@ -807,6 +870,7 @@ export default function WorkspacePage() {
                   <input
                     type="checkbox"
                     checked={state?.approved || false}
+                    disabled={isLocked}
                     onChange={(event) =>
                       setGenerated((prev) => ({
                         ...prev,
@@ -824,14 +888,14 @@ export default function WorkspacePage() {
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => exportDocument(kind, "docx")}
-                    disabled={!state?.approved || !state?.content}
+                    disabled={isLocked || !state?.approved || !state?.content}
                     className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
                   >
                     Exportera Word
                   </button>
                   <button
                     onClick={() => exportDocument(kind, "pdf")}
-                    disabled={!state?.approved || !state?.content}
+                    disabled={isLocked || !state?.approved || !state?.content}
                     className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
                   >
                     Exportera PDF

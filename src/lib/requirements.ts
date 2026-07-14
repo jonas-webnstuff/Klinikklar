@@ -1,5 +1,7 @@
 import type { DocumentKind } from "@/types/domain";
 
+type PlanLevel = "step1" | "step2" | "step3";
+
 export interface QuestionnaireItem {
   key: string;
   label: string;
@@ -19,6 +21,7 @@ export interface ComplianceRequirement {
   title: string;
   description: string;
   documentKind: DocumentKind;
+  availableFrom: PlanLevel;
 }
 
 export const complianceRequirements: ComplianceRequirement[] = [
@@ -27,30 +30,35 @@ export const complianceRequirements: ComplianceRequirement[] = [
     title: "Verksamhetsbeskrivning",
     description: "Beskrivning av klinikens uppdrag, målgrupp och vårdutbud.",
     documentKind: "verksamhetsbeskrivning",
+    availableFrom: "step1",
   },
   {
     code: "R-02",
     title: "Ledningssystem",
     description: "Processer för kvalitet, ansvar och intern styrning.",
     documentKind: "ledningssystem",
+    availableFrom: "step1",
   },
   {
     code: "R-03",
     title: "Riskanalys",
     description: "Identifiering av risker samt åtgärdsplaner.",
     documentKind: "riskanalys",
+    availableFrom: "step2",
   },
   {
     code: "R-04",
     title: "Avvikelsehantering",
     description: "Rutiner för rapportering, uppföljning och lärande.",
     documentKind: "avvikelsehantering",
+    availableFrom: "step2",
   },
   {
     code: "R-05",
     title: "Egenkontroll",
     description: "Plan för löpande internkontroll och förbättring.",
     documentKind: "egenkontroll",
+    availableFrom: "step2",
   },
 ];
 

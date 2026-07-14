@@ -36,12 +36,17 @@ export default function LoginPage() {
     step3: "Var alltid redo",
   };
 
+  const destinationPath =
+    selectedPlan && nextPath.startsWith("/")
+      ? `${nextPath}${nextPath.includes("?") ? "&" : "?"}plan=${selectedPlan}`
+      : nextPath;
+
   async function handleOAuth(provider: "google" | "azure") {
     setIsOAuthLoading(true);
     setMessage("");
 
     const supabase = createSupabaseBrowserClient();
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(destinationPath)}`;
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -91,7 +96,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push(nextPath);
+    router.push(destinationPath);
     router.refresh();
   }
 

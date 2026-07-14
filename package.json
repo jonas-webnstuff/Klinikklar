@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:3001": "PORT=3001 next dev",
+    "dev:clean:3001": "rm -rf .next node_modules/.cache && PORT=3001 next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

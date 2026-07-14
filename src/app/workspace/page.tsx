@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
-import type { DocumentKind, IncidentSeverity, IncidentStatus } from "@/types/domain";
+import type {
+  ControlTaskFrequency,
+  ControlTaskStatus,
+  DocumentKind,
+  IncidentSeverity,
+  IncidentStatus,
+  RiskStatus,
+} from "@/types/domain";
 
 type ProfileState = {
   clinicName: string;
@@ -55,6 +62,47 @@ type IncidentFormState = {
   immediateAction: string;
 };
 
+type RiskItem = {
+  id: string;
+  title: string;
+  description: string;
+  probability: number;
+  consequence: number;
+  status: RiskStatus;
+  ownerRole?: string | null;
+  dueDate?: string | null;
+  createdAt: string;
+};
+
+type RiskFormState = {
+  title: string;
+  description: string;
+  probability: number;
+  consequence: number;
+  ownerRole: string;
+  dueDate: string;
+};
+
+type ControlItem = {
+  id: string;
+  title: string;
+  description?: string | null;
+  frequency: ControlTaskFrequency;
+  ownerRole?: string | null;
+  nextDueDate?: string | null;
+  status: ControlTaskStatus;
+  lastCompletedAt?: string | null;
+  createdAt: string;
+};
+
+type ControlFormState = {
+  title: string;
+  description: string;
+  frequency: ControlTaskFrequency;
+  ownerRole: string;
+  nextDueDate: string;
+};
+
 const planLabels: Record<PlanLevel, string> = {
   step1: "Klinikklar Start",
   step2: "Klinikklar Drift",
@@ -90,6 +138,23 @@ const initialIncidentForm: IncidentFormState = {
   severity: "medium",
   description: "",
   immediateAction: "",
+};
+
+const initialRiskForm: RiskFormState = {
+  title: "",
+  description: "",
+  probability: 3,
+  consequence: 3,
+  ownerRole: "",
+  dueDate: "",
+};
+
+const initialControlForm: ControlFormState = {
+  title: "",
+  description: "",
+  frequency: "monthly",
+  ownerRole: "",
+  nextDueDate: "",
 };
 
 const clinicProfileHelp: HelpEntry[] = [
@@ -236,6 +301,16 @@ export default function WorkspacePage() {
   const [isIncidentsLoading, setIsIncidentsLoading] = useState(false);
   const [isIncidentSubmitting, setIsIncidentSubmitting] = useState(false);
   const [incidentMessage, setIncidentMessage] = useState("");
+  const [risks, setRisks] = useState<RiskItem[]>([]);
+  const [riskForm, setRiskForm] = useState<RiskFormState>(initialRiskForm);
+  const [isRisksLoading, setIsRisksLoading] = useState(false);
+  const [isRiskSubmitting, setIsRiskSubmitting] = useState(false);
+  const [riskMessage, setRiskMessage] = useState("");
+  const [controls, setControls] = useState<ControlItem[]>([]);
+  const [controlForm, setControlForm] = useState<ControlFormState>(initialControlForm);
+  const [isControlsLoading, setIsControlsLoading] = useState(false);
+  const [isControlSubmitting, setIsControlSubmitting] = useState(false);
+  const [controlMessage, setControlMessage] = useState("");
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -373,6 +448,8 @@ export default function WorkspacePage() {
     planAccessRank[activePlan] >= planAccessRank[requiredPlan];
 
   const canUseIncidentModule = hasPlanAccess("step2");
+  const canUseRiskModule = hasPlanAccess("step2");
+  const canUseControlModule = hasPlanAccess("step2");
 
   const incidentSummary = useMemo(() => {
     const summary = {
@@ -399,6 +476,56 @@ export default function WorkspacePage() {
 
     return summary;
   }, [incidents]);
+
+  const riskSummary = useMemo(() => {
+    const summary = {
+      total: risks.length,
+      open: 0,
+      mitigating: 0,
+      closed: 0,
+      highPriority: 0,
+    };
+
+    for (const risk of risks) {
+      if (risk.status === "open") {
+        summary.open += 1;
+      } else if (risk.status === "mitigating") {
+        summary.mitigating += 1;
+      } else if (risk.status === "closed") {
+        summary.closed += 1;
+      }
+
+      if (risk.probability * risk.consequence >= 15) {
+        summary.highPriority += 1;
+      }
+    }
+
+    return summary;
+  }, [risks]);
+
+  const controlSummary = useMemo(() => {
+    const summary = {
+      total: controls.length,
+      pending: 0,
+      done: 0,
+      overdue: 0,
+      skipped: 0,
+    };
+
+    for (const control of controls) {
+      if (control.status === "pending") {
+        summary.pending += 1;
+      } else if (control.status === "done") {
+        summary.done += 1;
+      } else if (control.status === "overdue") {
+        summary.overdue += 1;
+      } else if (control.status === "skipped") {
+        summary.skipped += 1;
+      }
+    }
+
+    return summary;
+  }, [controls]);
 
   const canGenerate =
     profile.clinicName.trim() &&
@@ -465,6 +592,152 @@ export default function WorkspacePage() {
     await loadIncidents();
   }
 
+  async function loadRisks() {
+    if (!canUseRiskModule) {
+      return;
+    }
+
+    setIsRisksLoading(true);
+
+    const response = await fetch("/api/risks/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    setIsRisksLoading(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setRiskMessage(data.error || "Kunde inte hämta risker.");
+      return;
+    }
+
+    const data = (await response.json()) as { risks: RiskItem[] };
+    setRisks(data.risks || []);
+  }
+
+  async function createRisk() {
+    if (!canUseRiskModule) {
+      return;
+    }
+
+    if (!riskForm.title.trim() || !riskForm.description.trim()) {
+      setRiskMessage("Ange rubrik och beskrivning för risken.");
+      return;
+    }
+
+    setIsRiskSubmitting(true);
+    setRiskMessage("");
+
+    const response = await fetch("/api/risks/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(riskForm),
+    });
+
+    setIsRiskSubmitting(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setRiskMessage(data.error || "Kunde inte skapa risk.");
+      return;
+    }
+
+    setRiskForm(initialRiskForm);
+    setRiskMessage("Risk skapad.");
+    await loadRisks();
+  }
+
+  async function updateRiskStatus(riskId: string, status: RiskStatus) {
+    const response = await fetch("/api/risks/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ riskId, status }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setRiskMessage(data.error || "Kunde inte uppdatera riskstatus.");
+      return;
+    }
+
+    await loadRisks();
+  }
+
+  async function loadControls() {
+    if (!canUseControlModule) {
+      return;
+    }
+
+    setIsControlsLoading(true);
+
+    const response = await fetch("/api/controls/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    setIsControlsLoading(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setControlMessage(data.error || "Kunde inte hämta kontroller.");
+      return;
+    }
+
+    const data = (await response.json()) as { controls: ControlItem[] };
+    setControls(data.controls || []);
+  }
+
+  async function createControl() {
+    if (!canUseControlModule) {
+      return;
+    }
+
+    if (!controlForm.title.trim()) {
+      setControlMessage("Ange en titel för kontrollpunkten.");
+      return;
+    }
+
+    setIsControlSubmitting(true);
+    setControlMessage("");
+
+    const response = await fetch("/api/controls/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(controlForm),
+    });
+
+    setIsControlSubmitting(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setControlMessage(data.error || "Kunde inte skapa kontrollpunkt.");
+      return;
+    }
+
+    setControlForm(initialControlForm);
+    setControlMessage("Kontrollpunkt skapad.");
+    await loadControls();
+  }
+
+  async function updateControlStatus(controlId: string, status: ControlTaskStatus) {
+    const response = await fetch("/api/controls/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ controlId, status }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setControlMessage(data.error || "Kunde inte uppdatera kontrollstatus.");
+      return;
+    }
+
+    await loadControls();
+  }
+
   async function updateIncidentStatus(incidentId: string, status: IncidentStatus) {
     const response = await fetch("/api/incidents/status", {
       method: "POST",
@@ -487,6 +760,22 @@ export default function WorkspacePage() {
     }
 
     loadIncidents();
+  }, [activePlan, hasHydratedWorkspace]);
+
+  useEffect(() => {
+    if (!hasHydratedWorkspace || !canUseRiskModule) {
+      return;
+    }
+
+    loadRisks();
+  }, [activePlan, hasHydratedWorkspace]);
+
+  useEffect(() => {
+    if (!hasHydratedWorkspace || !canUseControlModule) {
+      return;
+    }
+
+    loadControls();
   }, [activePlan, hasHydratedWorkspace]);
 
   async function saveWorkspace() {
@@ -529,6 +818,8 @@ export default function WorkspacePage() {
 
     setWorkspaceMessage("Uppgifter sparade.");
     void loadIncidents();
+    void loadRisks();
+    void loadControls();
   }
 
   async function loadWorkspace() {
@@ -578,6 +869,8 @@ export default function WorkspacePage() {
 
     setWorkspaceMessage("Uppgifter hämtade.");
     void loadIncidents();
+    void loadRisks();
+    void loadControls();
   }
 
   async function generateDocument(kind: DocumentKind) {
@@ -673,7 +966,7 @@ export default function WorkspacePage() {
           Klinikklar Workspace
         </p>
         <h1 className="mt-2 text-3xl font-semibold text-[color:var(--ink)]">
-          AI-ledningssystem för privat tandvård
+          Ledningssystem för privat tandvård
         </h1>
         <p className="mt-3 max-w-3xl text-[color:var(--muted)]">
           Arbeta löpande med kvalitet, risk, avvikelse och egenkontroll i samma flöde.
@@ -845,8 +1138,8 @@ export default function WorkspacePage() {
               />
             </div>
           </div>
-          {canUseIncidentModule ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {canUseIncidentModule || canUseRiskModule || canUseControlModule ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
               <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Avvikelser</p>
                 <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{incidentSummary.total}</p>
@@ -860,6 +1153,30 @@ export default function WorkspacePage() {
                 <p className="mt-1 text-xs text-amber-700">
                   Hög/Kritisk: {incidentSummary.criticalOrHigh}
                 </p>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Risker</p>
+                <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{riskSummary.total}</p>
+                <p className="mt-1 text-xs text-[color:var(--muted)]">Totalt registrerade</p>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Riskstatus</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">
+                  Öppna {riskSummary.open} / Åtgärdas {riskSummary.mitigating} / Stängda {riskSummary.closed}
+                </p>
+                <p className="mt-1 text-xs text-amber-700">Hög prioritet: {riskSummary.highPriority}</p>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Kontroller</p>
+                <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{controlSummary.total}</p>
+                <p className="mt-1 text-xs text-[color:var(--muted)]">Totalt registrerade</p>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Kontrollstatus</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">
+                  Pending {controlSummary.pending} / Klara {controlSummary.done}
+                </p>
+                <p className="mt-1 text-xs text-amber-700">Overdue: {controlSummary.overdue}</p>
               </div>
             </div>
           ) : null}
@@ -1031,7 +1348,284 @@ export default function WorkspacePage() {
       </section>
 
       <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Interaktiv frågeguide</h2>
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Riskanalyser (Drift/Premium)</h2>
+        {!canUseRiskModule ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">
+            Uppgradera till {planLabels.step2} för att hantera riskregister.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Ny risk</p>
+              <input
+                value={riskForm.title}
+                onChange={(event) => setRiskForm((prev) => ({ ...prev, title: event.target.value }))}
+                placeholder="Rubrik"
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
+              <textarea
+                value={riskForm.description}
+                onChange={(event) =>
+                  setRiskForm((prev) => ({ ...prev, description: event.target.value }))
+                }
+                placeholder="Beskriv risk, konsekvens och orsaker"
+                rows={4}
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Sannolikhet (1-5)
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={riskForm.probability}
+                    onChange={(event) =>
+                      setRiskForm((prev) => ({ ...prev, probability: Number(event.target.value) || 1 }))
+                    }
+                    className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Konsekvens (1-5)
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={riskForm.consequence}
+                    onChange={(event) =>
+                      setRiskForm((prev) => ({ ...prev, consequence: Number(event.target.value) || 1 }))
+                    }
+                    className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  value={riskForm.ownerRole}
+                  onChange={(event) => setRiskForm((prev) => ({ ...prev, ownerRole: event.target.value }))}
+                  placeholder="Ansvarig roll (valfritt)"
+                  className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                />
+                <input
+                  type="date"
+                  value={riskForm.dueDate}
+                  onChange={(event) => setRiskForm((prev) => ({ ...prev, dueDate: event.target.value }))}
+                  className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                />
+              </div>
+              <p className="text-xs text-[color:var(--muted)]">
+                Riskvärde: <span className="font-semibold text-[color:var(--ink)]">{riskForm.probability * riskForm.consequence}</span>
+              </p>
+              <button
+                type="button"
+                onClick={createRisk}
+                disabled={isRiskSubmitting}
+                className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {isRiskSubmitting ? "Sparar..." : "Skapa risk"}
+              </button>
+              {riskMessage ? <p className="text-sm text-[color:var(--muted)]">{riskMessage}</p> : null}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Senaste risker</p>
+              {isRisksLoading ? (
+                <p className="text-sm text-[color:var(--muted)]">Hämtar risker...</p>
+              ) : risks.length === 0 ? (
+                <p className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted)]">
+                  Inga risker registrerade än.
+                </p>
+              ) : (
+                risks.map((risk) => (
+                  <article key={risk.id} className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                    <p className="text-sm font-semibold text-[color:var(--ink)]">{risk.title}</p>
+                    <p className="mt-1 text-sm text-[color:var(--muted)]">{risk.description}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
+                        Riskvärde: {risk.probability * risk.consequence}
+                      </span>
+                      <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
+                        Status: {risk.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {risk.status !== "open" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateRiskStatus(risk.id, "open")}
+                          className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                        >
+                          Öppna
+                        </button>
+                      ) : null}
+                      {risk.status !== "mitigating" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateRiskStatus(risk.id, "mitigating")}
+                          className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                        >
+                          Åtgärdas
+                        </button>
+                      ) : null}
+                      {risk.status !== "closed" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateRiskStatus(risk.id, "closed")}
+                          className="rounded-lg bg-[color:var(--brand)] px-3 py-1 text-xs font-semibold text-white"
+                        >
+                          Stäng
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Årshjul och kontroller (Drift/Premium)</h2>
+        {!canUseControlModule ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">
+            Uppgradera till {planLabels.step2} för att hantera årshjul och kontroller.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Ny kontrollpunkt</p>
+              <input
+                value={controlForm.title}
+                onChange={(event) => setControlForm((prev) => ({ ...prev, title: event.target.value }))}
+                placeholder="Titel"
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
+              <textarea
+                value={controlForm.description}
+                onChange={(event) =>
+                  setControlForm((prev) => ({ ...prev, description: event.target.value }))
+                }
+                placeholder="Beskriv vad som ska kontrolleras"
+                rows={3}
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <select
+                  value={controlForm.frequency}
+                  onChange={(event) =>
+                    setControlForm((prev) => ({
+                      ...prev,
+                      frequency: event.target.value as ControlTaskFrequency,
+                    }))
+                  }
+                  className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                >
+                  <option value="weekly">Veckovis</option>
+                  <option value="monthly">Manadsvis</option>
+                  <option value="quarterly">Kvartalsvis</option>
+                  <option value="yearly">Arsvis</option>
+                  <option value="ad_hoc">Ad hoc</option>
+                </select>
+                <input
+                  type="date"
+                  value={controlForm.nextDueDate}
+                  onChange={(event) =>
+                    setControlForm((prev) => ({ ...prev, nextDueDate: event.target.value }))
+                  }
+                  className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                />
+              </div>
+              <input
+                value={controlForm.ownerRole}
+                onChange={(event) =>
+                  setControlForm((prev) => ({ ...prev, ownerRole: event.target.value }))
+                }
+                placeholder="Ansvarig roll (valfritt)"
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={createControl}
+                disabled={isControlSubmitting}
+                className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {isControlSubmitting ? "Sparar..." : "Skapa kontrollpunkt"}
+              </button>
+              {controlMessage ? <p className="text-sm text-[color:var(--muted)]">{controlMessage}</p> : null}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Planerade kontroller</p>
+              {isControlsLoading ? (
+                <p className="text-sm text-[color:var(--muted)]">Hämtar kontrollpunkter...</p>
+              ) : controls.length === 0 ? (
+                <p className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted)]">
+                  Inga kontrollpunkter registrerade än.
+                </p>
+              ) : (
+                controls.map((control) => (
+                  <article
+                    key={control.id}
+                    className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-[color:var(--ink)]">{control.title}</p>
+                      <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                        {control.nextDueDate || "-"}
+                      </p>
+                    </div>
+                    {control.description ? (
+                      <p className="mt-1 text-sm text-[color:var(--muted)]">{control.description}</p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
+                        Frekvens: {control.frequency}
+                      </span>
+                      <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
+                        Status: {control.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {control.status !== "pending" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateControlStatus(control.id, "pending")}
+                          className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                        >
+                          Pending
+                        </button>
+                      ) : null}
+                      {control.status !== "done" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateControlStatus(control.id, "done")}
+                          className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                        >
+                          Klar
+                        </button>
+                      ) : null}
+                      {control.status !== "overdue" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateControlStatus(control.id, "overdue")}
+                          className="rounded-lg bg-[color:var(--brand)] px-3 py-1 text-xs font-semibold text-white"
+                        >
+                          Overdue
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">6. Interaktiv frågeguide</h2>
         <div className="mt-4 space-y-5">
           {questionnaireItems.map((item) => (
             <div key={item.key} className="relative rounded-2xl bg-[color:var(--panel)] p-4">
@@ -1165,7 +1759,7 @@ export default function WorkspacePage() {
       ) : null}
 
       <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Dokumentgenerator + granskning</h2>
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">7. Dokumentgenerator + granskning</h2>
         <p className="mt-2 text-sm text-[color:var(--muted)]">
           AI-förslag skapas server-side för ledningssystemets moduler. Granska och verifiera
           innehållet innan export.

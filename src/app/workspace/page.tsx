@@ -1011,7 +1011,7 @@ export default function WorkspacePage() {
         </div>
       </header>
 
-      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+      <section id="ledningssystem" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
@@ -1207,7 +1207,7 @@ export default function WorkspacePage() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+      <section id="avvikelser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Avvikelser (Drift/Premium)</h2>
         {!canUseIncidentModule ? (
           <p className="mt-3 text-sm text-[color:var(--muted)]">
@@ -1347,7 +1347,7 @@ export default function WorkspacePage() {
         )}
       </section>
 
-      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+      <section id="riskanalyser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Riskanalyser (Drift/Premium)</h2>
         {!canUseRiskModule ? (
           <p className="mt-3 text-sm text-[color:var(--muted)]">
@@ -1486,7 +1486,7 @@ export default function WorkspacePage() {
         )}
       </section>
 
-      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+      <section id="arshjul" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Årshjul och kontroller (Drift/Premium)</h2>
         {!canUseControlModule ? (
           <p className="mt-3 text-sm text-[color:var(--muted)]">
@@ -1624,7 +1624,7 @@ export default function WorkspacePage() {
         )}
       </section>
 
-      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+      <section id="dokument" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">6. Interaktiv frågeguide</h2>
         <div className="mt-4 space-y-5">
           {questionnaireItems.map((item) => (

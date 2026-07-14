@@ -18,22 +18,44 @@ export async function Header() {
           </span>
           <span className="font-display text-[2rem] font-semibold tracking-[-0.04em]">Klinikklar</span>
         </Link>
-        <nav className="hidden items-center gap-10 text-[15px] font-medium text-[color:var(--ink)] lg:flex">
-          <Link href="/#sa-fungerar-det" className="transition hover:text-[color:var(--brand)]">
-            Så fungerar det
-          </Link>
-          <Link href="/#funktioner" className="transition hover:text-[color:var(--brand)]">
-            Funktioner
-          </Link>
-          <Link href="/#priser" className="transition hover:text-[color:var(--brand)]">
-            Priser
-          </Link>
-          <Link href="/#om-oss" className="transition hover:text-[color:var(--brand)]">
-            Om oss
-          </Link>
-          <Link href="/#kunskapsbank" className="transition hover:text-[color:var(--brand)]">
-            Kunskapsbank
-          </Link>
+        <nav className="hidden items-center gap-6 text-[15px] font-medium text-[color:var(--ink)] lg:mr-4 lg:flex xl:mr-8 xl:gap-8">
+          {user ? (
+            <>
+              <Link href="/workspace#ledningssystem" className="transition hover:text-[color:var(--brand)]">
+                Ledningssystem
+              </Link>
+              <Link href="/workspace#avvikelser" className="transition hover:text-[color:var(--brand)]">
+                Avvikelser
+              </Link>
+              <Link href="/workspace#riskanalyser" className="transition hover:text-[color:var(--brand)]">
+                Riskanalyser
+              </Link>
+              <Link href="/workspace#arshjul" className="transition hover:text-[color:var(--brand)]">
+                Årshjul
+              </Link>
+              <Link href="/workspace#dokument" className="transition hover:text-[color:var(--brand)]">
+                Dokument
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link href="/#sa-fungerar-det" className="transition hover:text-[color:var(--brand)]">
+                Så fungerar det
+              </Link>
+              <Link href="/#funktioner" className="transition hover:text-[color:var(--brand)]">
+                Funktioner
+              </Link>
+              <Link href="/#priser" className="transition hover:text-[color:var(--brand)]">
+                Priser
+              </Link>
+              <Link href="/#om-oss" className="transition hover:text-[color:var(--brand)]">
+                Om oss
+              </Link>
+              <Link href="/#kunskapsbank" className="transition hover:text-[color:var(--brand)]">
+                Kunskapsbank
+              </Link>
+            </>
+          )}
         </nav>
         <div className="flex items-center gap-3">
           {user ? (

@@ -374,6 +374,32 @@ export default function WorkspacePage() {
 
   const canUseIncidentModule = hasPlanAccess("step2");
 
+  const incidentSummary = useMemo(() => {
+    const summary = {
+      total: incidents.length,
+      open: 0,
+      investigating: 0,
+      closed: 0,
+      criticalOrHigh: 0,
+    };
+
+    for (const incident of incidents) {
+      if (incident.status === "new") {
+        summary.open += 1;
+      } else if (incident.status === "investigating") {
+        summary.investigating += 1;
+      } else if (incident.status === "closed") {
+        summary.closed += 1;
+      }
+
+      if (incident.severity === "high" || incident.severity === "critical") {
+        summary.criticalOrHigh += 1;
+      }
+    }
+
+    return summary;
+  }, [incidents]);
+
   const canGenerate =
     profile.clinicName.trim() &&
     profile.municipality.trim() &&
@@ -399,7 +425,7 @@ export default function WorkspacePage() {
 
     if (!response.ok) {
       const data = (await response.json()) as { error?: string };
-      setIncidentMessage(data.error || "Kunde inte hamta avvikelser.");
+      setIncidentMessage(data.error || "Kunde inte hämta avvikelser.");
       return;
     }
 
@@ -413,7 +439,7 @@ export default function WorkspacePage() {
     }
 
     if (!incidentForm.title.trim() || !incidentForm.description.trim()) {
-      setIncidentMessage("Ange rubrik och beskrivning for avvikelsen.");
+      setIncidentMessage("Ange rubrik och beskrivning för avvikelsen.");
       return;
     }
 
@@ -819,6 +845,24 @@ export default function WorkspacePage() {
               />
             </div>
           </div>
+          {canUseIncidentModule ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Avvikelser</p>
+                <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{incidentSummary.total}</p>
+                <p className="mt-1 text-xs text-[color:var(--muted)]">Totalt registrerade</p>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Status</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">
+                  Öppna {incidentSummary.open} / Utredning {incidentSummary.investigating} / Stängda {incidentSummary.closed}
+                </p>
+                <p className="mt-1 text-xs text-amber-700">
+                  Hög/Kritisk: {incidentSummary.criticalOrHigh}
+                </p>
+              </div>
+            </div>
+          ) : null}
           <ul className="mt-4 space-y-3">
             {complianceRequirements.map((item) => {
               const done = completionMap.get(item.code);
@@ -850,7 +894,7 @@ export default function WorkspacePage() {
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Avvikelser (Drift/Premium)</h2>
         {!canUseIncidentModule ? (
           <p className="mt-3 text-sm text-[color:var(--muted)]">
-            Uppgradera till {planLabels.step2} for att hantera avvikelser.
+            Uppgradera till {planLabels.step2} för att hantera avvikelser.
           </p>
         ) : (
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
@@ -883,9 +927,9 @@ export default function WorkspacePage() {
                   }
                   className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
                 >
-                  <option value="low">Lag</option>
+                  <option value="low">Låg</option>
                   <option value="medium">Medel</option>
-                  <option value="high">Hog</option>
+                  <option value="high">Hög</option>
                   <option value="critical">Kritisk</option>
                 </select>
               </div>
@@ -894,7 +938,7 @@ export default function WorkspacePage() {
                 onChange={(event) =>
                   setIncidentForm((prev) => ({ ...prev, description: event.target.value }))
                 }
-                placeholder="Beskriv vad som hant"
+                placeholder="Beskriv vad som hänt"
                 rows={4}
                 className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
               />
@@ -903,7 +947,7 @@ export default function WorkspacePage() {
                 onChange={(event) =>
                   setIncidentForm((prev) => ({ ...prev, immediateAction: event.target.value }))
                 }
-                placeholder="Omedelbar atgard (valfritt)"
+                placeholder="Omedelbar åtgärd (valfritt)"
                 rows={3}
                 className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
               />
@@ -923,10 +967,10 @@ export default function WorkspacePage() {
             <div className="space-y-3">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Senaste avvikelser</p>
               {isIncidentsLoading ? (
-                <p className="text-sm text-[color:var(--muted)]">Hamtar avvikelser...</p>
+                <p className="text-sm text-[color:var(--muted)]">Hämtar avvikelser...</p>
               ) : incidents.length === 0 ? (
                 <p className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted)]">
-                  Inga avvikelser registrerade an.
+                  Inga avvikelser registrerade än.
                 </p>
               ) : (
                 incidents.map((incident) => (
@@ -956,7 +1000,7 @@ export default function WorkspacePage() {
                           onClick={() => updateIncidentStatus(incident.id, "new")}
                           className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
                         >
-                          Ateroppna
+                          Återöppna
                         </button>
                       ) : null}
                       {incident.status !== "investigating" ? (
@@ -974,7 +1018,7 @@ export default function WorkspacePage() {
                           onClick={() => updateIncidentStatus(incident.id, "closed")}
                           className="rounded-lg bg-[color:var(--brand)] px-3 py-1 text-xs font-semibold text-white"
                         >
-                          Stang
+                          Stäng
                         </button>
                       ) : null}
                     </div>

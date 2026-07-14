@@ -49,9 +49,9 @@ export default function LoginPage() {
   }, []);
 
   const planLabelMap: Record<"step1" | "step2" | "step3", string> = {
-    step1: "Bli klinikklar",
-    step2: "Driv kliniken rätt",
-    step3: "Var alltid redo",
+    step1: "Klinikklar Start",
+    step2: "Klinikklar Drift",
+    step3: "Klinikklar Premium",
   };
 
   const destinationPath =

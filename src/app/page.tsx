@@ -53,48 +53,55 @@ const customerJourneySteps = [
 const pricingPlans = [
   {
     id: "step1",
-    badge: "Steg 1",
-    title: "Bli klinikklar",
-    price: "2 990 kr",
-    billing: "/månad",
-    description: "För nya kliniker som behöver tillstånds- och uppstartsstöd.",
+    badge: "Engångspaket",
+    title: "Klinikklar Start",
+    price: "19 900 kr",
+    billing: "",
+    description: "Kom igång med tillstånd, grundstruktur och komplett uppstartsstöd.",
     features: [
-      "Tillståndsflöde och uppstartschecklistor",
-      "Dokumentutkast för grundkrav",
-      "Guidning för första verksamhetsåret",
+      "IVO",
+      "Ledningssystem",
+      "Dokument",
+      "AI",
+      "Checklistor",
+      "Support",
     ],
-    ctaLabel: "Välj Bli klinikklar",
+    ctaLabel: "Välj Klinikklar Start",
     ctaHref: "/login?next=/workspace&plan=step1",
   },
   {
     id: "step2",
-    badge: "Steg 2",
-    title: "Driv kliniken rätt",
-    price: "5 490 kr",
-    billing: "/månad",
-    description: "För kliniker som vill driva ett levande ledningssystem i vardagen.",
+    badge: "Löpande",
+    title: "Klinikklar Drift",
+    price: "995 kr",
+    billing: "/mån",
+    description: "För daglig drift med strukturerat kvalitetsarbete och uppföljning.",
     features: [
-      "Rutiner, avvikelser och egenkontroller",
-      "Riskregister och förbättringsplaner",
-      "Löpande uppföljning per period",
+      "Uppdateringar",
+      "Avvikelser",
+      "Rutiner",
+      "Riskanalyser",
+      "Årshjul",
     ],
-    ctaLabel: "Välj Driv kliniken rätt",
+    ctaLabel: "Välj Klinikklar Drift",
     ctaHref: "/login?next=/workspace&plan=step2",
     highlighted: true,
   },
   {
     id: "step3",
-    badge: "Steg 3",
-    title: "Var alltid redo",
-    price: "8 490 kr",
-    billing: "/månad",
-    description: "För kliniker som vill vara proaktiva inför tillsyn och interna revisioner.",
+    badge: "Utökad nivå",
+    title: "Klinikklar Premium",
+    price: "2 495 kr",
+    billing: "/mån",
+    description: "För kliniker som vill ha proaktiv AI-styrning och hög revisionsberedskap.",
     features: [
-      "AI-bevakning av regeländringar",
-      "Prioriterade åtgärdsförslag",
-      "Tillsyns- och revisionsberedskap",
+      "AI Compliance Officer",
+      "Regelbevakning",
+      "AI-förslag",
+      "Revision",
+      "Internkontroll",
     ],
-    ctaLabel: "Välj Var alltid redo",
+    ctaLabel: "Välj Klinikklar Premium",
     ctaHref: "/login?next=/workspace&plan=step3",
   },
 ];
@@ -332,7 +339,7 @@ export default function Home() {
             {pricingPlans.map((plan) => (
               <article
                 key={plan.id}
-                className={`rounded-3xl border p-6 shadow-[0_16px_40px_rgba(13,39,87,0.05)] ${
+                className={`flex h-full flex-col rounded-3xl border p-6 shadow-[0_16px_40px_rgba(13,39,87,0.05)] ${
                   plan.highlighted
                     ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]"
                     : "border-[color:var(--line)] bg-white"
@@ -361,7 +368,7 @@ export default function Home() {
                 </ul>
                 <Link
                   href={plan.ctaHref}
-                  className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-[color:var(--brand)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-2)]"
+                  className="mt-auto inline-flex w-full items-center justify-center rounded-xl bg-[color:var(--brand)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-2)]"
                 >
                   {plan.ctaLabel}
                 </Link>

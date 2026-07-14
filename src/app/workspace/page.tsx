@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
-import type { DocumentKind } from "@/types/domain";
+import type { DocumentKind, IncidentSeverity, IncidentStatus } from "@/types/domain";
 
 type ProfileState = {
   clinicName: string;
@@ -36,6 +36,25 @@ type HelpEntry = {
 
 type PlanLevel = "step1" | "step2" | "step3";
 
+type IncidentItem = {
+  id: string;
+  title: string;
+  eventDate: string;
+  severity: IncidentSeverity;
+  description: string;
+  immediateAction?: string | null;
+  status: IncidentStatus;
+  createdAt: string;
+};
+
+type IncidentFormState = {
+  title: string;
+  eventDate: string;
+  severity: IncidentSeverity;
+  description: string;
+  immediateAction: string;
+};
+
 const planLabels: Record<PlanLevel, string> = {
   step1: "Klinikklar Start",
   step2: "Klinikklar Drift",
@@ -64,6 +83,14 @@ const initialProfile: ProfileState = {
 const initialAnswers: AnswersState = Object.fromEntries(
   questionnaireItems.map((item) => [item.key, { answer: "", followUpAnswer: "" }])
 );
+
+const initialIncidentForm: IncidentFormState = {
+  title: "",
+  eventDate: new Date().toISOString().slice(0, 10),
+  severity: "medium",
+  description: "",
+  immediateAction: "",
+};
 
 const clinicProfileHelp: HelpEntry[] = [
   {
@@ -204,6 +231,11 @@ export default function WorkspacePage() {
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
   const [hasHydratedWorkspace, setHasHydratedWorkspace] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState<string>("");
+  const [incidents, setIncidents] = useState<IncidentItem[]>([]);
+  const [incidentForm, setIncidentForm] = useState<IncidentFormState>(initialIncidentForm);
+  const [isIncidentsLoading, setIsIncidentsLoading] = useState(false);
+  const [isIncidentSubmitting, setIsIncidentSubmitting] = useState(false);
+  const [incidentMessage, setIncidentMessage] = useState("");
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -340,6 +372,8 @@ export default function WorkspacePage() {
   const hasPlanAccess = (requiredPlan: PlanLevel) =>
     planAccessRank[activePlan] >= planAccessRank[requiredPlan];
 
+  const canUseIncidentModule = hasPlanAccess("step2");
+
   const canGenerate =
     profile.clinicName.trim() &&
     profile.municipality.trim() &&
@@ -347,6 +381,87 @@ export default function WorkspacePage() {
     answers.quality_process?.answer.trim() &&
     answers.staffing?.answer.trim() &&
     answers.incident_routine?.answer.trim();
+
+  async function loadIncidents() {
+    if (!canUseIncidentModule) {
+      return;
+    }
+
+    setIsIncidentsLoading(true);
+
+    const response = await fetch("/api/incidents/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    setIsIncidentsLoading(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setIncidentMessage(data.error || "Kunde inte hamta avvikelser.");
+      return;
+    }
+
+    const data = (await response.json()) as { incidents: IncidentItem[] };
+    setIncidents(data.incidents || []);
+  }
+
+  async function createIncident() {
+    if (!canUseIncidentModule) {
+      return;
+    }
+
+    if (!incidentForm.title.trim() || !incidentForm.description.trim()) {
+      setIncidentMessage("Ange rubrik och beskrivning for avvikelsen.");
+      return;
+    }
+
+    setIsIncidentSubmitting(true);
+    setIncidentMessage("");
+
+    const response = await fetch("/api/incidents/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(incidentForm),
+    });
+
+    setIsIncidentSubmitting(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setIncidentMessage(data.error || "Kunde inte skapa avvikelse.");
+      return;
+    }
+
+    setIncidentForm((prev) => ({ ...initialIncidentForm, eventDate: prev.eventDate }));
+    setIncidentMessage("Avvikelse skapad.");
+    await loadIncidents();
+  }
+
+  async function updateIncidentStatus(incidentId: string, status: IncidentStatus) {
+    const response = await fetch("/api/incidents/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incidentId, status }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setIncidentMessage(data.error || "Kunde inte uppdatera status.");
+      return;
+    }
+
+    await loadIncidents();
+  }
+
+  useEffect(() => {
+    if (!hasHydratedWorkspace || !canUseIncidentModule) {
+      return;
+    }
+
+    loadIncidents();
+  }, [activePlan, hasHydratedWorkspace]);
 
   async function saveWorkspace() {
     if (!profile.orgNumber.trim()) {
@@ -387,6 +502,7 @@ export default function WorkspacePage() {
     }
 
     setWorkspaceMessage("Uppgifter sparade.");
+    void loadIncidents();
   }
 
   async function loadWorkspace() {
@@ -435,6 +551,7 @@ export default function WorkspacePage() {
     }
 
     setWorkspaceMessage("Uppgifter hämtade.");
+    void loadIncidents();
   }
 
   async function generateDocument(kind: DocumentKind) {
@@ -730,7 +847,147 @@ export default function WorkspacePage() {
       </section>
 
       <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Interaktiv frågeguide</h2>
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Avvikelser (Drift/Premium)</h2>
+        {!canUseIncidentModule ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">
+            Uppgradera till {planLabels.step2} for att hantera avvikelser.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Ny avvikelse</p>
+              <input
+                value={incidentForm.title}
+                onChange={(event) =>
+                  setIncidentForm((prev) => ({ ...prev, title: event.target.value }))
+                }
+                placeholder="Rubrik"
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  type="date"
+                  value={incidentForm.eventDate}
+                  onChange={(event) =>
+                    setIncidentForm((prev) => ({ ...prev, eventDate: event.target.value }))
+                  }
+                  className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                />
+                <select
+                  value={incidentForm.severity}
+                  onChange={(event) =>
+                    setIncidentForm((prev) => ({
+                      ...prev,
+                      severity: event.target.value as IncidentSeverity,
+                    }))
+                  }
+                  className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                >
+                  <option value="low">Lag</option>
+                  <option value="medium">Medel</option>
+                  <option value="high">Hog</option>
+                  <option value="critical">Kritisk</option>
+                </select>
+              </div>
+              <textarea
+                value={incidentForm.description}
+                onChange={(event) =>
+                  setIncidentForm((prev) => ({ ...prev, description: event.target.value }))
+                }
+                placeholder="Beskriv vad som hant"
+                rows={4}
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
+              <textarea
+                value={incidentForm.immediateAction}
+                onChange={(event) =>
+                  setIncidentForm((prev) => ({ ...prev, immediateAction: event.target.value }))
+                }
+                placeholder="Omedelbar atgard (valfritt)"
+                rows={3}
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={createIncident}
+                disabled={isIncidentSubmitting}
+                className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {isIncidentSubmitting ? "Sparar..." : "Skapa avvikelse"}
+              </button>
+              {incidentMessage ? (
+                <p className="text-sm text-[color:var(--muted)]">{incidentMessage}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Senaste avvikelser</p>
+              {isIncidentsLoading ? (
+                <p className="text-sm text-[color:var(--muted)]">Hamtar avvikelser...</p>
+              ) : incidents.length === 0 ? (
+                <p className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted)]">
+                  Inga avvikelser registrerade an.
+                </p>
+              ) : (
+                incidents.map((incident) => (
+                  <article
+                    key={incident.id}
+                    className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-[color:var(--ink)]">{incident.title}</p>
+                      <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                        {incident.eventDate}
+                      </p>
+                    </div>
+                    <p className="mt-1 text-sm text-[color:var(--muted)]">{incident.description}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
+                        Allvar: {incident.severity}
+                      </span>
+                      <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
+                        Status: {incident.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {incident.status !== "new" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateIncidentStatus(incident.id, "new")}
+                          className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                        >
+                          Ateroppna
+                        </button>
+                      ) : null}
+                      {incident.status !== "investigating" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateIncidentStatus(incident.id, "investigating")}
+                          className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                        >
+                          Under utredning
+                        </button>
+                      ) : null}
+                      {incident.status !== "closed" ? (
+                        <button
+                          type="button"
+                          onClick={() => updateIncidentStatus(incident.id, "closed")}
+                          className="rounded-lg bg-[color:var(--brand)] px-3 py-1 text-xs font-semibold text-white"
+                        >
+                          Stang
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Interaktiv frågeguide</h2>
         <div className="mt-4 space-y-5">
           {questionnaireItems.map((item) => (
             <div key={item.key} className="relative rounded-2xl bg-[color:var(--panel)] p-4">
@@ -864,7 +1121,7 @@ export default function WorkspacePage() {
       ) : null}
 
       <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Dokumentgenerator + granskning</h2>
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Dokumentgenerator + granskning</h2>
         <p className="mt-2 text-sm text-[color:var(--muted)]">
           AI-förslag skapas server-side för ledningssystemets moduler. Granska och verifiera
           innehållet innan export.

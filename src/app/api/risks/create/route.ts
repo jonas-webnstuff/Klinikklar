@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     } = await authSupabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ ok: false, error: "Du maste vara inloggad." }, { status: 401 });
+      return NextResponse.json({ ok: false, error: "Du måste vara inloggad." }, { status: 401 });
     }
 
     const supabase = createSupabaseAdminClient();
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     if (!organizationId) {
       return NextResponse.json(
-        { ok: false, error: "Ingen organisation hittades. Spara workspace forst." },
+        { ok: false, error: "Ingen organisation hittades. Spara workspace först." },
         { status: 400 }
       );
     }

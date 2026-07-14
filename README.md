@@ -47,10 +47,16 @@ cp .env.example .env.local
 4. Starta utvecklingsserver:
 
 ```bash
-npm run dev
+npm run dev:3001
 ```
 
-5. Öppna `http://localhost:3000`
+5. Öppna `http://localhost:3001`
+
+Vid cacheproblem, kör istället:
+
+```bash
+npm run dev:clean:3001
+```
 
 ## Databas (Supabase)
 
@@ -72,7 +78,9 @@ Kör SQL-skriptet i Supabase SQL Editor för att skapa tabellerna.
 
 ## Skript
 
-- `npm run dev` startar lokalt
+- `npm run dev` startar lokalt (default-port)
+- `npm run dev:3001` startar lokalt på port 3001
+- `npm run dev:clean:3001` rensar cache och startar på port 3001
 - `npm run build` bygger produktion
 - `npm run lint` kör ESLint
 - `npm run typecheck` kör TypeScript-kontroll

@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     } = await authSupabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ ok: false, error: "Du maste vara inloggad." }, { status: 401 });
+      return NextResponse.json({ ok: false, error: "Du måste vara inloggad." }, { status: 401 });
     }
 
     const supabase = createSupabaseAdminClient();
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
     if (!membership) {
       return NextResponse.json(
-        { ok: false, error: "Du har inte behorighet till organisationen." },
+        { ok: false, error: "Du har inte behörighet till organisationen." },
         { status: 403 }
       );
     }

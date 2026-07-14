@@ -1174,9 +1174,9 @@ export default function WorkspacePage() {
               <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Kontrollstatus</p>
                 <p className="mt-1 text-sm text-[color:var(--ink)]">
-                  Pending {controlSummary.pending} / Klara {controlSummary.done}
+                  Planerade {controlSummary.pending} / Klara {controlSummary.done}
                 </p>
-                <p className="mt-1 text-xs text-amber-700">Overdue: {controlSummary.overdue}</p>
+                <p className="mt-1 text-xs text-amber-700">Försenade: {controlSummary.overdue}</p>
               </div>
             </div>
           ) : null}
@@ -1523,9 +1523,9 @@ export default function WorkspacePage() {
                   className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
                 >
                   <option value="weekly">Veckovis</option>
-                  <option value="monthly">Manadsvis</option>
+                  <option value="monthly">Månadsvis</option>
                   <option value="quarterly">Kvartalsvis</option>
-                  <option value="yearly">Arsvis</option>
+                  <option value="yearly">Årsvis</option>
                   <option value="ad_hoc">Ad hoc</option>
                 </select>
                 <input
@@ -1594,7 +1594,7 @@ export default function WorkspacePage() {
                           onClick={() => updateControlStatus(control.id, "pending")}
                           className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
                         >
-                          Pending
+                          Planerad
                         </button>
                       ) : null}
                       {control.status !== "done" ? (
@@ -1612,7 +1612,7 @@ export default function WorkspacePage() {
                           onClick={() => updateControlStatus(control.id, "overdue")}
                           className="rounded-lg bg-[color:var(--brand)] px-3 py-1 text-xs font-semibold text-white"
                         >
-                          Overdue
+                          Försenad
                         </button>
                       ) : null}
                     </div>

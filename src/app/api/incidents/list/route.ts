@@ -26,7 +26,7 @@ export async function POST() {
     } = await authSupabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ ok: false, error: "Du maste vara inloggad." }, { status: 401 });
+      return NextResponse.json({ ok: false, error: "Du måste vara inloggad." }, { status: 401 });
     }
 
     const supabase = createSupabaseAdminClient();
@@ -62,7 +62,7 @@ export async function POST() {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Kunde inte hamta avvikelser",
+        error: error instanceof Error ? error.message : "Kunde inte hämta avvikelser",
       },
       { status: 400 }
     );

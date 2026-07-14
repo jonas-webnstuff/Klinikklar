@@ -9,6 +9,12 @@ const planRank = {
   step3: 3,
 } as const;
 
+const planLabels = {
+  step1: "Bli klinikklar",
+  step2: "Driv kliniken rätt",
+  step3: "Var alltid redo",
+} as const;
+
 const bodySchema = z.object({
   plan: z.enum(["step1", "step2", "step3"]),
   clinicName: z.string().min(1),
@@ -37,7 +43,7 @@ export async function POST(request: Request) {
     if (requirement && planRank[payload.plan] < planRank[requirement.availableFrom]) {
       return NextResponse.json(
         {
-          error: `Dokumentet ingar fran nivan ${requirement.availableFrom}.`,
+          error: `Dokumentet ingår från nivån ${planLabels[requirement.availableFrom]}.`,
         },
         { status: 403 }
       );

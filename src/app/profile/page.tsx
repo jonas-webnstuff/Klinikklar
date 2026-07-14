@@ -33,7 +33,7 @@ export default async function ProfilePage() {
           Min profil
         </p>
         <h1 className="mt-2 text-3xl font-semibold text-[color:var(--ink)]">
-          {profile?.full_name || "Anvandare"}
+          {profile?.full_name || "Användare"}
         </h1>
         <p className="mt-2 text-[color:var(--muted)]">{user.email}</p>
       </header>
@@ -43,7 +43,7 @@ export default async function ProfilePage() {
 
         {!memberships || memberships.length === 0 ? (
           <p className="mt-3 text-[color:var(--muted)]">
-            Inga organisationer kopplade an. Spara en workspace for att skapa kopplingen.
+            Inga organisationer kopplade än. Spara en workspace för att skapa kopplingen.
           </p>
         ) : (
           <ul className="mt-4 space-y-3">
@@ -53,7 +53,7 @@ export default async function ProfilePage() {
                 className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3"
               >
                 <p className="font-semibold text-[color:var(--ink)]">
-                  {(item.organizations as { name?: string } | null)?.name || "Okand organisation"}
+                  {(item.organizations as { name?: string } | null)?.name || "Okänd organisation"}
                 </p>
                 <p className="text-sm text-[color:var(--muted)]">
                   Org.nr: {(item.organizations as { org_number?: string } | null)?.org_number || "-"}

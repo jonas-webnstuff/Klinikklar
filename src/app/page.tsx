@@ -177,7 +177,7 @@ export default function Home() {
         </div>
 
         <div className="relative min-h-[620px]">
-          <div className="hero-glow absolute inset-0 overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-white">
+          <div className="hero-glow absolute inset-0 relative overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-white">
             <Image
               src="/images/hero-dentist.png"
               alt="Tandläkare i klinikmiljö"

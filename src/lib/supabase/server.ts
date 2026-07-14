@@ -16,9 +16,15 @@ export async function createSupabaseServerClient() {
         return cookieStore.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          cookieStore.set(name, value, options);
-        });
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        } catch (error) {
+          // Cookies can only be modified in Server Actions or Route Handlers.
+          // During SSR rendering, we silently skip setting cookies.
+          // They will be handled in Route Handlers (auth callbacks, etc).
+        }
       },
     },
   });

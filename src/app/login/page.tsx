@@ -110,7 +110,7 @@ export default function LoginPage() {
           {mode === "login" ? "Logga in" : "Skapa konto"}
         </h1>
         <p className="mt-3 text-[color:var(--muted)]">
-          Logga in for att komma at workspace, dokument och organisationens data.
+          Logga in för att komma åt workspace, dokument och organisationens data.
         </p>
 
         {selectedPlan ? (
@@ -126,7 +126,7 @@ export default function LoginPage() {
             disabled={isOAuthLoading || isLoading}
             className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:border-[color:var(--line-strong)] disabled:cursor-not-allowed disabled:text-slate-400"
           >
-            Fortsatt med Google
+            Fortsätt med Google
           </button>
           <button
             type="button"
@@ -134,12 +134,12 @@ export default function LoginPage() {
             disabled={isOAuthLoading || isLoading}
             className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:border-[color:var(--line-strong)] disabled:cursor-not-allowed disabled:text-slate-400"
           >
-            Fortsatt med Microsoft
+            Fortsätt med Microsoft
           </button>
         </div>
 
         <p className="mt-3 text-xs text-[color:var(--muted)]">
-          Du kan aktivera dessa providers i Supabase nar du vill.
+          Du kan aktivera dessa providers i Supabase när du vill.
         </p>
 
         <div className="mt-6 inline-flex rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-1">
@@ -178,7 +178,7 @@ export default function LoginPage() {
           </label>
 
           <label className="block space-y-1 text-sm text-[color:var(--muted)]">
-            Losenord
+            Lösenord
             <input
               type="password"
               value={password}
@@ -194,7 +194,7 @@ export default function LoginPage() {
             disabled={isLoading || isOAuthLoading}
             className="mt-2 w-full rounded-xl bg-[color:var(--brand)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-2)] disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isLoading ? "Vantar..." : mode === "login" ? "Logga in" : "Skapa konto"}
+            {isLoading ? "Väntar..." : mode === "login" ? "Logga in" : "Skapa konto"}
           </button>
 
           {message ? <p className="text-sm text-[color:var(--muted)]">{message}</p> : null}

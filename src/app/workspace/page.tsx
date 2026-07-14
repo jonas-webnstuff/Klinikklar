@@ -746,7 +746,7 @@ export default function WorkspacePage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--brand)]">
-                  Falthjalp
+                  Fälthjälp
                 </p>
                 <h3
                   id="question-help-title"
@@ -759,7 +759,7 @@ export default function WorkspacePage() {
                 type="button"
                 onClick={() => setOpenHelpKey(null)}
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--line)] text-[color:var(--muted)]"
-                aria-label="Stang"
+                aria-label="Stäng"
               >
                 ×
               </button>
@@ -790,7 +790,7 @@ export default function WorkspacePage() {
                 IVO-avsnitt
               </p>
               <p className="mt-2 text-sm text-[color:var(--muted)]">
-                Oppna IVO:s vagledning for att lasa vad som vanligtvis ska beskrivas i detta falt.
+                Öppna IVO:s vägledning för att läsa vad som vanligtvis ska beskrivas i detta fält.
               </p>
               <a
                 href={activeHelpItem.ivoUrl}

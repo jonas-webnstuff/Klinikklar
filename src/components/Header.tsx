@@ -40,13 +40,13 @@ export async function Header() {
             <>
               <Link
                 href="/profile"
-                className="rounded-xl border border-[color:var(--line-strong)] bg-white px-6 py-3 text-sm font-semibold text-[color:var(--ink)] shadow-[0_10px_25px_rgba(14,31,53,0.06)] transition hover:border-[color:var(--brand)]/30"
+                className="rounded-xl border border-[color:var(--line-strong)] bg-white px-4 py-2.5 text-sm font-semibold text-[color:var(--ink)] shadow-[0_10px_25px_rgba(14,31,53,0.06)] transition hover:border-[color:var(--brand)]/30 sm:px-6 sm:py-3"
               >
                 Profil
               </Link>
               <Link
                 href="/auth/signout"
-                className="rounded-xl bg-[color:var(--brand)] px-6 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(41,181,120,0.28)] transition hover:bg-[color:var(--brand-2)]"
+                className="rounded-xl bg-[color:var(--brand)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(41,181,120,0.28)] transition hover:bg-[color:var(--brand-2)] sm:px-6 sm:py-3"
               >
                 Logga ut
               </Link>
@@ -55,13 +55,13 @@ export async function Header() {
             <>
               <Link
                 href="/login"
-                className="rounded-xl border border-[color:var(--line-strong)] bg-white px-6 py-3 text-sm font-semibold text-[color:var(--ink)] shadow-[0_10px_25px_rgba(14,31,53,0.06)] transition hover:border-[color:var(--brand)]/30"
+                className="rounded-xl border border-[color:var(--line-strong)] bg-white px-4 py-2.5 text-sm font-semibold text-[color:var(--ink)] shadow-[0_10px_25px_rgba(14,31,53,0.06)] transition hover:border-[color:var(--brand)]/30 sm:px-6 sm:py-3"
               >
                 Logga in
               </Link>
               <Link
                 href="/login"
-                className="rounded-xl bg-[color:var(--brand)] px-6 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(41,181,120,0.28)] transition hover:bg-[color:var(--brand-2)]"
+                className="hidden rounded-xl bg-[color:var(--brand)] px-6 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(41,181,120,0.28)] transition hover:bg-[color:var(--brand-2)] sm:inline-flex"
               >
                 Kom igång
               </Link>

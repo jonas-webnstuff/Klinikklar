@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f9fd;
+  --panel: #eef5fb;
+  --panel-strong: #ffffff;
+  --ink: #0d2757;
+  --muted: #50627f;
+  --line: #dde7f1;
+  --line-strong: #cdd9e6;
+  --brand: #2ab86f;
+  --brand-2: #1f9b5c;
+  --brand-soft: #ebf9f1;
+  --accent: #9dc4f0;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-sora);
+  --font-mono: var(--font-space-grotesk);
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(42, 184, 111, 0.08), transparent 28%),
+    radial-gradient(circle at 82% 18%, rgba(157, 196, 240, 0.18), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
+  color: var(--ink);
+  font-family: var(--font-sora), sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-space-grotesk), sans-serif;
+}
+
+.app-shell {
+  animation: fade-in 500ms ease-out;
+}
+
+.hero-panel {
+  background: linear-gradient(180deg, #ffffff 0%, #f6fbff 100%);
+}
+
+.hero-glow {
+  box-shadow: 0 24px 80px rgba(13, 39, 87, 0.08);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

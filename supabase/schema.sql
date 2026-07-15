@@ -122,6 +122,16 @@ create table if not exists document_versions (
   unique (generated_document_id, version)
 );
 
+create table if not exists compliance_audit_events (
+  id uuid primary key default gen_random_uuid(),
+  application_id uuid not null references applications(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_type text not null,
+  message text not null,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists compliance_cycles (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
@@ -213,6 +223,9 @@ on control_tasks(organization_id, next_due_date);
 create index if not exists improvement_actions_org_status_idx
 on improvement_actions(organization_id, status);
 
+create index if not exists compliance_audit_events_application_created_idx
+on compliance_audit_events(application_id, created_at desc);
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -292,6 +305,7 @@ alter table evidence enable row level security;
 alter table document_templates enable row level security;
 alter table generated_documents enable row level security;
 alter table document_versions enable row level security;
+alter table compliance_audit_events enable row level security;
 alter table compliance_cycles enable row level security;
 alter table risk_register_entries enable row level security;
 alter table incident_reports enable row level security;
@@ -454,6 +468,27 @@ with check (
     from generated_documents gd
     join applications a on a.id = gd.application_id
     where gd.id = document_versions.generated_document_id
+      and public.is_org_member(a.organization_id)
+  )
+);
+
+drop policy if exists compliance_audit_events_member_policy on compliance_audit_events;
+create policy compliance_audit_events_member_policy
+on compliance_audit_events
+for all
+using (
+  exists (
+    select 1
+    from applications a
+    where a.id = compliance_audit_events.application_id
+      and public.is_org_member(a.organization_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from applications a
+    where a.id = compliance_audit_events.application_id
       and public.is_org_member(a.organization_id)
   )
 );

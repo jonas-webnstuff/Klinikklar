@@ -1,12 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import useLocalStorage from "@/hooks/useLocalStorage";
+import { useEffect, useMemo, useState } from "react";
 
-type ApplicationStage = "draft" | "review" | "approved" | "submitted";
+type ApplicationStatus = "draft" | "in_review" | "ready_to_submit" | "submitted";
+
+type ReadinessChecklist = {
+  hasOrganization: boolean;
+  hasClinic: boolean;
+  questionnaireComplete: boolean;
+  requirementsComplete: boolean;
+  evidenceLinked: boolean;
+  canMoveToReady: boolean;
+  canSubmit: boolean;
+  evidenceCount: number;
+  completeRequirementCount: number;
+  requirementCount: number;
+};
+
+type RequirementOption = {
+  id: string;
+  code: string;
+  title: string;
+};
+
+type EvidenceItem = {
+  id: string;
+  requirementId: string;
+  requirementCode: string;
+  requirementTitle: string;
+  title: string;
+  note?: string;
+  filePath?: string;
+};
+
+type AuditItem = {
+  id: string;
+  event_type: string;
+  message: string;
+  created_at: string;
+};
 
 const stages: Array<{
-  key: ApplicationStage;
+  key: ApplicationStatus;
   title: string;
   description: string;
 }> = [
@@ -16,12 +52,12 @@ const stages: Array<{
     description: "Fyll i frågeguiden och samla underlag.",
   },
   {
-    key: "review",
+    key: "in_review",
     title: "Klar för granskning",
     description: "Gå igenom dokument och kontrollera innehållet.",
   },
   {
-    key: "approved",
+    key: "ready_to_submit",
     title: "Godkänd",
     description: "Materialet är klart för inskick.",
   },
@@ -32,20 +68,180 @@ const stages: Array<{
   },
 ];
 
-const stageLabels: Record<ApplicationStage, string> = {
+const stageLabels: Record<ApplicationStatus, string> = {
   draft: "Utkast",
-  review: "Klar för granskning",
-  approved: "Godkänd",
+  in_review: "Klar för granskning",
+  ready_to_submit: "Godkänd",
   submitted: "Inskickad",
 };
 
 export default function AnsokanPage() {
-  const [applicationStage, setApplicationStage] = useLocalStorage<ApplicationStage>(
-    "klinikklar-ansokan-stage",
-    "draft"
+  const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("draft");
+  const [checklist, setChecklist] = useState<ReadinessChecklist | null>(null);
+  const [audit, setAudit] = useState<AuditItem[]>([]);
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [requirements, setRequirements] = useState<RequirementOption[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [evidenceMessage, setEvidenceMessage] = useState("");
+  const [isSavingEvidence, setIsSavingEvidence] = useState(false);
+  const [evidenceForm, setEvidenceForm] = useState({
+    requirementId: "",
+    title: "",
+    note: "",
+    filePath: "",
+  });
+
+  const activeStageIndex = stages.findIndex((stage) => stage.key === applicationStatus);
+
+  const readinessItems = useMemo(
+    () => [
+      {
+        key: "questionnaire",
+        label: "Frågeguiden är ifylld",
+        done: checklist?.questionnaireComplete || false,
+      },
+      {
+        key: "requirements",
+        label: "Kravlistan är komplett",
+        done: checklist?.requirementsComplete || false,
+      },
+      {
+        key: "evidence",
+        label: "Minst ett evidensunderlag är kopplat",
+        done: checklist?.evidenceLinked || false,
+      },
+    ],
+    [checklist]
   );
 
-  const activeStageIndex = stages.findIndex((stage) => stage.key === applicationStage);
+  async function loadApplicationState() {
+    setIsLoading(true);
+    setStatusMessage("");
+
+    const response = await fetch("/api/application/readiness", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    setIsLoading(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setStatusMessage(data.error || "Kunde inte hämta ansökningsstatus.");
+      return;
+    }
+
+    const data = (await response.json()) as {
+      found: boolean;
+      status?: ApplicationStatus;
+      checklist?: ReadinessChecklist;
+      audit?: AuditItem[];
+    };
+
+    if (!data.found) {
+      setStatusMessage("Ingen aktiv ansökan hittades. Spara workspace först.");
+      return;
+    }
+
+    if (data.status) {
+      setApplicationStatus(data.status);
+    }
+
+    if (data.checklist) {
+      setChecklist(data.checklist);
+    }
+
+    setAudit(data.audit || []);
+  }
+
+  async function loadEvidence() {
+    const response = await fetch("/api/evidence/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setEvidenceMessage(data.error || "Kunde inte hämta evidens.");
+      return;
+    }
+
+    const data = (await response.json()) as {
+      evidence: EvidenceItem[];
+      requirements: RequirementOption[];
+    };
+
+    setEvidence(data.evidence || []);
+    setRequirements(data.requirements || []);
+
+    setEvidenceForm((prev) => ({
+      ...prev,
+      requirementId: prev.requirementId || data.requirements?.[0]?.id || "",
+    }));
+  }
+
+  async function updateApplicationStatus(status: ApplicationStatus) {
+    setStatusMessage("");
+
+    const response = await fetch("/api/application/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setStatusMessage(data.error || "Kunde inte uppdatera status.");
+      return;
+    }
+
+    const data = (await response.json()) as {
+      status: ApplicationStatus;
+      checklist: ReadinessChecklist;
+    };
+
+    setApplicationStatus(data.status);
+    setChecklist(data.checklist);
+    setStatusMessage("Status uppdaterad.");
+    await loadApplicationState();
+  }
+
+  async function createEvidence() {
+    if (!evidenceForm.requirementId || !evidenceForm.title.trim()) {
+      setEvidenceMessage("Välj krav och ange titel på underlaget.");
+      return;
+    }
+
+    setIsSavingEvidence(true);
+    setEvidenceMessage("");
+
+    const response = await fetch("/api/evidence/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(evidenceForm),
+    });
+
+    setIsSavingEvidence(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setEvidenceMessage(data.error || "Kunde inte spara evidens.");
+      return;
+    }
+
+    setEvidenceMessage("Evidens sparad.");
+    setEvidenceForm((prev) => ({ ...prev, title: "", note: "", filePath: "" }));
+    await loadEvidence();
+    await loadApplicationState();
+  }
+
+  useEffect(() => {
+    void loadApplicationState();
+    void loadEvidence();
+  }, []);
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-10 md:px-10">
@@ -55,12 +251,12 @@ export default function AnsokanPage() {
         </p>
         <h1 className="mt-2 text-3xl font-semibold text-[color:var(--ink)]">Frågeguide och underlag</h1>
         <p className="mt-3 max-w-3xl text-[color:var(--muted)]">
-          Här samlar vi frågeguiden, dokumentgranskning och export inför inskick. Status sparas
-          automatiskt i webbläsaren.
+          Här samlar vi frågeguiden, dokumentgranskning, evidens och export inför inskick.
         </p>
         <div className="mt-4 inline-flex rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-          Nuvarande status: {stageLabels[applicationStage]}
+          Nuvarande status: {stageLabels[applicationStatus]}
         </div>
+        {statusMessage ? <p className="mt-3 text-sm text-[color:var(--muted)]">{statusMessage}</p> : null}
       </header>
 
       <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
@@ -71,7 +267,7 @@ export default function AnsokanPage() {
             </p>
             <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">Steg för ansökan</h2>
           </div>
-          <p className="text-sm text-[color:var(--muted)]">Sparas automatiskt</p>
+          <p className="text-sm text-[color:var(--muted)]">Backend-spårad status</p>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -112,42 +308,170 @@ export default function AnsokanPage() {
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          {applicationStage !== "draft" ? (
+          {applicationStatus !== "draft" ? (
             <button
               type="button"
-              onClick={() => setApplicationStage("draft")}
+              onClick={() => updateApplicationStatus("draft")}
               className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
             >
               Återställ till utkast
             </button>
           ) : null}
-          {applicationStage === "draft" ? (
+          {applicationStatus === "draft" ? (
             <button
               type="button"
-              onClick={() => setApplicationStage("review")}
+              onClick={() => updateApplicationStatus("in_review")}
+              disabled={!checklist?.canMoveToReady}
               className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
             >
               Markera klar för granskning
             </button>
           ) : null}
-          {applicationStage === "review" ? (
+          {applicationStatus === "in_review" ? (
             <button
               type="button"
-              onClick={() => setApplicationStage("approved")}
+              onClick={() => updateApplicationStatus("ready_to_submit")}
+              disabled={!checklist?.canMoveToReady}
               className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
             >
               Godkänn ansökan
             </button>
           ) : null}
-          {applicationStage === "approved" ? (
+          {applicationStatus === "ready_to_submit" ? (
             <button
               type="button"
-              onClick={() => setApplicationStage("submitted")}
+              onClick={() => updateApplicationStatus("submitted")}
+              disabled={!checklist?.canSubmit}
               className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
             >
               Markera som inskickad
             </button>
           ) : null}
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold text-[color:var(--ink)]">Readiness-checklista</p>
+          <ul className="mt-3 space-y-2 text-sm">
+            {readinessItems.map((item) => (
+              <li key={item.key} className="flex items-center justify-between gap-3">
+                <span className="text-[color:var(--ink)]">{item.label}</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    item.done
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-amber-100 text-amber-800"
+                  }`}
+                >
+                  {item.done ? "Klar" : "Saknas"}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-[color:var(--muted)]">
+            Krav klara: {checklist?.completeRequirementCount || 0}/{checklist?.requirementCount || 0}. Evidens: {checklist?.evidenceCount || 0}.
+          </p>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">Evidens och underlag</h2>
+        <p className="mt-2 text-sm text-[color:var(--muted)]">
+          Koppla dokument eller länkar till respektive krav för att stärka ansökningsunderlaget.
+        </p>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+          <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Lägg till evidens</p>
+            <select
+              value={evidenceForm.requirementId}
+              onChange={(event) =>
+                setEvidenceForm((prev) => ({ ...prev, requirementId: event.target.value }))
+              }
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Välj krav</option>
+              {requirements.map((requirement) => (
+                <option key={requirement.id} value={requirement.id}>
+                  {requirement.code} - {requirement.title}
+                </option>
+              ))}
+            </select>
+            <input
+              value={evidenceForm.title}
+              onChange={(event) => setEvidenceForm((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Titel på underlag"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <textarea
+              value={evidenceForm.note}
+              onChange={(event) => setEvidenceForm((prev) => ({ ...prev, note: event.target.value }))}
+              placeholder="Kort beskrivning"
+              rows={3}
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <input
+              value={evidenceForm.filePath}
+              onChange={(event) => setEvidenceForm((prev) => ({ ...prev, filePath: event.target.value }))}
+              placeholder="Filväg eller URL (valfritt)"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={createEvidence}
+              disabled={isSavingEvidence}
+              className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {isSavingEvidence ? "Sparar..." : "Spara evidens"}
+            </button>
+            {evidenceMessage ? <p className="text-sm text-[color:var(--muted)]">{evidenceMessage}</p> : null}
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Tillagt underlag</p>
+            {isLoading ? (
+              <p className="text-sm text-[color:var(--muted)]">Läser in...</p>
+            ) : evidence.length === 0 ? (
+              <p className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted)]">
+                Ingen evidens registrerad än.
+              </p>
+            ) : (
+              evidence.map((item) => (
+                <article key={item.id} className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                    {item.requirementCode}
+                  </p>
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">{item.title}</p>
+                  <p className="mt-1 text-sm text-[color:var(--muted)]">{item.requirementTitle}</p>
+                  {item.note ? <p className="mt-2 text-sm text-[color:var(--muted)]">{item.note}</p> : null}
+                  {item.filePath ? (
+                    <p className="mt-2 text-xs text-[color:var(--muted)]">Ref: {item.filePath}</p>
+                  ) : null}
+                </article>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">Auditlogg</h2>
+        <p className="mt-2 text-sm text-[color:var(--muted)]">
+          Senaste händelser för status och evidens i ansökningsprocessen.
+        </p>
+        <div className="mt-4 space-y-2">
+          {audit.length === 0 ? (
+            <p className="text-sm text-[color:var(--muted)]">Ingen logghistorik ännu.</p>
+          ) : (
+            audit.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-2"
+              >
+                <p className="text-sm font-semibold text-[color:var(--ink)]">{item.message}</p>
+                <p className="text-xs text-[color:var(--muted)]">{new Date(item.created_at).toLocaleString("sv-SE")}</p>
+              </div>
+            ))
+          )}
         </div>
       </section>
 

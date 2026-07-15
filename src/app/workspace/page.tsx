@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import useLocalStorage from "@/hooks/useLocalStorage";
 import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
 import type {
   ControlTaskFrequency,
@@ -51,7 +50,12 @@ type WorkspaceView =
   | "riskanalyser"
   | "arshjul"
   | "dokument";
-type ApplicationStage = "draft" | "review" | "approved" | "submitted";
+type ApplicationStatus = "draft" | "in_review" | "ready_to_submit" | "submitted";
+
+type ReadinessChecklist = {
+  canMoveToReady: boolean;
+  canSubmit: boolean;
+};
 
 type IncidentItem = {
   id: string;
@@ -299,10 +303,11 @@ export default function WorkspacePage() {
   const searchParams = useSearchParams();
   const [activePlan, setActivePlan] = useState<PlanLevel>("step2");
   const [activeView, setActiveView] = useState<WorkspaceView>("overview");
-  const [applicationStage, setApplicationStage] = useLocalStorage<ApplicationStage>(
-    "klinikklar-ansokan-stage",
-    "draft"
-  );
+  const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("draft");
+  const [readiness, setReadiness] = useState<ReadinessChecklist>({
+    canMoveToReady: false,
+    canSubmit: false,
+  });
 
   const [profile, setProfile] = useState<ProfileState>(initialProfile);
   const [answers, setAnswers] = useState<AnswersState>(initialAnswers);
@@ -430,6 +435,7 @@ export default function WorkspacePage() {
       }
 
       setWorkspaceMessage("Tidigare sparade uppgifter hämtade.");
+      void loadApplicationReadiness();
     }
 
     hydrateWorkspace();
@@ -484,8 +490,8 @@ export default function WorkspacePage() {
   const isApplicationView = activeView === "dokument";
   const showSection = (view: Exclude<WorkspaceView, "overview">) =>
     activeView === view || (isOverview && view !== "dokument");
-  const isApplicationSubmitted = applicationStage === "submitted";
-  const isApplicationApproved = applicationStage === "approved";
+  const isApplicationSubmitted = applicationStatus === "submitted";
+  const isApplicationApproved = applicationStatus === "ready_to_submit";
 
   const incidentSummary = useMemo(() => {
     const summary = {
@@ -570,6 +576,72 @@ export default function WorkspacePage() {
     answers.quality_process?.answer.trim() &&
     answers.staffing?.answer.trim() &&
     answers.incident_routine?.answer.trim();
+
+  const getAnswerValue = (key: string) => answers[key]?.answer || "";
+
+  const setAnswerValue = (key: string, value: string) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [key]: {
+        answer: value,
+        followUpAnswer: prev[key]?.followUpAnswer || "",
+      },
+    }));
+  };
+
+  async function loadApplicationReadiness() {
+    const response = await fetch("/api/application/readiness", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as {
+      found: boolean;
+      status?: ApplicationStatus;
+      checklist?: ReadinessChecklist;
+    };
+
+    if (!data.found) {
+      setApplicationStatus("draft");
+      setReadiness({ canMoveToReady: false, canSubmit: false });
+      return;
+    }
+
+    if (data.status) {
+      setApplicationStatus(data.status);
+    }
+
+    if (data.checklist) {
+      setReadiness(data.checklist);
+    }
+  }
+
+  async function updateApplicationStatus(status: ApplicationStatus) {
+    const response = await fetch("/api/application/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setWorkspaceMessage(data.error || "Kunde inte uppdatera ansökningsstatus.");
+      return;
+    }
+
+    const data = (await response.json()) as {
+      status: ApplicationStatus;
+      checklist: ReadinessChecklist;
+    };
+
+    setApplicationStatus(data.status);
+    setReadiness(data.checklist);
+  }
 
   async function loadIncidents() {
     if (!canUseIncidentModule) {
@@ -814,6 +886,14 @@ export default function WorkspacePage() {
     loadControls();
   }, [activePlan, hasHydratedWorkspace]);
 
+  useEffect(() => {
+    if (!hasHydratedWorkspace) {
+      return;
+    }
+
+    void loadApplicationReadiness();
+  }, [hasHydratedWorkspace]);
+
   async function saveWorkspace() {
     if (!profile.orgNumber.trim()) {
       setWorkspaceMessage("Ange organisationsnummer innan du sparar.");
@@ -853,6 +933,7 @@ export default function WorkspacePage() {
     }
 
     setWorkspaceMessage("Uppgifter sparade.");
+    void loadApplicationReadiness();
     void loadIncidents();
     void loadRisks();
     void loadControls();
@@ -904,6 +985,7 @@ export default function WorkspacePage() {
     }
 
     setWorkspaceMessage("Uppgifter hämtade.");
+    void loadApplicationReadiness();
     void loadIncidents();
     void loadRisks();
     void loadControls();
@@ -1174,6 +1256,91 @@ export default function WorkspacePage() {
             >
               Öppna ansökan
             </a>
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Ledningssystem</p>
+              <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Månatlig uppföljning
+              </p>
+              <div className="mt-3 space-y-3">
+                <input
+                  value={getAnswerValue("management_system_owner")}
+                  onChange={(event) => setAnswerValue("management_system_owner", event.target.value)}
+                  placeholder="Ansvarig roll (ex. Verksamhetschef)"
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                <textarea
+                  value={getAnswerValue("management_system_processes")}
+                  onChange={(event) =>
+                    setAnswerValue("management_system_processes", event.target.value)
+                  }
+                  placeholder="Beskriv huvudprocesser och hur de följs upp"
+                  rows={3}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                <textarea
+                  value={getAnswerValue("management_system_documents")}
+                  onChange={(event) =>
+                    setAnswerValue("management_system_documents", event.target.value)
+                  }
+                  placeholder="Styrande dokument (rutiner, policyer, riktlinjer)"
+                  rows={3}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Senast uppdaterad
+                  <input
+                    type="date"
+                    value={getAnswerValue("management_system_updated_at")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_updated_at", event.target.value)
+                    }
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              </div>
+            </article>
+
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Rutiner och uppdateringar</p>
+              <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">Löpande</p>
+              <div className="mt-3 space-y-3">
+                <input
+                  value={getAnswerValue("routine_updates_area")}
+                  onChange={(event) => setAnswerValue("routine_updates_area", event.target.value)}
+                  placeholder="Berört område (ex. steril, journal, bemanning)"
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                <textarea
+                  value={getAnswerValue("routine_updates_change_log")}
+                  onChange={(event) =>
+                    setAnswerValue("routine_updates_change_log", event.target.value)
+                  }
+                  placeholder="Vad har ändrats och varför?"
+                  rows={3}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                <input
+                  value={getAnswerValue("routine_updates_owner")}
+                  onChange={(event) => setAnswerValue("routine_updates_owner", event.target.value)}
+                  placeholder="Ansvarig för uppdateringen"
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Nästa uppföljning
+                  <input
+                    type="date"
+                    value={getAnswerValue("routine_updates_next_review")}
+                    onChange={(event) =>
+                      setAnswerValue("routine_updates_next_review", event.target.value)
+                    }
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              </div>
+            </article>
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1935,11 +2102,11 @@ export default function WorkspacePage() {
               </p>
             </div>
             <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-              {applicationStage === "draft"
+              {applicationStatus === "draft"
                 ? "Utkast"
-                : applicationStage === "review"
+                : applicationStatus === "in_review"
                   ? "Klar för granskning"
-                  : applicationStage === "approved"
+                  : applicationStatus === "ready_to_submit"
                     ? "Godkänd"
                     : "Inskickad"}
             </div>
@@ -1951,37 +2118,40 @@ export default function WorkspacePage() {
                 {isApplicationSubmitted ? "Ansökan är inskickad" : "Ansökningsläge"}
               </p>
               <div className="flex flex-wrap gap-2">
-                {applicationStage !== "draft" ? (
+                {applicationStatus !== "draft" ? (
                   <button
                     type="button"
-                    onClick={() => setApplicationStage("draft")}
+                    onClick={() => updateApplicationStatus("draft")}
                     className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
                   >
                     Till utkast
                   </button>
                 ) : null}
-                {applicationStage === "draft" ? (
+                {applicationStatus === "draft" ? (
                   <button
                     type="button"
-                    onClick={() => setApplicationStage("review")}
+                    onClick={() => updateApplicationStatus("in_review")}
+                    disabled={!readiness.canMoveToReady}
                     className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white"
                   >
                     Klar för granskning
                   </button>
                 ) : null}
-                {applicationStage === "review" ? (
+                {applicationStatus === "in_review" ? (
                   <button
                     type="button"
-                    onClick={() => setApplicationStage("approved")}
+                    onClick={() => updateApplicationStatus("ready_to_submit")}
+                    disabled={!readiness.canMoveToReady}
                     className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white"
                   >
                     Godkänn
                   </button>
                 ) : null}
-                {applicationStage === "approved" ? (
+                {applicationStatus === "ready_to_submit" ? (
                   <button
                     type="button"
-                    onClick={() => setApplicationStage("submitted")}
+                    onClick={() => updateApplicationStatus("submitted")}
+                    disabled={!readiness.canSubmit}
                     className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white"
                   >
                     Markera inskickad
@@ -2094,7 +2264,8 @@ export default function WorkspacePage() {
                   {state?.approved && !isApplicationApproved && !isApplicationSubmitted ? (
                     <button
                       type="button"
-                      onClick={() => setApplicationStage("approved")}
+                      onClick={() => updateApplicationStatus("ready_to_submit")}
+                      disabled={!readiness.canMoveToReady}
                       className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
                     >
                       Förbered inskick

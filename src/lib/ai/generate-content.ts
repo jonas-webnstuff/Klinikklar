@@ -1,7 +1,10 @@
 import { z } from "zod";
 import type { DocumentKind } from "@/types/domain";
 
+type PlanLevel = "step1" | "step2" | "step3";
+
 const inputSchema = z.object({
+  plan: z.enum(["step1", "step2", "step3"]),
   clinicName: z.string().min(1),
   municipality: z.string().min(1),
   careScope: z.string().min(1),
@@ -19,8 +22,46 @@ const inputSchema = z.object({
 
 export type GenerateContentInput = z.infer<typeof inputSchema>;
 
+const planLabels: Record<PlanLevel, string> = {
+  step1: "Klinikklar Start",
+  step2: "Klinikklar Drift",
+  step3: "Klinikklar Premium",
+};
+
+function planDocumentationProcess(plan: PlanLevel): string[] {
+  if (plan === "step1") {
+    return [
+      "Dokumentationsprocess (Start):",
+      "- Samla grundkrav och ansvarsfordelning i ett basdokument.",
+      "- Uppdatera dokument manadsvis eller vid storre forandring.",
+      "- Hall version och datum synliga i varje dokument.",
+    ];
+  }
+
+  if (plan === "step2") {
+    return [
+      "Dokumentationsprocess (Drift):",
+      "- Hall levande versionslogg for rutiner, risker och avvikelser.",
+      "- Ange ansvarig roll, datum och beslut for varje uppdatering.",
+      "- Koppla andringar till uppfoljning i arshjul och kontrollpunkter.",
+    ];
+  }
+
+  return [
+    "Dokumentationsprocess (Premium):",
+    "- Dokumentera internkontroll med spårbar historik per version.",
+    "- Beskriv granskningsflode: utkast, intern granskning, godkannande.",
+    "- Prioritera revisionsberedskap med tydliga evidensreferenser.",
+  ];
+}
+
 function fallbackTemplate(input: GenerateContentInput): string {
-  const intro = `Dokumenttyp: ${input.documentKind}\nKlinik: ${input.clinicName}\nKommun: ${input.municipality}`;
+  const intro = [
+    `Dokumenttyp: ${input.documentKind}`,
+    `Plan: ${planLabels[input.plan]}`,
+    `Klinik: ${input.clinicName}`,
+    `Kommun: ${input.municipality}`,
+  ].join("\n");
 
   const sections: Record<DocumentKind, string[]> = {
     verksamhetsbeskrivning: [
@@ -50,7 +91,9 @@ function fallbackTemplate(input: GenerateContentInput): string {
     ],
   };
 
-  return [intro, ...sections[input.documentKind]].join("\n\n");
+  return [intro, ...planDocumentationProcess(input.plan), ...sections[input.documentKind]].join(
+    "\n\n"
+  );
 }
 
 export async function generateContent(rawInput: unknown): Promise<string> {
@@ -65,6 +108,9 @@ export async function generateContent(rawInput: unknown): Promise<string> {
     "Du är en AI-assistent för ledningssystem i privat tandvård i Sverige.",
     "Skriv ett professionellt utkast på svenska i punktform och korta stycken.",
     "Fokusera på praktisk efterlevnad och IVO-relevant struktur men ge inte juridiska garantier.",
+    "Anpassa detaljniva och dokumentationsprocess efter planens mognad.",
+    `Plan: ${planLabels[input.plan]} (${input.plan})`,
+    ...planDocumentationProcess(input.plan),
     `Dokumenttyp: ${input.documentKind}`,
     `Klinik: ${input.clinicName}`,
     `Kommun: ${input.municipality}`,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
 import type {
@@ -643,7 +643,7 @@ export default function WorkspacePage() {
     setReadiness(data.checklist);
   }
 
-  async function loadIncidents() {
+  const loadIncidents = useCallback(async () => {
     if (!canUseIncidentModule) {
       return;
     }
@@ -666,7 +666,7 @@ export default function WorkspacePage() {
 
     const data = (await response.json()) as { incidents: IncidentItem[] };
     setIncidents(data.incidents || []);
-  }
+  }, [canUseIncidentModule]);
 
   async function createIncident() {
     if (!canUseIncidentModule) {
@@ -700,7 +700,7 @@ export default function WorkspacePage() {
     await loadIncidents();
   }
 
-  async function loadRisks() {
+  const loadRisks = useCallback(async () => {
     if (!canUseRiskModule) {
       return;
     }
@@ -723,7 +723,7 @@ export default function WorkspacePage() {
 
     const data = (await response.json()) as { risks: RiskItem[] };
     setRisks(data.risks || []);
-  }
+  }, [canUseRiskModule]);
 
   async function createRisk() {
     if (!canUseRiskModule) {
@@ -773,7 +773,7 @@ export default function WorkspacePage() {
     await loadRisks();
   }
 
-  async function loadControls() {
+  const loadControls = useCallback(async () => {
     if (!canUseControlModule) {
       return;
     }
@@ -796,7 +796,7 @@ export default function WorkspacePage() {
 
     const data = (await response.json()) as { controls: ControlItem[] };
     setControls(data.controls || []);
-  }
+  }, [canUseControlModule]);
 
   async function createControl() {
     if (!canUseControlModule) {
@@ -868,7 +868,7 @@ export default function WorkspacePage() {
     }
 
     loadIncidents();
-  }, [activePlan, hasHydratedWorkspace]);
+  }, [activePlan, canUseIncidentModule, hasHydratedWorkspace, loadIncidents]);
 
   useEffect(() => {
     if (!hasHydratedWorkspace || !canUseRiskModule) {
@@ -876,7 +876,7 @@ export default function WorkspacePage() {
     }
 
     loadRisks();
-  }, [activePlan, hasHydratedWorkspace]);
+  }, [activePlan, canUseRiskModule, hasHydratedWorkspace, loadRisks]);
 
   useEffect(() => {
     if (!hasHydratedWorkspace || !canUseControlModule) {
@@ -884,7 +884,7 @@ export default function WorkspacePage() {
     }
 
     loadControls();
-  }, [activePlan, hasHydratedWorkspace]);
+  }, [activePlan, canUseControlModule, hasHydratedWorkspace, loadControls]);
 
   useEffect(() => {
     if (!hasHydratedWorkspace) {

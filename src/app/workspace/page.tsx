@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
 import type {
@@ -299,7 +299,7 @@ const ledningssystemModules = [
   },
 ];
 
-export default function WorkspacePage() {
+function WorkspacePageContent() {
   const searchParams = useSearchParams();
   const [activePlan, setActivePlan] = useState<PlanLevel>("step2");
   const [activeView, setActiveView] = useState<WorkspaceView>("overview");
@@ -2278,5 +2278,19 @@ export default function WorkspacePage() {
         </section>
       ) : null}
     </div>
+  );
+}
+
+export default function WorkspacePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-3xl px-4 py-12 text-sm text-[color:var(--muted)]">
+          Laddar arbetsyta...
+        </div>
+      }
+    >
+      <WorkspacePageContent />
+    </Suspense>
   );
 }

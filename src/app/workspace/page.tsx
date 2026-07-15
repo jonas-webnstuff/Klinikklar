@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import useLocalStorage from "@/hooks/useLocalStorage";
 import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
 import type {
   ControlTaskFrequency,
@@ -42,6 +44,14 @@ type HelpEntry = {
 };
 
 type PlanLevel = "step1" | "step2" | "step3";
+type WorkspaceView =
+  | "overview"
+  | "ledningssystem"
+  | "avvikelser"
+  | "riskanalyser"
+  | "arshjul"
+  | "dokument";
+type ApplicationStage = "draft" | "review" | "approved" | "submitted";
 
 type IncidentItem = {
   id: string;
@@ -286,7 +296,13 @@ const ledningssystemModules = [
 ];
 
 export default function WorkspacePage() {
+  const searchParams = useSearchParams();
   const [activePlan, setActivePlan] = useState<PlanLevel>("step2");
+  const [activeView, setActiveView] = useState<WorkspaceView>("overview");
+  const [applicationStage, setApplicationStage] = useLocalStorage<ApplicationStage>(
+    "klinikklar-ansokan-stage",
+    "draft"
+  );
 
   const [profile, setProfile] = useState<ProfileState>(initialProfile);
   const [answers, setAnswers] = useState<AnswersState>(initialAnswers);
@@ -313,13 +329,27 @@ export default function WorkspacePage() {
   const [controlMessage, setControlMessage] = useState("");
 
   useEffect(() => {
-    const query = new URLSearchParams(window.location.search);
-    const plan = query.get("plan");
+    const plan = searchParams.get("plan");
 
     if (plan === "step1" || plan === "step2" || plan === "step3") {
       setActivePlan(plan);
     }
-  }, []);
+
+    const view = searchParams.get("view");
+
+    if (
+      view === "ledningssystem" ||
+      view === "avvikelser" ||
+      view === "riskanalyser" ||
+      view === "arshjul" ||
+      view === "dokument"
+    ) {
+      setActiveView(view);
+      return;
+    }
+
+    setActiveView("overview");
+  }, [searchParams]);
 
   const helpEntries: HelpEntry[] = [
     ...clinicProfileHelp,
@@ -450,6 +480,12 @@ export default function WorkspacePage() {
   const canUseIncidentModule = hasPlanAccess("step2");
   const canUseRiskModule = hasPlanAccess("step2");
   const canUseControlModule = hasPlanAccess("step2");
+  const isOverview = activeView === "overview";
+  const isApplicationView = activeView === "dokument";
+  const showSection = (view: Exclude<WorkspaceView, "overview">) =>
+    activeView === view || (isOverview && view !== "dokument");
+  const isApplicationSubmitted = applicationStage === "submitted";
+  const isApplicationApproved = applicationStage === "approved";
 
   const incidentSummary = useMemo(() => {
     const summary = {
@@ -963,32 +999,97 @@ export default function WorkspacePage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10 md:px-10">
       <header className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-6 shadow-sm">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--brand-2)]">
-          Klinikklar Workspace
+          {isApplicationView ? "Klinikklar Ansökan" : "Klinikklar Workspace"}
         </p>
         <h1 className="mt-2 text-3xl font-semibold text-[color:var(--ink)]">
-          Ledningssystem för privat tandvård
+          {isApplicationView
+            ? "Ansökan och underlag"
+            : "Ledningssystem för privat tandvård"}
         </h1>
         <p className="mt-3 max-w-3xl text-[color:var(--muted)]">
-          Arbeta löpande med kvalitet, risk, avvikelse och egenkontroll i samma flöde.
-          IVO-underlag genereras från ert dagliga ledningsarbete.
+          {isApplicationView
+            ? "Arbeta med frågeguiden, granska dokument och förbered underlag för inskick."
+            : "Arbeta löpande med kvalitet, risk, avvikelse och egenkontroll i samma flöde."}
         </p>
         <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
           Aktiv nivå: {planLabels[activePlan]}
         </p>
-        <div className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--muted)]">
-            Aktiva funktioner i din plan
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {activePlanFeatures.map((feature) => (
-              <span
-                key={feature}
-                className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          {isApplicationView ? (
+            <>
+              <a
+                href="/workspace"
+                className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
               >
-                {feature}
-              </span>
-            ))}
-          </div>
+                Till startsida
+              </a>
+              <a
+                href="/workspace?view=ledningssystem"
+                className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                Till arbetsyta
+              </a>
+            </>
+          ) : (
+            <>
+              <a
+                href="/workspace"
+                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                  isOverview
+                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
+                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
+                }`}
+              >
+                Översikt
+              </a>
+              <a
+                href="/workspace?view=ledningssystem"
+                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                  activeView === "ledningssystem"
+                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
+                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
+                }`}
+              >
+                Ledningssystem
+              </a>
+              <a
+                href="/workspace?view=avvikelser"
+                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                  activeView === "avvikelser"
+                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
+                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
+                }`}
+              >
+                Avvikelser
+              </a>
+              <a
+                href="/workspace?view=riskanalyser"
+                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                  activeView === "riskanalyser"
+                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
+                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
+                }`}
+              >
+                Riskanalyser
+              </a>
+              <a
+                href="/workspace?view=arshjul"
+                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                  activeView === "arshjul"
+                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
+                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
+                }`}
+              >
+                Årshjul
+              </a>
+              <a
+                href="/ansokan"
+                className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                Ansökan
+              </a>
+            </>
+          )}
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
@@ -1011,34 +1112,88 @@ export default function WorkspacePage() {
         </div>
       </header>
 
-      <section id="ledningssystem" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
-              Moduler
-            </p>
-            <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">
-              0. Ledningssystemets arbetsyta
-            </h2>
-          </div>
-          <p className="text-sm text-[color:var(--muted)]">Fokus: återkommande efterlevnad</p>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {availableModules.map((module) => (
-            <article
-              key={module.key}
-              className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
-            >
-              <p className="text-sm font-semibold text-[color:var(--ink)]">{module.title}</p>
-              <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">
-                {module.cadence}
+      {showSection("ledningssystem") ? (
+        <section id="ledningssystem" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+                Ledningssystem
               </p>
-              <p className="mt-2 text-sm text-[color:var(--muted)]">{module.description}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+              <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">
+                Översikt och nästa steg
+              </h2>
+            </div>
+            <p className="text-sm text-[color:var(--muted)]">Fokus: återkommande efterlevnad</p>
+          </div>
 
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Status</p>
+              <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">Aktivt ledningsarbete</p>
+              <p className="mt-1 text-sm text-[color:var(--muted)]">Strukturen är redo för löpande uppdatering.</p>
+            </article>
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Nästa steg</p>
+              <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">Se rutiner och uppdateringar</p>
+              <p className="mt-1 text-sm text-[color:var(--muted)]">Samla förändringar, versioner och ansvar på ett ställe.</p>
+            </article>
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Dokumentation</p>
+              <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">Redigera i appen</p>
+              <p className="mt-1 text-sm text-[color:var(--muted)]">Exportera till Word när innehållet ska delas eller lämnas in.</p>
+            </article>
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Ingång</p>
+              <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">Ansökan</p>
+              <p className="mt-1 text-sm text-[color:var(--muted)]">Frågeguiden och underlagen samlas där inför inskick.</p>
+            </article>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <a
+              href="/workspace?view=avvikelser"
+              className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+            >
+              Gå till avvikelser
+            </a>
+            <a
+              href="/workspace?view=riskanalyser"
+              className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+            >
+              Gå till riskanalyser
+            </a>
+            <a
+              href="/workspace?view=arshjul"
+              className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+            >
+              Gå till årshjul
+            </a>
+            <a
+              href="/ansokan"
+              className="rounded-full bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
+            >
+              Öppna ansökan
+            </a>
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {availableModules.map((module) => (
+              <article
+                key={module.key}
+                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
+              >
+                <p className="text-sm font-semibold text-[color:var(--ink)]">{module.title}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                  {module.cadence}
+                </p>
+                <p className="mt-2 text-sm text-[color:var(--muted)]">{module.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {isOverview ? (
       <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6 rounded-3xl border border-[color:var(--line)] bg-white p-6">
           <h2 className="text-xl font-semibold text-[color:var(--ink)]">1. Klinikprofil</h2>
@@ -1206,7 +1361,9 @@ export default function WorkspacePage() {
           </ul>
         </div>
       </section>
+      ) : null}
 
+      {showSection("avvikelser") ? (
       <section id="avvikelser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Avvikelser (Drift/Premium)</h2>
         {!canUseIncidentModule ? (
@@ -1346,7 +1503,9 @@ export default function WorkspacePage() {
           </div>
         )}
       </section>
+      ) : null}
 
+      {showSection("riskanalyser") ? (
       <section id="riskanalyser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Riskanalyser (Drift/Premium)</h2>
         {!canUseRiskModule ? (
@@ -1485,7 +1644,9 @@ export default function WorkspacePage() {
           </div>
         )}
       </section>
+      ) : null}
 
+      {showSection("arshjul") ? (
       <section id="arshjul" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Årshjul och kontroller (Drift/Premium)</h2>
         {!canUseControlModule ? (
@@ -1623,9 +1784,14 @@ export default function WorkspacePage() {
           </div>
         )}
       </section>
+      ) : null}
 
+      {showSection("dokument") ? (
       <section id="dokument" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">6. Interaktiv frågeguide</h2>
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">1. Frågeguide</h2>
+        <p className="mt-2 text-sm text-[color:var(--muted)]">
+          Fyll i uppgifterna steg för steg. Svaren används som grund för dokument och ansökan.
+        </p>
         <div className="mt-4 space-y-5">
           {questionnaireItems.map((item) => (
             <div key={item.key} className="relative rounded-2xl bg-[color:var(--panel)] p-4">
@@ -1682,6 +1848,7 @@ export default function WorkspacePage() {
           ))}
         </div>
       </section>
+      ) : null}
 
       {activeHelpItem ? (
         <div
@@ -1758,108 +1925,187 @@ export default function WorkspacePage() {
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">7. Dokumentgenerator + granskning</h2>
-        <p className="mt-2 text-sm text-[color:var(--muted)]">
-          AI-förslag skapas server-side för ledningssystemets moduler. Granska och verifiera
-          innehållet innan export.
-        </p>
+      {showSection("dokument") ? (
+        <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-[color:var(--ink)]">2. Dokument och granskning</h2>
+              <p className="mt-2 text-sm text-[color:var(--muted)]">
+                AI-förslag skapas server-side. Granska och verifiera innehållet innan export.
+              </p>
+            </div>
+            <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+              {applicationStage === "draft"
+                ? "Utkast"
+                : applicationStage === "review"
+                  ? "Klar för granskning"
+                  : applicationStage === "approved"
+                    ? "Godkänd"
+                    : "Inskickad"}
+            </div>
+          </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {complianceRequirements.map((requirement) => {
-            const kind = requirement.documentKind;
-            const state = generated[kind];
-            const isLocked = !hasPlanAccess(requirement.availableFrom);
-            return (
-              <article
-                key={requirement.code}
-                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-[color:var(--muted)]">
-                      {requirement.code}
-                    </p>
-                    <h3 className="text-base font-semibold text-[color:var(--ink)]">
-                      {requirement.title}
-                    </h3>
-                    {isLocked ? (
-                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">
-                        Låst - ingår från {planLabels[requirement.availableFrom]}
-                      </p>
-                    ) : null}
-                  </div>
+          <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">
+                {isApplicationSubmitted ? "Ansökan är inskickad" : "Ansökningsläge"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {applicationStage !== "draft" ? (
                   <button
-                    onClick={() => generateDocument(kind)}
-                    disabled={!canGenerate || state?.isLoading || isLocked}
-                    className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                    type="button"
+                    onClick={() => setApplicationStage("draft")}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
                   >
-                    {state?.isLoading ? "Genererar..." : "Generera"}
+                    Till utkast
                   </button>
-                </div>
+                ) : null}
+                {applicationStage === "draft" ? (
+                  <button
+                    type="button"
+                    onClick={() => setApplicationStage("review")}
+                    className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    Klar för granskning
+                  </button>
+                ) : null}
+                {applicationStage === "review" ? (
+                  <button
+                    type="button"
+                    onClick={() => setApplicationStage("approved")}
+                    className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    Godkänn
+                  </button>
+                ) : null}
+                {applicationStage === "approved" ? (
+                  <button
+                    type="button"
+                    onClick={() => setApplicationStage("submitted")}
+                    className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    Markera inskickad
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <p className="mt-3 text-sm text-[color:var(--muted)]">
+              Status sparas automatiskt och avgör om dokumenten är öppna för ändringar.
+            </p>
+          </div>
 
-                <textarea
-                  value={state?.content || ""}
-                  onChange={(event) =>
-                    setGenerated((prev) => ({
-                      ...prev,
-                      [kind]: {
-                        content: event.target.value,
-                        approved: prev[kind]?.approved || false,
-                        isLoading: false,
-                      },
-                    }))
-                  }
-                  placeholder={
-                    isLocked
-                      ? `Uppgradera till ${planLabels[requirement.availableFrom]} för att skapa detta dokument.`
-                      : "Genererat innehåll visas här"
-                  }
-                  rows={8}
-                  disabled={isLocked}
-                  className="mt-3 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {complianceRequirements.map((requirement) => {
+              const kind = requirement.documentKind;
+              const state = generated[kind];
+              const isLocked = !hasPlanAccess(requirement.availableFrom);
+              return (
+                <article
+                  key={requirement.code}
+                  className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-[color:var(--muted)]">
+                        {requirement.code}
+                      </p>
+                      <h3 className="text-base font-semibold text-[color:var(--ink)]">
+                        {requirement.title}
+                      </h3>
+                      {isLocked ? (
+                        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">
+                          Låst - ingår från {planLabels[requirement.availableFrom]}
+                        </p>
+                      ) : null}
+                    </div>
+                    <button
+                      onClick={() => generateDocument(kind)}
+                      disabled={!canGenerate || state?.isLoading || isLocked || isApplicationSubmitted}
+                      className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                    >
+                      {state?.isLoading ? "Genererar..." : "Generera"}
+                    </button>
+                  </div>
 
-                <label className="mt-3 flex items-center gap-2 text-sm text-[color:var(--ink)]">
-                  <input
-                    type="checkbox"
-                    checked={state?.approved || false}
-                    disabled={isLocked}
+                  <textarea
+                    value={state?.content || ""}
                     onChange={(event) =>
                       setGenerated((prev) => ({
                         ...prev,
                         [kind]: {
-                          content: prev[kind]?.content || "",
-                          approved: event.target.checked,
+                          content: event.target.value,
+                          approved: prev[kind]?.approved || false,
                           isLoading: false,
                         },
                       }))
                     }
+                    placeholder={
+                      isLocked
+                        ? `Uppgradera till ${planLabels[requirement.availableFrom]} för att skapa detta dokument.`
+                        : "Genererat innehåll visas här"
+                    }
+                    rows={8}
+                    disabled={isLocked || isApplicationSubmitted}
+                    className="mt-3 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                   />
-                  Jag har granskat och verifierat innehållet
-                </label>
 
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => exportDocument(kind, "docx")}
-                    disabled={isLocked || !state?.approved || !state?.content}
-                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                  >
-                    Exportera Word
-                  </button>
-                  <button
-                    onClick={() => exportDocument(kind, "pdf")}
-                    disabled={isLocked || !state?.approved || !state?.content}
-                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                  >
-                    Exportera PDF
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
+                  {isApplicationSubmitted ? (
+                    <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+                      Ansökan är inskickad och låst för ändringar.
+                    </p>
+                  ) : (
+                    <label className="mt-3 flex items-center gap-2 text-sm text-[color:var(--ink)]">
+                      <input
+                        type="checkbox"
+                        checked={state?.approved || false}
+                        disabled={isLocked}
+                        onChange={(event) =>
+                          setGenerated((prev) => ({
+                            ...prev,
+                            [kind]: {
+                              content: prev[kind]?.content || "",
+                              approved: event.target.checked,
+                              isLoading: false,
+                            },
+                          }))
+                        }
+                      />
+                      Jag har granskat och verifierat innehållet
+                    </label>
+                  )}
+
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => exportDocument(kind, "docx")}
+                      disabled={isLocked || !state?.approved || !state?.content}
+                      className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                    >
+                      Exportera Word
+                    </button>
+                    <button
+                      onClick={() => exportDocument(kind, "pdf")}
+                      disabled={isLocked || !state?.approved || !state?.content}
+                      className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                    >
+                      Exportera PDF
+                    </button>
+                  </div>
+
+                  {state?.approved && !isApplicationApproved && !isApplicationSubmitted ? (
+                    <button
+                      type="button"
+                      onClick={() => setApplicationStage("approved")}
+                      className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+                    >
+                      Förbered inskick
+                    </button>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

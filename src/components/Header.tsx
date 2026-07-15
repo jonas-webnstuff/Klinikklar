@@ -21,20 +21,14 @@ export async function Header() {
         <nav className="hidden items-center gap-6 text-[15px] font-medium text-[color:var(--ink)] lg:mr-4 lg:flex xl:mr-8 xl:gap-8">
           {user ? (
             <>
-              <Link href="/workspace#ledningssystem" className="transition hover:text-[color:var(--brand)]">
-                Ledningssystem
+              <Link href="/workspace" className="transition hover:text-[color:var(--brand)]">
+                Startsida
               </Link>
-              <Link href="/workspace#avvikelser" className="transition hover:text-[color:var(--brand)]">
-                Avvikelser
+              <Link href="/workspace?view=ledningssystem" className="transition hover:text-[color:var(--brand)]">
+                Arbetsyta
               </Link>
-              <Link href="/workspace#riskanalyser" className="transition hover:text-[color:var(--brand)]">
-                Riskanalyser
-              </Link>
-              <Link href="/workspace#arshjul" className="transition hover:text-[color:var(--brand)]">
-                Årshjul
-              </Link>
-              <Link href="/workspace#dokument" className="transition hover:text-[color:var(--brand)]">
-                Dokument
+              <Link href="/ansokan" className="transition hover:text-[color:var(--brand)]">
+                Ansökan
               </Link>
             </>
           ) : (

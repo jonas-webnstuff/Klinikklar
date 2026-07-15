@@ -85,6 +85,10 @@ Kör SQL-skriptet i Supabase SQL Editor för att skapa tabellerna.
 - `npm run lint` kör ESLint
 - `npm run typecheck` kör TypeScript-kontroll
 
+## Testning
+
+- Pilottest-checklista finns i `docs/pilot-testmatris.md`
+
 ## Begränsningar i MVP
 
 - Ingen automatisk inlämning till IVO

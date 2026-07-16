@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { canManageCustomers } from "@/lib/admin-access";
 
 export async function Header() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const canAdminCustomers = user ? await canManageCustomers(user.id) : false;
 
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--line)] bg-white/92 backdrop-blur">
@@ -30,6 +32,11 @@ export async function Header() {
               <Link href="/ansokan" className="transition hover:text-[color:var(--brand)]">
                 Ansökan
               </Link>
+              {canAdminCustomers ? (
+                <Link href="/admin/customers" className="transition hover:text-[color:var(--brand)]">
+                  Admin
+                </Link>
+              ) : null}
             </>
           ) : (
             <>

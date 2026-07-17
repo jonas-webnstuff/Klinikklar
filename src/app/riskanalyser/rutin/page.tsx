@@ -17,9 +17,9 @@ const processSteps = [
 
 const minimumRequirements = [
   "Risk ska ha ansvarig roll och uppföljningsdatum",
-  "Riskvärde ska vara spårbart över tid",
+  "Riskvärde ska registreras för prioritering",
   "Höga risker ska ha dokumenterad åtgärdsplan",
-  "Stängning först efter verifierad effekt",
+  "Uppföljning av åtgärd och status uppdateras i systemet",
 ];
 
 export default function RiskanalysRutinPage() {
@@ -70,8 +70,9 @@ export default function RiskanalysRutinPage() {
       <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6">
         <h2 className="text-lg font-semibold text-amber-900">Viktigt om lagkrav</h2>
         <p className="mt-2 text-sm text-amber-900">
-          Detta är ett utkast och behöver fastställas av ansvarig funktion samt anpassas till er
-          verksamhetsform innan det kan betraktas som fullt lagkravsanpassat.
+          Denna rutin är anpassad för tandvårdskliniker med 1-10 medarbetare. Dokumentet behöver
+          fastställas av ansvarig funktion och anpassas till er exakta verksamhetsform innan det
+          kan betraktas som fullt lagkravsanpassat.
         </p>
       </section>
 

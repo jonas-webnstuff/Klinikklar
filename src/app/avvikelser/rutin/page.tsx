@@ -9,18 +9,18 @@ const legalBasis = [
 const processSteps = [
   "Omedelbar hantering och riskreducering.",
   "Registrering av avvikelse med obligatoriska uppgifter.",
-  "Initial bedömning och prioritering inom 24 timmar.",
-  "Utredning och orsaksanalys med systemfokus.",
-  "Åtgärdsplan med ansvar, tidsram och verifiering.",
-  "Bedömning av eventuell extern anmälan (Lex Maria/Lex Sarah).",
-  "Uppföljning, lärande och stängning efter verifierad effekt.",
+  "Initial bedömning inom 24 timmar eller nästa arbetspass.",
+  "Utredning och orsaksanalys (enkel eller djupgående efter allvarlighetsgrad).",
+  "Åtgärdsplan med ansvar och tidsram.",
+  "Bedömning av eventuell extern anmälan (Lex Maria vid allvarliga händelser).",
+  "Uppföljning av åtgärd och stängning när åtgärd är genomförd.",
 ];
 
 const minimumSla = [
   "Registrering: samma arbetspass eller senast inom 24 timmar",
-  "Initial bedömning: inom 24 timmar",
-  "Utredningsstart: inom 3 arbetsdagar",
-  "Normal handläggning: inom 30 dagar",
+  "Initial bedömning: inom 24 timmar eller nästa arbetspass",
+  "Åtgärder: beslutas och startas inom 3-5 arbetsdagar",
+  "Stängning: när åtgärd är genomförd och uppföljd (ca 14-30 dagar för normala ärenden)",
 ];
 
 export default function AvvikelseRutinPage() {
@@ -73,9 +73,9 @@ export default function AvvikelseRutinPage() {
       <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6">
         <h2 className="text-lg font-semibold text-amber-900">Viktigt om lagkrav</h2>
         <p className="mt-2 text-sm text-amber-900">
-          Dokumentet är ett verksamhetsutkast och behöver fastställas av ansvarig funktion samt
-          anpassas efter er exakta verksamhetsform innan det kan betraktas som fullt
-          lagkravsanpassat.
+          Denna rutin är anpassad för tandvårdskliniker med 1-10 medarbetare. Dokumentet behöver
+          fastställas av ansvarig funktion och anpassas till er exakta verksamhetsform innan det
+          kan betraktas som fullt lagkravsanpassat.
         </p>
       </section>
 

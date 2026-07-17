@@ -10,16 +10,16 @@ const processSteps = [
   "Genomför kontroll enligt årshjul och dokumentera utfall.",
   "Klassificera avvikelser från förväntat resultat.",
   "Besluta korrigerande åtgärder med tidsfrist.",
-  "Följ upp om åtgärd gett avsedd effekt.",
-  "Markera kontroll som klar först efter verifiering.",
+  "Följ upp effekt av åtgärder i efterföljande kontroll.",
+  "Markera kontroll som klar när genomförd och utfall registrerat.",
   "Eskalera till riskanalys eller avvikelsehantering vid behov.",
 ];
 
 const minimumRequirements = [
   "Varje kontroll ska ha titel, frekvens och nästa datum",
   "Ansvarig roll ska vara angiven eller tydligt delegerad",
-  "Försenade kontroller ska följas upp i ledningsmöte",
-  "Resultat och beslutade åtgärder ska vara spårbara",
+  "Försenade kontroller ska åtgärdas eller dokumenteras (kan hanteras i vanlig uppföljning)",
+  "Resultat och beslutade åtgärder ska vara spårbara i systemet",
 ];
 
 export default function ArshjulRutinPage() {
@@ -71,8 +71,9 @@ export default function ArshjulRutinPage() {
       <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6">
         <h2 className="text-lg font-semibold text-amber-900">Viktigt om lagkrav</h2>
         <p className="mt-2 text-sm text-amber-900">
-          Detta är ett utkast och behöver fastställas av ansvarig funktion samt anpassas till er
-          verksamhetsform innan det kan betraktas som fullt lagkravsanpassat.
+          Denna rutin är anpassad för tandvårdskliniker med 1-10 medarbetare. Dokumentet behöver
+          fastställas av ansvarig funktion och anpassas till er exakta verksamhetsform innan det
+          kan betraktas som fullt lagkravsanpassat.
         </p>
       </section>
 

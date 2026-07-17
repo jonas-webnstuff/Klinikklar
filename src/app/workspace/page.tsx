@@ -686,7 +686,7 @@ function WorkspacePageContent() {
 
     if (!response.ok) {
       const data = (await response.json()) as { error?: string };
-      const message = data.error || "Kunde inte skapa AI-forslag.";
+      const message = data.error || "Kunde inte skapa AI-förslag.";
 
       if (feature === "risk_analysis") setRiskMessage(message);
       if (feature === "incident_investigation") setIncidentMessage(message);
@@ -710,7 +710,7 @@ function WorkspacePageContent() {
       ownerRole: suggestion.ownerRole,
       dueDate: suggestion.dueDate,
     });
-    setRiskMessage("AI-forslag infogat i riskanalysen.");
+    setRiskMessage("AI-förslag infogat i riskanalysen.");
   }
 
   async function suggestRoutineUpdate() {
@@ -721,7 +721,7 @@ function WorkspacePageContent() {
     setAnswerValue("routine_updates_change_log", suggestion.changeLog);
     setAnswerValue("routine_updates_owner", suggestion.owner);
     setAnswerValue("routine_updates_next_review", suggestion.nextReview);
-    setWorkspaceMessage("AI-forslag infogat for rutiner och uppdateringar.");
+    setWorkspaceMessage("AI-förslag infogat för rutiner och uppdateringar.");
   }
 
   async function writeIncidentInvestigation() {
@@ -757,7 +757,7 @@ function WorkspacePageContent() {
       ownerRole: suggestion.ownerRole,
       nextDueDate: suggestion.nextDueDate,
     });
-    setControlMessage("AI-forslag infogat i kontrollpunkten.");
+    setControlMessage("AI-förslag infogat i kontrollpunkten.");
   }
 
   async function loadApplicationReadiness() {

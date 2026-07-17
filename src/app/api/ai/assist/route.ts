@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     if (payload.plan !== "step3") {
       return NextResponse.json(
-        { error: "AI-formularstod ingar endast i Klinikklar Premium." },
+        { error: "AI-formulärstöd ingår endast i Klinikklar Premium." },
         { status: 403 }
       );
     }
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch {
     return NextResponse.json(
-      { error: "Kunde inte skapa AI-forslag." },
+      { error: "Kunde inte skapa AI-förslag." },
       { status: 400 }
     );
   }

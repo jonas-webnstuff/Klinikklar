@@ -28,29 +28,59 @@ const planLabels: Record<PlanLevel, string> = {
   step3: "Klinikklar Premium",
 };
 
+function documentGuidance(kind: DocumentKind): string[] {
+  switch (kind) {
+    case "verksamhetsbeskrivning":
+      return [
+        "Beskriv klinikens uppdrag, vårdutbud, målgrupp och övergripande arbetssätt.",
+        "Håll tonen saklig och användbar för intern styrning och myndighetsunderlag.",
+      ];
+    case "ledningssystem":
+      return [
+        "Beskriv ansvarsfördelning, uppföljning, avvikelsehantering och förbättringsarbete som ett levande system.",
+        "Undvik alltför generella formuleringar och nämn konkreta uppföljningsmoment.",
+      ];
+    case "riskanalys":
+      return [
+        "Beskriv relevanta risker för privat tandvård, orsaker, konsekvenser och planerade åtgärder.",
+        "Använd konkreta exempel från drift, hygien, journalföring eller bemanning när det passar.",
+      ];
+    case "avvikelsehantering":
+      return [
+        "Beskriv hur avvikelser rapporteras, utreds, åtgärdas och återkopplas i verksamheten.",
+        "Fokusera på lärande, ansvar och dokumentation.",
+      ];
+    case "egenkontroll":
+      return [
+        "Beskriv återkommande kontroller, ansvar, frekvens och hur resultat används i förbättringsarbete.",
+        "Knyt egenkontrollen till konkreta uppföljningspunkter i vardagen.",
+      ];
+  }
+}
+
 function planDocumentationProcess(plan: PlanLevel): string[] {
   if (plan === "step1") {
     return [
       "Dokumentationsprocess (Start):",
-      "- Samla grundkrav och ansvarsfordelning i ett basdokument.",
-      "- Uppdatera dokument manadsvis eller vid storre forandring.",
-      "- Hall version och datum synliga i varje dokument.",
+      "- Samla grundkrav och ansvarsfördelning i ett basdokument.",
+      "- Uppdatera dokument månadsvis eller vid större förändring.",
+      "- Håll version och datum synliga i varje dokument.",
     ];
   }
 
   if (plan === "step2") {
     return [
       "Dokumentationsprocess (Drift):",
-      "- Hall levande versionslogg for rutiner, risker och avvikelser.",
-      "- Ange ansvarig roll, datum och beslut for varje uppdatering.",
-      "- Koppla andringar till uppfoljning i arshjul och kontrollpunkter.",
+      "- Håll en levande versionslogg för rutiner, risker och avvikelser.",
+      "- Ange ansvarig roll, datum och beslut för varje uppdatering.",
+      "- Koppla ändringar till uppföljning i årshjul och kontrollpunkter.",
     ];
   }
 
   return [
     "Dokumentationsprocess (Premium):",
     "- Dokumentera internkontroll med spårbar historik per version.",
-    "- Beskriv granskningsflode: utkast, intern granskning, godkannande.",
+    "- Beskriv granskningsflöde: utkast, intern granskning, godkännande.",
     "- Prioritera revisionsberedskap med tydliga evidensreferenser.",
   ];
 }
@@ -108,9 +138,10 @@ export async function generateContent(rawInput: unknown): Promise<string> {
     "Du är en AI-assistent för ledningssystem i privat tandvård i Sverige.",
     "Skriv ett professionellt utkast på svenska i punktform och korta stycken.",
     "Fokusera på praktisk efterlevnad och IVO-relevant struktur men ge inte juridiska garantier.",
-    "Anpassa detaljniva och dokumentationsprocess efter planens mognad.",
+    "Anpassa detaljnivå och dokumentationsprocess efter planens mognad.",
     `Plan: ${planLabels[input.plan]} (${input.plan})`,
     ...planDocumentationProcess(input.plan),
+    ...documentGuidance(input.documentKind),
     `Dokumenttyp: ${input.documentKind}`,
     `Klinik: ${input.clinicName}`,
     `Kommun: ${input.municipality}`,

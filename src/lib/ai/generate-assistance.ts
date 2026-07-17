@@ -113,6 +113,53 @@ const outputSchema = z.discriminatedUnion("feature", [
 export type GenerateAssistanceInput = z.infer<typeof inputSchema>;
 export type GenerateAssistanceOutput = z.infer<typeof outputSchema>;
 
+function planContext(plan: GenerateAssistanceInput["plan"]) {
+  if (plan === "step1") {
+    return "Basnivå: håll förslagen enkla, tydliga och realistiska för en nystartad klinik.";
+  }
+
+  if (plan === "step2") {
+    return "Driftnivå: fokusera på löpande uppföljning, ansvar och återkommande kontroller i vardagen.";
+  }
+
+  return "Premiumnivå: inkludera tydlig spårbarhet, ansvarsfördelning, uppföljning och revisionsberedskap.";
+}
+
+function featureGuidance(feature: GenerateAssistanceInput["feature"]) {
+  switch (feature) {
+    case "risk_analysis":
+      return [
+        "Utgå från konkreta risker i tandvård, till exempel sterilhantering, journalföring, delegering, läkemedel, röntgen eller bemanningsbrist.",
+        "Beskriv risk, möjlig orsak, möjlig konsekvens och vad som praktiskt bör följas upp.",
+        "Välj sannolikhet och konsekvens på en rimlig nivå, inte alltid högsta värden.",
+      ].join(" ");
+    case "routine":
+      return [
+        "Formulera en faktisk rutinuppdatering, inte marknadstext.",
+        "Beskriv vilket område som ändras, varför rutinen uppdateras och hur uppföljning ska ske.",
+        "Föreslå en ansvarig roll som känns realistisk för en privat tandvårdsklinik.",
+      ].join(" ");
+    case "incident_investigation":
+      return [
+        "Skriv som en saklig intern utredning efter en avvikelse.",
+        "Beskriv händelse, troliga orsaker, påverkan på patient eller verksamhet och direkt åtgärd.",
+        "Undvik överdrifter och skriv inte att något är lagkrav om det inte uttryckligen framgår.",
+      ].join(" ");
+    case "management_system":
+      return [
+        "Beskriv ledningssystemet som ett levande arbetssätt, inte bara ett dokument.",
+        "Ta med huvudprocesser som patientmottagning, hygien, journalföring, avvikelsehantering, riskanalys och egenkontroll.",
+        "Nämn styrande dokument som faktiskt brukar finnas i mindre vårdverksamheter.",
+      ].join(" ");
+    case "controls":
+      return [
+        "Föreslå en konkret kontrollpunkt som faktiskt går att utföra och följa upp i årshjulet.",
+        "Knyt kontrollen till hygien, journalgranskning, avvikelser, kompetens eller utrustning.",
+        "Välj rimlig frekvens och ge en tydlig beskrivning av vad som ska kontrolleras.",
+      ].join(" ");
+  }
+}
+
 function isoDateAfter(days: number) {
   const target = new Date();
   target.setDate(target.getDate() + days);
@@ -125,10 +172,10 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
       return {
         feature: "risk_analysis",
         title:
-          input.currentRisk?.title || `Riskanalys for ${input.careScope || "verksamhetens huvudprocesser"}`,
+          input.currentRisk?.title || `Riskanalys för ${input.careScope || "verksamhetens huvudprocesser"}`,
         description:
           input.currentRisk?.description ||
-          `Risk kopplad till ${input.careScope || "vårdutbudet"}. Beskriv sannolika orsaker, konsekvenser för patientsakerhet och vilka kontroller som ska minska risken.`,
+          `Risk kopplad till ${input.careScope || "vårdutbudet"}. Beskriv troliga orsaker, konsekvenser för patientsäkerheten samt vilka förebyggande kontroller och uppföljningar som ska minska risken över tid.`,
         probability: input.currentRisk?.probability || 3,
         consequence: input.currentRisk?.consequence || 4,
         ownerRole: input.currentRisk?.ownerRole || "Verksamhetschef",
@@ -140,7 +187,7 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
         area: input.currentRoutine?.area || "Steril och hygien",
         changeLog:
           input.currentRoutine?.changeLog ||
-          "Rutinen uppdateras for att tydliggora ansvar, kontrollpunkter och dokumentation vid avvikelser och egenkontroller.",
+          "Rutinen uppdateras för att tydliggöra ansvar, kontrollpunkter och dokumentation vid avvikelser, egenkontroller och återkommande uppföljning.",
         owner: input.currentRoutine?.owner || "Kvalitetsansvarig",
         nextReview: input.currentRoutine?.nextReview || isoDateAfter(90),
       };
@@ -149,10 +196,10 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
         feature: "incident_investigation",
         description:
           input.currentIncident?.description ||
-          "Beskriv handelsen kronologiskt, mojliga orsaker, berorda processer och vilken patient- eller kvalitetsrisk som uppstod.",
+          "Beskriv händelsen kronologiskt, möjliga orsaker, berörda processer, eventuell påverkan på patient eller arbetsflöde samt vad som behöver följas upp vidare.",
         immediateAction:
           input.currentIncident?.immediateAction ||
-          "Sakra omedelbart patientsakerheten, informera ansvarig roll och starta dokumenterad utredning samma arbetsdag.",
+          "Säkra omedelbart patientsäkerheten, informera ansvarig roll, dokumentera initial bedömning och starta utredning samma arbetsdag.",
       };
     case "management_system":
       return {
@@ -160,18 +207,18 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
         owner: input.currentManagementSystem?.owner || "Verksamhetschef",
         processes:
           input.currentManagementSystem?.processes ||
-          "Ledningssystemet omfattar patientmottagning, journalforing, hygien, avvikelsehantering, riskuppfoljning och egenkontroll med manadsvis uppfoljning.",
+          "Ledningssystemet omfattar patientmottagning, journalföring, hygien, avvikelsehantering, riskuppföljning, bemanning och egenkontroll med månadsvis uppföljning i ledningsmöte.",
         documents:
           input.currentManagementSystem?.documents ||
-          "Styrande dokument inkluderar ledningssystem, hygienrutiner, avvikelseprocess, riskregister, introduktionsmaterial och kontrolljournal.",
+          "Styrande dokument inkluderar ledningssystem, hygienrutiner, avvikelseprocess, riskregister, introduktionsmaterial, delegeringsrutiner och kontrolljournal.",
       };
     case "controls":
       return {
         feature: "controls",
-        title: input.currentControl?.title || "Manadskontroll av hygien och dokumentation",
+        title: input.currentControl?.title || "Månadskontroll av hygien och dokumentation",
         description:
           input.currentControl?.description ||
-          "Genomfor kontroll av hygienrutiner, journalstickprov och uppfoljning av oppna avvikelser. Dokumentera resultat och ansvarig atgard.",
+          "Genomför kontroll av hygienrutiner, journalstickprov och uppföljning av öppna avvikelser. Dokumentera resultat, avvikelser och beslutad åtgärd.",
         frequency: input.currentControl?.frequency || "monthly",
         ownerRole: input.currentControl?.ownerRole || "Kvalitetsansvarig",
         nextDueDate: input.currentControl?.nextDueDate || isoDateAfter(30),
@@ -182,28 +229,30 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
 function outputInstructions(feature: GenerateAssistanceInput["feature"]) {
   switch (feature) {
     case "risk_analysis":
-      return `Returnera enbart JSON med exakt dessa falt: {"feature":"risk_analysis","title":"...","description":"...","probability":1-5,"consequence":1-5,"ownerRole":"...","dueDate":"YYYY-MM-DD"}`;
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"risk_analysis","title":"...","description":"...","probability":1-5,"consequence":1-5,"ownerRole":"...","dueDate":"YYYY-MM-DD"}`;
     case "routine":
-      return `Returnera enbart JSON med exakt dessa falt: {"feature":"routine","area":"...","changeLog":"...","owner":"...","nextReview":"YYYY-MM-DD"}`;
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"routine","area":"...","changeLog":"...","owner":"...","nextReview":"YYYY-MM-DD"}`;
     case "incident_investigation":
-      return `Returnera enbart JSON med exakt dessa falt: {"feature":"incident_investigation","description":"...","immediateAction":"..."}`;
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"incident_investigation","description":"...","immediateAction":"..."}`;
     case "management_system":
-      return `Returnera enbart JSON med exakt dessa falt: {"feature":"management_system","owner":"...","processes":"...","documents":"..."}`;
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"management_system","owner":"...","processes":"...","documents":"..."}`;
     case "controls":
-      return `Returnera enbart JSON med exakt dessa falt: {"feature":"controls","title":"...","description":"...","frequency":"weekly|monthly|quarterly|yearly|ad_hoc","ownerRole":"...","nextDueDate":"YYYY-MM-DD"}`;
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"controls","title":"...","description":"...","frequency":"weekly|monthly|quarterly|yearly|ad_hoc","ownerRole":"...","nextDueDate":"YYYY-MM-DD"}`;
   }
 }
 
 function buildPrompt(input: GenerateAssistanceInput) {
   return [
-    "Du ar en AI-assistent for svensk privat tandvard och ledningssystem.",
-    "Skriv pa svenska med praktiskt fokus. Ge inga juridiska garantier.",
-    "Malen ar att forifylla ett formulär i en SaaS-produkt for klinikens kvalitetsarbete.",
+    "Du är en AI-assistent för svensk privat tandvård och ledningssystem.",
+    "Skriv på svenska med praktiskt fokus. Ge inga juridiska garantier.",
+    "Målet är att förifylla ett formulär i en SaaS-produkt för klinikens kvalitetsarbete.",
+    planContext(input.plan),
+    featureGuidance(input.feature),
     outputInstructions(input.feature),
     `Plan: ${input.plan}`,
     `Klinik: ${input.clinicName}`,
     `Kommun: ${input.municipality}`,
-    `Vardutbud: ${input.careScope}`,
+    `Vårdutbud: ${input.careScope}`,
     `Kvalitetsarbete: ${input.qualityProcess}`,
     `Bemanning: ${input.staffing}`,
     `Avvikelserutin: ${input.incidentRoutine}`,
@@ -212,6 +261,8 @@ function buildPrompt(input: GenerateAssistanceInput) {
     `Nuvarande avvikelseutkast: ${JSON.stringify(input.currentIncident || {})}`,
     `Nuvarande ledningssystemutkast: ${JSON.stringify(input.currentManagementSystem || {})}`,
     `Nuvarande kontrollutkast: ${JSON.stringify(input.currentControl || {})}`,
+    "Om befintliga fält redan innehåller relevant information ska du bygga vidare på den i stället för att byta ämne.",
+    "Ge konkreta, trovärdiga och kortfattade formuleringar som en klinik faktiskt kan använda direkt i sitt arbete.",
   ].join("\n");
 }
 

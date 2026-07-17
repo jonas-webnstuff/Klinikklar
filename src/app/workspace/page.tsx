@@ -229,6 +229,7 @@ const ledningssystemRequirementItems = [
   { key: "management_system_purpose", label: "Syfte" },
   { key: "management_system_scope", label: "Omfattning" },
   { key: "management_system_owner", label: "Ansvarig" },
+  { key: "management_system_approved_by", label: "Godkänd av" },
   { key: "management_system_processes", label: "Processer och uppföljning" },
   {
     key: "management_system_followup_log",
@@ -1010,14 +1011,14 @@ function WorkspacePageContent() {
   }
 
   function registerManagementFollowup(cadence: "monthly" | "quarterly") {
-    const owner =
-      getAnswerValue("management_system_owner").trim() ||
+    const approver =
       getAnswerValue("management_system_approved_by").trim() ||
+      getAnswerValue("management_system_owner").trim() ||
       "Ej angivet";
 
     const today = new Date().toISOString().slice(0, 10);
     const cadenceLabel = cadence === "monthly" ? "Månatlig" : "Kvartalsvis";
-    const entry = `${today} | ${cadenceLabel} uppföljning | Ansvarig: ${owner}`;
+    const entry = `${today} | ${cadenceLabel} uppföljning | Godkänd av: ${approver}`;
 
     const existing = getAnswerValue("management_system_followup_log")
       .split("\n")
@@ -1426,6 +1427,11 @@ function WorkspacePageContent() {
         `Omfattar ${routineArea.toLowerCase()} samt uppföljning av riskanalys, avvikelsehantering och årshjul.`
       );
       setField("management_system_owner", managementSystemSummary.responsibility.managementOwner);
+      setField(
+        "management_system_approved_by",
+        getAnswerValue("management_system_approved_by") ||
+          managementSystemSummary.responsibility.managementOwner
+      );
       setField("management_system_process_owners", processOwners);
       setField("management_system_processes", processes);
       setField("management_system_documents", supportingDocumentsWithRoutineRefs);
@@ -1851,6 +1857,13 @@ function WorkspacePageContent() {
 
     if (!profile.email.trim()) {
       setWorkspaceMessage("Ange e-post innan du sparar.");
+      return;
+    }
+
+    if (!getAnswerValue("management_system_approved_by").trim()) {
+      setWorkspaceMessage("Ange Godkänd av i Ledningssystem innan du sparar.");
+      setActiveView("ledningssystem");
+      focusManagementField("management_system_approved_by");
       return;
     }
 

@@ -117,6 +117,17 @@ type ControlFormState = {
   nextDueDate: string;
 };
 
+type RoutineEntry = {
+  id: string;
+  requirementKey: string;
+  requirementLabel: string;
+  area: string;
+  changeLog: string;
+  owner: string;
+  nextReview: string;
+  updatedAt: string;
+};
+
 type AiAssistFeature =
   | "risk_analysis"
   | "routine"
@@ -213,6 +224,93 @@ const initialControlForm: ControlFormState = {
   frequency: "monthly",
   ownerRole: "",
   nextDueDate: "",
+};
+const ledningssystemRequirementItems = [
+  { key: "management_system_purpose", label: "Syfte" },
+  { key: "management_system_scope", label: "Omfattning" },
+  { key: "management_system_owner", label: "Ansvarig" },
+  { key: "management_system_processes", label: "Processer och uppföljning" },
+  { key: "management_system_documents", label: "Styrande dokument" },
+  { key: "management_system_next_review", label: "Nästa planerade uppföljning" },
+];
+
+const routineRequirementPoints = [
+  { key: "patient_safe_processes", label: "Patientsäkerhetskritiska processer" },
+  { key: "responsibility", label: "Tydlig ansvarsfördelning" },
+  { key: "tracked_updates", label: "Spårbar uppdatering" },
+  { key: "follow_up", label: "Regelbunden uppföljning och förbättring" },
+  { key: "incident_risk_link", label: "Koppling till avvikelse och risk" },
+  { key: "document_control", label: "Dokumentstyrning" },
+];
+
+const annualControlChecklistItems = [
+  "Hygienrutiner och sterilhantering",
+  "Journalstickprov och dokumentationskvalitet",
+  "Läkemedelshantering och kontroll av hållbarhet",
+  "Kompetens och delegeringar",
+  "Uppföljning av avvikelser och åtgärder",
+  "Uppföljning av höga risker och åtgärdsplaner",
+];
+
+const annualControlTemplates = [
+  {
+    title: "Hygienrutiner och sterilhantering",
+    description: "Kontrollera hygienrutiner, sterilprocesser och dokumenterad egenkontroll enligt rutin.",
+  },
+  {
+    title: "Journalstickprov och dokumentationskvalitet",
+    description: "Genomför stickprov av journaler och verifiera att dokumentation är fullständig och spårbar.",
+  },
+  {
+    title: "Läkemedelshantering och kontroll av hållbarhet",
+    description: "Kontrollera förvaring, åtkomst, hållbarhet och dokumentation för läkemedel och förbrukningsmaterial.",
+  },
+  {
+    title: "Kompetens och delegeringar",
+    description: "Följ upp att roller, delegeringar och kompetenskrav är aktuella och dokumenterade.",
+  },
+  {
+    title: "Uppföljning av avvikelser och åtgärder",
+    description: "Följ upp öppna avvikelser, status på åtgärdsplaner och verifierad effekt av genomförda åtgärder.",
+  },
+  {
+    title: "Uppföljning av höga risker och åtgärdsplaner",
+    description: "Granska risker med hög prioritet, ansvar, tidsfrister och effekten av riskreducerande åtgärder.",
+  },
+] as const;
+
+const controlFrequencyLabels: Record<ControlTaskFrequency, string> = {
+  weekly: "Veckovis",
+  monthly: "Månadsvis",
+  quarterly: "Kvartalsvis",
+  yearly: "Årsvis",
+  ad_hoc: "Ad hoc",
+};
+
+const controlStatusLabels: Record<ControlTaskStatus, string> = {
+  pending: "Planerad",
+  done: "Klar",
+  overdue: "Försenad",
+  skipped: "Hoppad över",
+};
+
+const incidentSeverityLabels: Record<IncidentSeverity, string> = {
+  low: "Låg",
+  medium: "Medel",
+  high: "Hög",
+  critical: "Kritisk",
+};
+
+const incidentStatusLabels: Record<IncidentStatus, string> = {
+  new: "Ny",
+  investigating: "Under utredning",
+  closed: "Stängd",
+};
+
+const riskStatusLabels: Record<RiskStatus, string> = {
+  open: "Öppen",
+  mitigating: "Åtgärdas",
+  closed: "Stängd",
 };
 
 const clinicProfileHelp: HelpEntry[] = [
@@ -376,6 +474,7 @@ function WorkspacePageContent() {
   const [isControlsLoading, setIsControlsLoading] = useState(false);
   const [isControlSubmitting, setIsControlSubmitting] = useState(false);
   const [controlMessage, setControlMessage] = useState("");
+  const [routineMessage, setRoutineMessage] = useState("");
   const [aiAssistLoading, setAiAssistLoading] = useState<Record<AiAssistFeature, boolean>>({
     risk_analysis: false,
     routine: false,
@@ -383,6 +482,9 @@ function WorkspacePageContent() {
     management_system: false,
     controls: false,
   });
+  const [activeRoutineRequirementKey, setActiveRoutineRequirementKey] = useState(
+    routineRequirementPoints[0].key
+  );
 
   useEffect(() => {
     const plan = searchParams.get("plan");
@@ -505,6 +607,15 @@ function WorkspacePageContent() {
     const result = new Map<string, boolean>();
 
     for (const requirement of complianceRequirements) {
+      if (requirement.code === "R-02") {
+        const ledningssystemDone = ledningssystemRequirementItems.every(({ key }) =>
+          Boolean(answers[key]?.answer?.trim())
+        );
+
+        result.set(requirement.code, ledningssystemDone);
+        continue;
+      }
+
       const mappedItems = questionnaireItems.filter((q) =>
         q.mapsToRequirements.includes(requirement.code)
       );
@@ -543,10 +654,107 @@ function WorkspacePageContent() {
   const canUseRiskModule = hasPlanAccess("step2");
   const canUseControlModule = hasPlanAccess("step2");
   const canUsePremiumAi = hasPlanAccess("step3");
+  const routineEntries = useMemo<RoutineEntry[]>(() => {
+    const raw = answers.routine_updates_entries?.answer;
+
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map((item) => {
+          if (!item || typeof item !== "object") {
+            return null;
+          }
+
+          const candidate = item as Partial<RoutineEntry>;
+
+          if (
+            typeof candidate.requirementKey !== "string" ||
+            typeof candidate.requirementLabel !== "string" ||
+            typeof candidate.area !== "string" ||
+            typeof candidate.changeLog !== "string" ||
+            typeof candidate.owner !== "string" ||
+            typeof candidate.nextReview !== "string"
+          ) {
+            return null;
+          }
+
+          return {
+            id:
+              typeof candidate.id === "string" && candidate.id
+                ? candidate.id
+                : `${candidate.requirementKey}-${Date.now()}`,
+            requirementKey: candidate.requirementKey,
+            requirementLabel: candidate.requirementLabel,
+            area: candidate.area,
+            changeLog: candidate.changeLog,
+            owner: candidate.owner,
+            nextReview: candidate.nextReview,
+            updatedAt:
+              typeof candidate.updatedAt === "string" && candidate.updatedAt
+                ? candidate.updatedAt
+                : new Date().toISOString(),
+          };
+        })
+        .filter((entry): entry is RoutineEntry => Boolean(entry));
+    } catch {
+      return [];
+    }
+  }, [answers]);
+  const routineCoverageMissingPoints = useMemo(
+    () =>
+      routineRequirementPoints
+        .filter((point) => !routineEntries.some((entry) => entry.requirementKey === point.key))
+        .map((point) => point.label),
+    [routineEntries]
+  );
+  const hasRoutineCoverage = routineCoverageMissingPoints.length === 0;
+  const activeRoutineRequirement = useMemo(
+    () =>
+      routineRequirementPoints.find((point) => point.key === activeRoutineRequirementKey) ||
+      routineRequirementPoints[0],
+    [activeRoutineRequirementKey]
+  );
+  const ledningssystemMissingFields = useMemo(
+    () =>
+      ledningssystemRequirementItems
+        .filter(({ key }) => !answers[key]?.answer?.trim())
+        .map(({ label }) => label),
+    [answers]
+  );
+  const hasLedningssystemCoverage = ledningssystemMissingFields.length === 0;
   const isOverview = activeView === "overview";
   const isApplicationView = activeView === "dokument";
   const showSection = (view: Exclude<WorkspaceView, "overview">) =>
     activeView === view || (isOverview && view !== "dokument");
+  const submissionBlockers = useMemo(() => {
+    const blockers: string[] = [];
+
+    if (!hasLedningssystemCoverage) {
+      blockers.push(`Ledningssystem: ${ledningssystemMissingFields.join(", ")}`);
+    }
+
+    if (canUseIncidentModule && !hasRoutineCoverage) {
+      blockers.push(`Rutiner (R-04): ${routineCoverageMissingPoints.join(", ")}`);
+    }
+
+    return blockers;
+  }, [
+    hasLedningssystemCoverage,
+    ledningssystemMissingFields,
+    canUseIncidentModule,
+    hasRoutineCoverage,
+    routineCoverageMissingPoints,
+  ]);
+  const canSubmitApplication = readiness.canSubmit && submissionBlockers.length === 0;
   const isApplicationSubmitted = applicationStatus === "submitted";
   const isApplicationApproved = applicationStatus === "ready_to_submit";
 
@@ -626,6 +834,66 @@ function WorkspacePageContent() {
     return summary;
   }, [controls]);
 
+  const managementSystemSummary = useMemo(() => {
+    const latestRoutineEntry = routineEntries
+      .slice()
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
+    const routineArea =
+      latestRoutineEntry?.area || answers.routine_updates_area?.answer?.trim() || "Ej angivet";
+    const routineOwner =
+      latestRoutineEntry?.owner || answers.routine_updates_owner?.answer?.trim() || "Ej angivet";
+    const routineNextReview =
+      latestRoutineEntry?.nextReview || answers.routine_updates_next_review?.answer || "Ej satt";
+
+    const managementOwner =
+      answers.management_system_owner?.answer?.trim() || profile.clinicName.trim() || "Ej angivet";
+    const managementNextReview = answers.management_system_next_review?.answer || "Ej satt";
+
+    const riskHeadlines = risks.slice(0, 2).map((item) => item.title).filter(Boolean);
+    const incidentHeadlines = incidents.slice(0, 2).map((item) => item.title).filter(Boolean);
+    const controlHeadlines = controls.slice(0, 2).map((item) => item.title).filter(Boolean);
+
+    return {
+      responsibility: {
+        managementOwner,
+        routineOwner,
+      },
+      routines: {
+        area: routineArea,
+        nextReview: routineNextReview,
+      },
+      risks: {
+        open: riskSummary.open,
+        highPriority: riskSummary.highPriority,
+        headlines: riskHeadlines,
+      },
+      incidents: {
+        open: incidentSummary.open,
+        criticalOrHigh: incidentSummary.criticalOrHigh,
+        headlines: incidentHeadlines,
+      },
+      controls: {
+        pending: controlSummary.pending,
+        overdue: controlSummary.overdue,
+        headlines: controlHeadlines,
+      },
+      nextReview: {
+        managementSystem: managementNextReview,
+        routines: routineNextReview,
+      },
+    };
+  }, [
+    answers,
+    profile.clinicName,
+    risks,
+    incidents,
+    controls,
+    routineEntries,
+    riskSummary,
+    incidentSummary,
+    controlSummary,
+  ]);
+
   const canGenerate =
     profile.clinicName.trim() &&
     profile.municipality.trim() &&
@@ -645,6 +913,224 @@ function WorkspacePageContent() {
       },
     }));
   };
+
+  const ensureRoutineDocumentReferences = (text: string) => {
+    const references = [
+      "- Avvikelsehanteringsrutin: /avvikelser/rutin",
+      "- Riskanalysrutin: /riskanalyser/rutin",
+      "- Kontrollrutin (årshjul): /arshjul/rutin",
+    ];
+
+    const existingLines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const normalized = [...existingLines];
+
+    if (!normalized.some((line) => line.toLowerCase() === "dokumenterade rutiner:")) {
+      normalized.push("Dokumenterade rutiner:");
+    }
+
+    for (const reference of references) {
+      if (!normalized.some((line) => line.includes(reference.split(": ")[1]))) {
+        normalized.push(reference);
+      }
+    }
+
+    return normalized.join("\n");
+  };
+
+  const ensureAnnualControlChecklist = (text: string) => {
+    const existingLines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const normalized = [...existingLines];
+
+    if (!normalized.some((line) => line.toLowerCase() === "årskontroll-checklista:")) {
+      normalized.push("Årskontroll-checklista:");
+    }
+
+    for (const item of annualControlChecklistItems) {
+      const checklistLine = `- ${item}`;
+      if (!normalized.some((line) => line.toLowerCase() === checklistLine.toLowerCase())) {
+        normalized.push(checklistLine);
+      }
+    }
+
+    return normalized.join("\n");
+  };
+
+  function insertAnnualControlChecklistToDocuments() {
+    const current = getAnswerValue("management_system_documents").trim();
+    const base = current || "Styrande dokument:";
+    const withRoutineRefs = ensureRoutineDocumentReferences(base);
+    const withChecklist = ensureAnnualControlChecklist(withRoutineRefs);
+
+    setAnswerValue("management_system_documents", withChecklist);
+    setWorkspaceMessage("Årskontroll-checklista har infogats i Styrande dokument.");
+  }
+
+  const upsertRoutineEntry = useCallback(
+    (entry: Omit<RoutineEntry, "id" | "updatedAt">) => {
+      const updatedEntry: RoutineEntry = {
+        ...entry,
+        id: `${entry.requirementKey}-${Date.now()}`,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setAnswers((prev) => {
+        const previousRaw = prev.routine_updates_entries?.answer;
+        let previousEntries: RoutineEntry[] = [];
+
+        if (previousRaw) {
+          try {
+            const parsed = JSON.parse(previousRaw) as RoutineEntry[];
+            if (Array.isArray(parsed)) {
+              previousEntries = parsed;
+            }
+          } catch {
+            previousEntries = [];
+          }
+        }
+
+        const nextEntries = [
+          ...previousEntries.filter((item) => item.requirementKey !== entry.requirementKey),
+          updatedEntry,
+        ];
+
+        return {
+          ...prev,
+          routine_updates_entries: {
+            answer: JSON.stringify(nextEntries),
+            followUpAnswer: prev.routine_updates_entries?.followUpAnswer || "",
+          },
+          routine_updates_area: {
+            answer: entry.area,
+            followUpAnswer: prev.routine_updates_area?.followUpAnswer || "",
+          },
+          routine_updates_change_log: {
+            answer: entry.changeLog,
+            followUpAnswer: prev.routine_updates_change_log?.followUpAnswer || "",
+          },
+          routine_updates_owner: {
+            answer: entry.owner,
+            followUpAnswer: prev.routine_updates_owner?.followUpAnswer || "",
+          },
+          routine_updates_next_review: {
+            answer: entry.nextReview,
+            followUpAnswer: prev.routine_updates_next_review?.followUpAnswer || "",
+          },
+        };
+      });
+    },
+    []
+  );
+
+  function saveRoutineForPoint() {
+    const area = getAnswerValue("routine_updates_area").trim();
+    const changeLog = getAnswerValue("routine_updates_change_log").trim();
+    const owner = getAnswerValue("routine_updates_owner").trim();
+    const nextReview = getAnswerValue("routine_updates_next_review").trim();
+
+    if (!area || !changeLog || !owner || !nextReview) {
+      setRoutineMessage("Fyll i område, ändring, ansvarig och nästa uppföljning innan du sparar rutin.");
+      return;
+    }
+
+    upsertRoutineEntry({
+      requirementKey: activeRoutineRequirement.key,
+      requirementLabel: activeRoutineRequirement.label,
+      area,
+      changeLog,
+      owner,
+      nextReview,
+    });
+
+    setRoutineMessage(`Rutin sparad för punkt: ${activeRoutineRequirement.label}.`);
+  }
+
+  function editRoutineForPoint(requirementKey: string) {
+    const entry = routineEntries.find((item) => item.requirementKey === requirementKey);
+
+    if (!entry) {
+      return;
+    }
+
+    setActiveRoutineRequirementKey(entry.requirementKey);
+    setAnswerValue("routine_updates_area", entry.area);
+    setAnswerValue("routine_updates_change_log", entry.changeLog);
+    setAnswerValue("routine_updates_owner", entry.owner);
+    setAnswerValue("routine_updates_next_review", entry.nextReview);
+    setWorkspaceMessage(`Rutin laddad för redigering: ${entry.requirementLabel}.`);
+  }
+
+  function removeRoutineForPoint(requirementKey: string) {
+    setAnswers((prev) => {
+      const previousRaw = prev.routine_updates_entries?.answer;
+      let previousEntries: RoutineEntry[] = [];
+
+      if (previousRaw) {
+        try {
+          const parsed = JSON.parse(previousRaw) as RoutineEntry[];
+          if (Array.isArray(parsed)) {
+            previousEntries = parsed;
+          }
+        } catch {
+          previousEntries = [];
+        }
+      }
+
+      const nextEntries = previousEntries.filter((item) => item.requirementKey !== requirementKey);
+
+      return {
+        ...prev,
+        routine_updates_entries: {
+          answer: JSON.stringify(nextEntries),
+          followUpAnswer: prev.routine_updates_entries?.followUpAnswer || "",
+        },
+      };
+    });
+    setWorkspaceMessage("Rutin borttagen för vald punkt.");
+  }
+
+  function focusManagementField(fieldKey: string) {
+    const element = document.getElementById(`management-field-${fieldKey}`) as
+      | HTMLInputElement
+      | HTMLTextAreaElement
+      | null;
+
+    if (!element) {
+      return;
+    }
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.focus();
+  }
+
+  function focusRoutinePoint(requirementKey: string) {
+    const entry = routineEntries.find((item) => item.requirementKey === requirementKey);
+
+    if (entry) {
+      editRoutineForPoint(requirementKey);
+    } else {
+      const point = routineRequirementPoints.find((item) => item.key === requirementKey);
+      if (point) {
+        setActiveRoutineRequirementKey(point.key);
+        setAnswerValue("routine_updates_area", point.label);
+      }
+    }
+
+    const element = document.getElementById("routine-field-area") as HTMLInputElement | null;
+    if (!element) {
+      return;
+    }
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.focus();
+  }
 
   async function requestAiAssistance(feature: AiAssistFeature) {
     if (!canUsePremiumAi) {
@@ -674,6 +1160,7 @@ function WorkspacePageContent() {
           documents: getAnswerValue("management_system_documents"),
         },
         currentRoutine: {
+          requirementPoint: activeRoutineRequirement.label,
           area: getAnswerValue("routine_updates_area"),
           changeLog: getAnswerValue("routine_updates_change_log"),
           owner: getAnswerValue("routine_updates_owner"),
@@ -713,15 +1200,59 @@ function WorkspacePageContent() {
     setRiskMessage("AI-förslag infogat i riskanalysen.");
   }
 
-  async function suggestRoutineUpdate() {
+  async function suggestRoutineUpdate(
+    targetPoint: (typeof routineRequirementPoints)[number] = activeRoutineRequirement
+  ) {
     const suggestion = await requestAiAssistance("routine");
     if (!suggestion || suggestion.feature !== "routine") return;
 
-    setAnswerValue("routine_updates_area", suggestion.area);
-    setAnswerValue("routine_updates_change_log", suggestion.changeLog);
-    setAnswerValue("routine_updates_owner", suggestion.owner);
-    setAnswerValue("routine_updates_next_review", suggestion.nextReview);
-    setWorkspaceMessage("AI-förslag infogat för rutiner och uppdateringar.");
+    const area = suggestion.area?.trim() || targetPoint.label;
+    const changeLog =
+      suggestion.changeLog?.trim() || "Rutinen uppdateras enligt senaste krav och uppföljning.";
+    const owner = suggestion.owner?.trim() || "Kvalitetsansvarig";
+    const nextReview = suggestion.nextReview?.trim() || new Date().toISOString().slice(0, 10);
+
+    upsertRoutineEntry({
+      requirementKey: targetPoint.key,
+      requirementLabel: targetPoint.label,
+      area,
+      changeLog,
+      owner,
+      nextReview,
+    });
+
+    setWorkspaceMessage(`AI-rutin skapad och sparad för punkt: ${targetPoint.label}.`);
+  }
+
+  async function suggestRoutineForPoint(pointKey: string) {
+    const point = routineRequirementPoints.find((item) => item.key === pointKey);
+
+    if (!point) {
+      return;
+    }
+
+    setActiveRoutineRequirementKey(pointKey);
+    setAnswerValue("routine_updates_area", point.label);
+    await suggestRoutineUpdate(point);
+  }
+
+  async function suggestAllMissingRoutines() {
+    if (!canUsePremiumAi) {
+      return;
+    }
+
+    for (const point of routineRequirementPoints) {
+      const hasRoutine = routineEntries.some((entry) => entry.requirementKey === point.key);
+
+      if (hasRoutine) {
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      await suggestRoutineForPoint(point.key);
+    }
+
+    setWorkspaceMessage("AI har skapat rutiner för alla saknade lagkravspunkter.");
   }
 
   async function writeIncidentInvestigation() {
@@ -740,10 +1271,109 @@ function WorkspacePageContent() {
     const suggestion = await requestAiAssistance("management_system");
     if (!suggestion || suggestion.feature !== "management_system") return;
 
+    const today = new Date().toISOString().slice(0, 10);
+
+    const fallbackPurpose =
+      "Ledningssystemet ska säkerställa lagkrav, kvalitet och patientsäkerhet genom systematisk uppföljning och tydlig ansvarsfördelning.";
+    const routineArea = answers.routine_updates_area?.answer?.trim() || "kärnprocesser";
+    const fallbackScope = `Omfattar ${routineArea.toLowerCase()}, avvikelsehantering, riskanalys, dokumentstyrning och egenkontroller.`;
+    const fallbackProcessOwners = [
+      `Ledningssystem: ${suggestion.owner || getAnswerValue("management_system_owner") || "Verksamhetschef"}`,
+      `Rutiner: ${getAnswerValue("routine_updates_owner") || "Kvalitetsansvarig"}`,
+    ].join("\n");
+
+    const fallbackNextReview = (() => {
+      const date = new Date();
+      date.setMonth(date.getMonth() + 3);
+      return date.toISOString().slice(0, 10);
+    })();
+
+    const nextReview =
+      getAnswerValue("routine_updates_next_review") ||
+      getAnswerValue("management_system_next_review") ||
+      fallbackNextReview;
+
+    setAnswerValue("management_system_purpose", getAnswerValue("management_system_purpose") || fallbackPurpose);
+    setAnswerValue("management_system_scope", getAnswerValue("management_system_scope") || fallbackScope);
     setAnswerValue("management_system_owner", suggestion.owner);
+    setAnswerValue(
+      "management_system_process_owners",
+      getAnswerValue("management_system_process_owners") || fallbackProcessOwners
+    );
     setAnswerValue("management_system_processes", suggestion.processes);
-    setAnswerValue("management_system_documents", suggestion.documents);
-    setWorkspaceMessage("AI-utkast infogat i ledningssystemet.");
+    setAnswerValue(
+      "management_system_documents",
+      ensureRoutineDocumentReferences(suggestion.documents)
+    );
+    setAnswerValue("management_system_updated_at", today);
+    setAnswerValue("management_system_version", getAnswerValue("management_system_version") || "1.0");
+    setAnswerValue(
+      "management_system_approved_by",
+      getAnswerValue("management_system_approved_by") || suggestion.owner || "Verksamhetschef"
+    );
+    setAnswerValue("management_system_next_review", nextReview);
+    setWorkspaceMessage("AI-utkast infogat. Samtliga nyckelfält för ledningssystem har fyllts med förslag.");
+  }
+
+  function insertManagementSystemSummaryDraft() {
+    const today = new Date().toISOString().slice(0, 10);
+    const routineArea = managementSystemSummary.routines.area;
+    const routineChangeLog = answers.routine_updates_change_log?.answer?.trim() || "Ej angivet";
+
+    const processes = [
+      `Rutiner (${routineArea}) med ansvarig ${managementSystemSummary.responsibility.routineOwner}.`,
+      `Riskhantering: ${managementSystemSummary.risks.open} öppna risker, varav ${managementSystemSummary.risks.highPriority} med hög prioritet.`,
+      `Avvikelsehantering: ${managementSystemSummary.incidents.open} öppna avvikelser, varav ${managementSystemSummary.incidents.criticalOrHigh} hög/kritisk.`,
+      `Egenkontroller: ${managementSystemSummary.controls.pending} väntar och ${managementSystemSummary.controls.overdue} förfallna i årshjulet.`,
+    ].join("\n");
+
+    const processOwners = [
+      `Ledningssystem: ${managementSystemSummary.responsibility.managementOwner}`,
+      `Rutiner: ${managementSystemSummary.responsibility.routineOwner}`,
+    ].join("\n");
+
+    const supportingDocuments = [
+      "Styrande dokument:",
+      "- Rutiner och uppdateringslogg",
+      "- Riskregister och åtgärdsplaner",
+      "- Avvikelserapporter och utredningar",
+      "- Årshjul och egenkontroller",
+      `Senaste rutinändring: ${routineChangeLog}`,
+    ].join("\n");
+
+    const supportingDocumentsWithRoutineRefs = ensureRoutineDocumentReferences(supportingDocuments);
+
+    setAnswers((prev) => {
+      const next = { ...prev };
+      const setField = (key: string, value: string) => {
+        next[key] = {
+          answer: value,
+          followUpAnswer: prev[key]?.followUpAnswer || "",
+        };
+      };
+
+      setField(
+        "management_system_purpose",
+        "Ledningssystemet samlar och följer upp rutiner, risker, avvikelser och egenkontroller i ett gemensamt arbetssätt."
+      );
+      setField(
+        "management_system_scope",
+        `Omfattar ${routineArea.toLowerCase()} samt uppföljning av riskanalys, avvikelsehantering och årshjul.`
+      );
+      setField("management_system_owner", managementSystemSummary.responsibility.managementOwner);
+      setField("management_system_process_owners", processOwners);
+      setField("management_system_processes", processes);
+      setField("management_system_documents", supportingDocumentsWithRoutineRefs);
+      setField("management_system_updated_at", today);
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(managementSystemSummary.nextReview.managementSystem)) {
+        setField("management_system_next_review", managementSystemSummary.nextReview.managementSystem);
+      }
+
+      return next;
+    });
+
+    setWorkspaceMessage("Sammanställningen har infogats i ledningssystem-utkastet.");
   }
 
   async function suggestControls() {
@@ -793,6 +1423,12 @@ function WorkspacePageContent() {
   }
 
   async function updateApplicationStatus(status: ApplicationStatus) {
+    if (status === "submitted" && submissionBlockers.length > 0) {
+      setWorkspaceMessage(`Kan inte markera som inskickad. Komplettera: ${submissionBlockers.join(" | ")}.`);
+      setActiveView("ledningssystem");
+      return;
+    }
+
     const response = await fetch("/api/application/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -999,6 +1635,83 @@ function WorkspacePageContent() {
     setControlForm(initialControlForm);
     setControlMessage("Kontrollpunkt skapad.");
     await loadControls();
+  }
+
+  async function createAnnualControlTemplate() {
+    if (!canUseControlModule) {
+      return;
+    }
+
+    setIsControlSubmitting(true);
+    setControlMessage("");
+
+    const listResponse = await fetch("/api/controls/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!listResponse.ok) {
+      setIsControlSubmitting(false);
+      const data = (await listResponse.json()) as { error?: string };
+      setControlMessage(data.error || "Kunde inte läsa befintliga kontrollpunkter.");
+      return;
+    }
+
+    const listData = (await listResponse.json()) as { controls: ControlItem[] };
+    const existingTitles = new Set(
+      (listData.controls || []).map((control) => control.title.trim().toLowerCase())
+    );
+
+    const nextDueDate = (() => {
+      const date = new Date();
+      date.setFullYear(date.getFullYear() + 1);
+      return date.toISOString().slice(0, 10);
+    })();
+
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const template of annualControlTemplates) {
+      const normalizedTitle = template.title.trim().toLowerCase();
+
+      if (existingTitles.has(normalizedTitle)) {
+        skipped += 1;
+        continue;
+      }
+
+      const response = await fetch("/api/controls/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: template.title,
+          description: template.description,
+          frequency: "yearly",
+          ownerRole: "Verksamhetschef",
+          nextDueDate,
+        }),
+      });
+
+      if (response.ok) {
+        created += 1;
+        existingTitles.add(normalizedTitle);
+      } else {
+        failed += 1;
+      }
+    }
+
+    setIsControlSubmitting(false);
+    await loadControls();
+
+    if (failed > 0) {
+      setControlMessage(
+        `Standardårskontroller skapade: ${created}. Fanns redan: ${skipped}. Misslyckades: ${failed}.`
+      );
+      return;
+    }
+
+    setControlMessage(`Standardårskontroller skapade: ${created}. Fanns redan: ${skipped}.`);
   }
 
   async function updateControlStatus(controlId: string, status: ControlTaskStatus) {
@@ -1435,30 +2148,225 @@ function WorkspacePageContent() {
             </a>
           </div>
 
+          <article className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Ledningssystem: sammanställning från systemet</p>
+            <p className="mt-1 text-sm text-[color:var(--muted)]">
+              Underlaget hämtas automatiskt från Rutiner, Riskanalyser, Avvikelser, Årshjul och ansvarsfält.
+            </p>
+            <button
+              type="button"
+              onClick={insertManagementSystemSummaryDraft}
+              className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
+            >
+              Infoga sammanställning i utkast
+            </button>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Ansvar</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Ledningssystem: {managementSystemSummary.responsibility.managementOwner}</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Rutiner: {managementSystemSummary.responsibility.routineOwner}</p>
+              </div>
+
+              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Rutiner</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Område: {managementSystemSummary.routines.area}</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Nästa uppföljning: {managementSystemSummary.routines.nextReview}</p>
+              </div>
+
+              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Riskhantering</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Öppna risker: {managementSystemSummary.risks.open}</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Hög prioritet: {managementSystemSummary.risks.highPriority}</p>
+                <p className="mt-1 text-sm text-[color:var(--muted)]">
+                  {managementSystemSummary.risks.headlines.length > 0
+                    ? `Exempel: ${managementSystemSummary.risks.headlines.join(", ")}`
+                    : "Inga riskrubriker ännu."}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Avvikelsehantering</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Öppna avvikelser: {managementSystemSummary.incidents.open}</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Hög/kritisk: {managementSystemSummary.incidents.criticalOrHigh}</p>
+                <p className="mt-1 text-sm text-[color:var(--muted)]">
+                  {managementSystemSummary.incidents.headlines.length > 0
+                    ? `Exempel: ${managementSystemSummary.incidents.headlines.join(", ")}`
+                    : "Inga avvikelserubriker ännu."}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Egenkontroller (årshjul)</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Väntar: {managementSystemSummary.controls.pending}</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Förfallna: {managementSystemSummary.controls.overdue}</p>
+                <p className="mt-1 text-sm text-[color:var(--muted)]">
+                  {managementSystemSummary.controls.headlines.length > 0
+                    ? `Exempel: ${managementSystemSummary.controls.headlines.join(", ")}`
+                    : "Inga kontrollrubriker ännu."}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Nästa översyn</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Ledningssystem: {managementSystemSummary.nextReview.managementSystem}</p>
+                <p className="mt-1 text-sm text-[color:var(--ink)]">Rutiner: {managementSystemSummary.nextReview.routines}</p>
+              </div>
+            </div>
+          </article>
+
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ledningssystem</p>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">
                 Månatlig uppföljning
               </p>
-              {canUsePremiumAi ? (
+              <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                  Kravchecklista (R-02)
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-[color:var(--ink)]">
+                  {ledningssystemRequirementItems.map(({ key, label }) => {
+                    const hasValue = Boolean(answers[key]?.answer?.trim());
+                    return (
+                      <li key={key} className="flex items-center justify-between gap-3">
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`h-2 w-2 rounded-full ${hasValue ? "bg-emerald-500" : "bg-amber-500"}`}
+                          />
+                          <span>{label}</span>
+                        </span>
+                        {!hasValue ? (
+                          <button
+                            type="button"
+                            onClick={() => focusManagementField(key)}
+                            className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                          >
+                            Visa
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                  <li className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span>Dokumenterad avvikelsehanteringsrutin</span>
+                    </span>
+                    <a
+                      href="/avvikelser/rutin"
+                      className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                    >
+                      Öppna
+                    </a>
+                  </li>
+                  <li className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span>Dokumenterad riskanalysrutin</span>
+                    </span>
+                    <a
+                      href="/riskanalyser/rutin"
+                      className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                    >
+                      Öppna
+                    </a>
+                  </li>
+                  <li className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span>Dokumenterad kontrollrutin (årshjul)</span>
+                    </span>
+                    <a
+                      href="/arshjul/rutin"
+                      className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                    >
+                      Öppna
+                    </a>
+                  </li>
+                </ul>
+                {ledningssystemMissingFields.length > 0 ? (
+                  <p className="mt-2 text-xs text-[color:var(--muted)]">
+                    Saknas: {ledningssystemMissingFields.join(", ")}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-emerald-700">Alla punkter i R-02 är ifyllda.</p>
+                )}
+              </div>
+              <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                  Årskontroll-checklista (standard)
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-[color:var(--ink)]">
+                  {annualControlChecklistItems.map((item) => (
+                    <li key={item} className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-[color:var(--brand)]" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
                 <button
                   type="button"
-                  onClick={generateManagementSystemDraft}
-                  disabled={aiAssistLoading.management_system}
-                  className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                  onClick={insertAnnualControlChecklistToDocuments}
+                  className="mt-3 rounded-lg border border-[color:var(--line)] px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
                 >
-                  {aiAssistLoading.management_system ? "AI arbetar..." : "AI: Generera utkast"}
+                  Infoga i Styrande dokument
                 </button>
+              </div>
+              {canUsePremiumAi ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={generateManagementSystemDraft}
+                    disabled={aiAssistLoading.management_system}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {aiAssistLoading.management_system ? "AI arbetar..." : "AI: Generera utkast"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={insertManagementSystemSummaryDraft}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                  >
+                    Infoga sammanställning
+                  </button>
+                </div>
               ) : null}
               <div className="mt-3 space-y-3">
+                <textarea
+                  id="management-field-management_system_purpose"
+                  value={getAnswerValue("management_system_purpose")}
+                  onChange={(event) => setAnswerValue("management_system_purpose", event.target.value)}
+                  placeholder="Syfte med ledningssystemet (ex. säkerställa lagkrav och systematiskt kvalitetsarbete)"
+                  rows={2}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                <textarea
+                  id="management-field-management_system_scope"
+                  value={getAnswerValue("management_system_scope")}
+                  onChange={(event) => setAnswerValue("management_system_scope", event.target.value)}
+                  placeholder="Omfattning (ex. patientmottagning, journalföring, steril, röntgen, personal, läkemedel)"
+                  rows={2}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
                 <input
+                  id="management-field-management_system_owner"
                   value={getAnswerValue("management_system_owner")}
                   onChange={(event) => setAnswerValue("management_system_owner", event.target.value)}
                   placeholder="Ansvarig roll (ex. Verksamhetschef)"
                   className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                 />
                 <textarea
+                  value={getAnswerValue("management_system_process_owners")}
+                  onChange={(event) =>
+                    setAnswerValue("management_system_process_owners", event.target.value)
+                  }
+                  placeholder="Processägare per område (ex. Hygien: Anna, Journal: Johan, Avvikelser: Lisa)"
+                  rows={2}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                <textarea
+                  id="management-field-management_system_processes"
                   value={getAnswerValue("management_system_processes")}
                   onChange={(event) =>
                     setAnswerValue("management_system_processes", event.target.value)
@@ -1468,6 +2376,7 @@ function WorkspacePageContent() {
                   className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                 />
                 <textarea
+                  id="management-field-management_system_documents"
                   value={getAnswerValue("management_system_documents")}
                   onChange={(event) =>
                     setAnswerValue("management_system_documents", event.target.value)
@@ -1476,6 +2385,24 @@ function WorkspacePageContent() {
                   rows={3}
                   className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                 />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    value={getAnswerValue("management_system_version")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_version", event.target.value)
+                    }
+                    placeholder="Version (ex. 1.0, 1.1, 1.2)"
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={getAnswerValue("management_system_approved_by")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_approved_by", event.target.value)
+                    }
+                    placeholder="Godkänd av (ex. Verksamhetschef, styrelse)"
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                </div>
                 <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
                   Senast uppdaterad
                   <input
@@ -1487,24 +2414,123 @@ function WorkspacePageContent() {
                     className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
                   />
                 </label>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Nästa planerade uppföljning
+                  <input
+                    id="management-field-management_system_next_review"
+                    type="date"
+                    value={getAnswerValue("management_system_next_review")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_next_review", event.target.value)
+                    }
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void saveWorkspace()}
+                  disabled={isSaving}
+                  className="w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {isSaving ? "Sparar..." : "Spara"}
+                </button>
               </div>
             </article>
 
             <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Rutiner och uppdateringar</p>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">Löpande</p>
-              {canUsePremiumAi ? (
-                <button
-                  type="button"
-                  onClick={suggestRoutineUpdate}
-                  disabled={aiAssistLoading.routine}
-                  className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                  Lagkravspunkter för rutiner
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-[color:var(--ink)]">
+                  {routineRequirementPoints.map((point) => {
+                    const hasValue = routineEntries.some((entry) => entry.requirementKey === point.key);
+
+                    return (
+                      <li key={point.key} className="flex items-center justify-between gap-3">
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              hasValue ? "bg-emerald-500" : "bg-amber-500"
+                            }`}
+                          />
+                          <span>{point.label}</span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          {hasValue ? (
+                            <button
+                              type="button"
+                              onClick={() => focusRoutinePoint(point.key)}
+                              className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                            >
+                              Visa
+                            </button>
+                          ) : null}
+                          {!hasValue && canUsePremiumAi ? (
+                            <button
+                              type="button"
+                              onClick={() => void suggestRoutineForPoint(point.key)}
+                              disabled={aiAssistLoading.routine}
+                              className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                            >
+                              AI-generera
+                            </button>
+                          ) : null}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {routineCoverageMissingPoints.length > 0 ? (
+                  <p className="mt-2 text-xs text-[color:var(--muted)]">
+                    Saknas: {routineCoverageMissingPoints.join(", ")}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-emerald-700">Alla lagkravspunkter har en sparad rutin.</p>
+                )}
+              </div>
+
+              <label className="mt-3 block space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                Välj lagkravspunkt
+                <select
+                  value={activeRoutineRequirementKey}
+                  onChange={(event) => setActiveRoutineRequirementKey(event.target.value)}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal text-[color:var(--ink)]"
                 >
-                  {aiAssistLoading.routine ? "AI arbetar..." : "AI: Skapa rutin"}
-                </button>
+                  {routineRequirementPoints.map((point) => (
+                    <option key={point.key} value={point.key}>
+                      {point.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {canUsePremiumAi ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void suggestRoutineUpdate()}
+                    disabled={aiAssistLoading.routine}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {aiAssistLoading.routine ? "AI arbetar..." : "AI: Skapa för vald punkt"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={suggestAllMissingRoutines}
+                    disabled={aiAssistLoading.routine || routineCoverageMissingPoints.length === 0}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    AI: Skapa alla saknade
+                  </button>
+                </div>
               ) : null}
+
               <div className="mt-3 space-y-3">
                 <input
+                  id="routine-field-area"
                   value={getAnswerValue("routine_updates_area")}
                   onChange={(event) => setAnswerValue("routine_updates_area", event.target.value)}
                   placeholder="Berört område (ex. steril, journal, bemanning)"
@@ -1536,7 +2562,78 @@ function WorkspacePageContent() {
                     className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
                   />
                 </label>
+                <button
+                  type="button"
+                  onClick={saveRoutineForPoint}
+                  className="w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white"
+                >
+                  Spara rutin för vald punkt
+                </button>
+                {routineMessage ? (
+                  <p className="text-sm text-[color:var(--muted)]">{routineMessage}</p>
+                ) : (
+                  <p className="text-xs text-[color:var(--muted)]">Spara punkt och klicka sedan på Spara längst ned i kortet.</p>
+                )}
               </div>
+
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Sparade rutiner per punkt
+                </p>
+                {routineRequirementPoints.map((point) => {
+                  const entry = routineEntries.find((item) => item.requirementKey === point.key);
+
+                  return (
+                    <div
+                      key={point.key}
+                      className="rounded-xl border border-[color:var(--line)] bg-white p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-[color:var(--ink)]">{point.label}</p>
+                        <span
+                          className={`text-xs font-semibold ${
+                            entry ? "text-emerald-700" : "text-amber-700"
+                          }`}
+                        >
+                          {entry ? "Klar" : "Saknas"}
+                        </span>
+                      </div>
+                      {entry ? (
+                        <>
+                          <p className="mt-1 text-xs text-[color:var(--muted)]">{entry.area}</p>
+                          <p className="mt-1 text-xs text-[color:var(--muted)]">Ansvarig: {entry.owner}</p>
+                          <p className="mt-1 text-xs text-[color:var(--muted)]">Nästa uppföljning: {entry.nextReview}</p>
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => editRoutineForPoint(point.key)}
+                              className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                            >
+                              Redigera
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeRoutineForPoint(point.key)}
+                              className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                            >
+                              Ta bort
+                            </button>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void saveWorkspace()}
+                disabled={isSaving}
+                className="mt-4 w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {isSaving ? "Sparar..." : "Spara"}
+              </button>
             </article>
           </div>
 
@@ -1730,6 +2827,18 @@ function WorkspacePageContent() {
       {showSection("avvikelser") ? (
       <section id="avvikelser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Avvikelser (Drift/Premium)</h2>
+        <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
+          <p className="mt-1 text-sm text-[color:var(--muted)]">
+            Avvikelsehanteringsrutin finns dokumenterad och kan användas som underlag för ledningssystemet.
+          </p>
+          <a
+            href="/avvikelser/rutin"
+            className="mt-3 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-slate-50"
+          >
+            Öppna avvikelsehanteringsrutin
+          </a>
+        </div>
         {!canUseIncidentModule ? (
           <p className="mt-3 text-sm text-[color:var(--muted)]">
             Uppgradera till {planLabels.step2} för att hantera avvikelser.
@@ -1835,10 +2944,10 @@ function WorkspacePageContent() {
                     <p className="mt-1 text-sm text-[color:var(--muted)]">{incident.description}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
-                        Allvar: {incident.severity}
+                        Allvar: {incidentSeverityLabels[incident.severity]}
                       </span>
                       <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
-                        Status: {incident.status}
+                        Status: {incidentStatusLabels[incident.status]}
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -1882,6 +2991,18 @@ function WorkspacePageContent() {
       {showSection("riskanalyser") ? (
       <section id="riskanalyser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Riskanalyser (Drift/Premium)</h2>
+        <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
+          <p className="mt-1 text-sm text-[color:var(--muted)]">
+            Riskanalysrutin finns dokumenterad och kan användas som underlag för ledningssystemet.
+          </p>
+          <a
+            href="/riskanalyser/rutin"
+            className="mt-3 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-slate-50"
+          >
+            Öppna riskanalysrutin
+          </a>
+        </div>
         {!canUseRiskModule ? (
           <p className="mt-3 text-sm text-[color:var(--muted)]">
             Uppgradera till {planLabels.step2} för att hantera riskregister.
@@ -1989,7 +3110,7 @@ function WorkspacePageContent() {
                         Riskvärde: {risk.probability * risk.consequence}
                       </span>
                       <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
-                        Status: {risk.status}
+                        Status: {riskStatusLabels[risk.status]}
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -2033,6 +3154,18 @@ function WorkspacePageContent() {
       {showSection("arshjul") ? (
       <section id="arshjul" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Årshjul och kontroller (Drift/Premium)</h2>
+        <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
+          <p className="mt-1 text-sm text-[color:var(--muted)]">
+            Kontrollrutin för årshjul och egenkontroller finns dokumenterad och kan användas som underlag för ledningssystemet.
+          </p>
+          <a
+            href="/arshjul/rutin"
+            className="mt-3 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-slate-50"
+          >
+            Öppna kontrollrutin
+          </a>
+        </div>
         {!canUseControlModule ? (
           <p className="mt-3 text-sm text-[color:var(--muted)]">
             Uppgradera till {planLabels.step2} för att hantera årshjul och kontroller.
@@ -2042,15 +3175,28 @@ function WorkspacePageContent() {
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny kontrollpunkt</p>
               {canUsePremiumAi ? (
-                <button
-                  type="button"
-                  onClick={suggestControls}
-                  disabled={aiAssistLoading.controls}
-                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                >
-                  {aiAssistLoading.controls ? "AI arbetar..." : "AI: Föreslå kontroller"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={suggestControls}
+                    disabled={aiAssistLoading.controls || isControlSubmitting}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {aiAssistLoading.controls ? "AI arbetar..." : "AI: Föreslå en kontroll"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={createAnnualControlTemplate}
+                    disabled={isControlSubmitting}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {isControlSubmitting ? "Lägger in checklista..." : "Lägg in årschecklista (6 punkter)"}
+                  </button>
+                </div>
               ) : null}
+              <p className="text-xs text-[color:var(--muted)]">
+                AI skapar ett enskilt förslag utifrån kontext. Årschecklista lägger in fördefinierade standardpunkter.
+              </p>
               <input
                 value={controlForm.title}
                 onChange={(event) => setControlForm((prev) => ({ ...prev, title: event.target.value }))}
@@ -2136,10 +3282,10 @@ function WorkspacePageContent() {
                     ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
-                        Frekvens: {control.frequency}
+                        Frekvens: {controlFrequencyLabels[control.frequency]}
                       </span>
                       <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
-                        Status: {control.status}
+                        Status: {controlStatusLabels[control.status]}
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -2378,8 +3524,13 @@ function WorkspacePageContent() {
                   <button
                     type="button"
                     onClick={() => updateApplicationStatus("submitted")}
-                    disabled={!readiness.canSubmit}
+                    disabled={!canSubmitApplication}
                     className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white"
+                    title={
+                      submissionBlockers.length === 0
+                        ? undefined
+                        : `Komplettera: ${submissionBlockers.join(" | ")}`
+                    }
                   >
                     Markera inskickad
                   </button>
@@ -2436,12 +3587,6 @@ function WorkspacePageContent() {
                         },
                       }))
                     }
-                    placeholder={
-                      isLocked
-                        ? `Uppgradera till ${planLabels[requirement.availableFrom]} för att skapa detta dokument.`
-                        : "Genererat innehåll visas här"
-                    }
-                    rows={8}
                     disabled={isLocked || isApplicationSubmitted}
                     className="mt-3 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                   />

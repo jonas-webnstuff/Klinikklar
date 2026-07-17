@@ -52,22 +52,21 @@ const customerJourneySteps = [
 
 const pricingPlans = [
   {
-    id: "step1",
-    badge: "Engångspaket",
-    title: "Klinikklar Start",
-    price: "19 900 kr",
-    billing: "",
-    description: "Kom igång med tillstånd, grundstruktur och komplett uppstartsstöd.",
+    id: "ansokan",
+    badge: "Engångsinsats",
+    title: "Klinikklar Ansökan",
+    price: "9 995 kr",
+    billing: "engång",
+    description: "För kliniker som behöver hjälp med själva ansökan utan löpande abonnemang.",
     features: [
-      "IVO",
-      "Ledningssystem",
-      "Dokument",
-      "AI",
-      "Checklistor",
-      "Support",
+      "Ansökningsstöd",
+      "Dokumentgenomgång",
+      "Kravtolkning",
+      "Checklista",
+      "Rådgivning",
     ],
-    ctaLabel: "Välj Klinikklar Start",
-    ctaHref: "/login?next=/workspace&plan=step1",
+    ctaLabel: "Boka ansökningshjälp",
+    ctaHref: "#om-oss",
   },
   {
     id: "step2",
@@ -75,33 +74,56 @@ const pricingPlans = [
     title: "Klinikklar Drift",
     price: "995 kr",
     billing: "/mån",
-    description: "För daglig drift med strukturerat kvalitetsarbete och uppföljning.",
+    description: "För kliniker som redan gjort ansökan men saknar ledningssystem och löpande struktur.",
+    footerNote: "Startavgift 4 995 kr",
     features: [
-      "Uppdateringar",
-      "Avvikelser",
+      "Ledningssystem",
+      "Avvikelsehantering",
       "Rutiner",
       "Riskanalyser",
       "Årshjul",
+      "AI-förslag",
     ],
     ctaLabel: "Välj Klinikklar Drift",
     ctaHref: "/login?next=/workspace&plan=step2",
+  },
+  {
+    id: "step1",
+    badge: "Kombination",
+    title: "Klinikklar Komplett",
+    price: "995 kr",
+    billing: "/mån",
+    description: "För kliniker som vill ha hjälp med ansökan och därefter driva ett levande ledningssystem.",
+    footerNote: "Startavgift 19 900 kr",
+    features: [
+      "Start + Drift i ett upplägg",
+      "Ansökningsprocess",
+      "IVO-underlag",
+      "Ledningssystem",
+      "AI-förslag",
+      "Löpande driftabonnemang krävs",
+      "Support",
+    ],
+    ctaLabel: "Välj Klinikklar Komplett",
+    ctaHref: "/login?next=/workspace&plan=step1",
     highlighted: true,
   },
   {
     id: "step3",
-    badge: "Utökad nivå",
+    badge: "Premium",
     title: "Klinikklar Premium",
-    price: "2 495 kr",
+    price: "1 995 kr",
     billing: "/mån",
-    description: "För kliniker som vill ha proaktiv AI-styrning och hög revisionsberedskap.",
+    description: "För kliniker som vill ha premiumfunktioner, hög AI-nivå och avancerad revisionsberedskap.",
+    footerNote: "Startavgift 4 995 kr",
     features: [
       "AI Compliance Officer",
       "Regelbevakning",
-      "AI-förslag",
       "Revision",
       "Internkontroll",
+      "Prioriterad support",
     ],
-    ctaLabel: "Välj Klinikklar Premium",
+    ctaLabel: "Välj Premium Drift",
     ctaHref: "/login?next=/workspace&plan=step3",
   },
 ];
@@ -260,7 +282,7 @@ export default function Home() {
         ))}
       </section>
 
-      <section id="sa-fungerar-det" className="mt-18 grid gap-8 pt-16 lg:grid-cols-[0.9fr_1.1fr]">
+      <section id="sa-fungerar-det" className="mt-18 scroll-mt-28 grid gap-8 pt-16 lg:grid-cols-[0.9fr_1.1fr]">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
             Så fungerar det
@@ -281,7 +303,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="funktioner" className="mt-18 grid gap-6 pt-16 md:grid-cols-2 xl:grid-cols-3">
+      <section id="funktioner" className="mt-18 scroll-mt-28 grid gap-6 pt-16 md:grid-cols-2 xl:grid-cols-3">
         {[
           "Modul för ledningssystem med ansvar, processer och årshjul",
           "Egenkontroller med frekvens, ägare och förfallodatum",
@@ -296,7 +318,7 @@ export default function Home() {
         ))}
       </section>
 
-      <section id="tre-steg" className="mt-18 pt-16">
+      <section id="tre-steg" className="mt-18 scroll-mt-28 pt-16">
         <div className="rounded-[2rem] border border-[color:var(--line)] bg-white p-8 lg:p-10">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
             Erbjudande i tre steg
@@ -323,23 +345,26 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="priser" className="mt-18 pt-16">
+      <section id="priser" className="mt-18 scroll-mt-28 pt-16">
         <div className="rounded-[2rem] border border-[color:var(--line)] bg-[linear-gradient(180deg,#ffffff_0%,#f2f8fd_100%)] p-8 lg:p-10">
           <div className="max-w-2xl">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">Priser</p>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-[color:var(--ink)]">
-              Välj nivå efter var kliniken befinner sig
+              Välj upplägg efter var kliniken befinner sig
             </h2>
             <p className="mt-4 text-lg leading-8 text-[color:var(--muted)]">
-              Börja i rätt steg och väx vidare i samma plattform när behovet ökar.
+              Engång för ansökan, löpande abonnemang för ledningssystem och ett tydligt kombinationsupplägg för hela resan.
+            </p>
+            <p className="mt-2 text-sm font-medium text-[color:var(--muted)]">
+              Startavgift debiteras vid onboarding för Drift, Komplett och Premium.
             </p>
           </div>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
+          <div className="mt-8 grid gap-3 lg:grid-cols-4">
             {pricingPlans.map((plan) => (
               <article
                 key={plan.id}
-                className={`flex h-full flex-col rounded-3xl border p-6 shadow-[0_16px_40px_rgba(13,39,87,0.05)] ${
+                className={`flex h-full flex-col rounded-2xl border p-4 shadow-[0_10px_26px_rgba(13,39,87,0.05)] ${
                   plan.highlighted
                     ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]"
                     : "border-[color:var(--line)] bg-white"
@@ -348,27 +373,36 @@ export default function Home() {
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--brand)]">
                   {plan.badge}
                 </p>
-                <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[color:var(--ink)]">
+                <h3 className="mt-1.5 text-xl font-semibold tracking-[-0.02em] text-[color:var(--ink)]">
                   {plan.title}
                 </h3>
-                <div className="mt-3 flex items-end gap-1">
-                  <p className="text-4xl font-semibold tracking-[-0.04em] text-[color:var(--ink)]">
+                <div className="mt-2.5 flex items-end gap-1">
+                  <p className="text-3xl font-semibold tracking-[-0.03em] text-[color:var(--ink)]">
                     {plan.price}
                   </p>
-                  <p className="pb-1 text-sm text-[color:var(--muted)]">{plan.billing}</p>
+                  <p className="pb-1 text-xs text-[color:var(--muted)]">{plan.billing}</p>
                 </div>
-                <p className="mt-3 text-sm leading-7 text-[color:var(--muted)]">{plan.description}</p>
-                <ul className="mt-4 space-y-2 text-sm text-[color:var(--ink)]">
+                <div className="mt-2.5 min-h-[84px]">
+                  <p className="text-xs leading-6 text-[color:var(--muted)]">{plan.description}</p>
+                </div>
+                {"footerNote" in plan ? (
+                  <p className="mt-3 min-h-[24px] text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                    {plan.footerNote}
+                  </p>
+                ) : (
+                  <div className="mt-3 min-h-[24px]" />
+                )}
+                <ul className="space-y-1.5 text-xs text-[color:var(--ink)]">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
-                      <span className="mt-1.5 h-2 w-2 rounded-full bg-[color:var(--brand)]" />
+                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[color:var(--brand)]" />
                       <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
                 <Link
                   href={plan.ctaHref}
-                  className="mt-auto inline-flex w-full items-center justify-center rounded-xl bg-[color:var(--brand)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-2)]"
+                  className="mt-auto inline-flex w-full items-center justify-center rounded-lg bg-[color:var(--brand)] px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-[color:var(--brand-2)]"
                 >
                   {plan.ctaLabel}
                 </Link>
@@ -378,7 +412,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="om-oss" className="mt-18 grid gap-6 pt-16 lg:grid-cols-2">
+      <section id="om-oss" className="mt-18 scroll-mt-28 grid gap-6 pt-16 lg:grid-cols-2">
         <article className="rounded-[2rem] border border-[color:var(--line)] bg-white p-8 shadow-[0_16px_40px_rgba(13,39,87,0.05)]">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">Om oss</p>
           <h2 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-[color:var(--ink)]">
@@ -389,7 +423,7 @@ export default function Home() {
             kvalitetssystem och dokumentation utan att bli ett journalsystem.
           </p>
         </article>
-        <article id="kunskapsbank" className="rounded-[2rem] border border-[color:var(--line)] bg-white p-8 shadow-[0_16px_40px_rgba(13,39,87,0.05)]">
+        <article id="kunskapsbank" className="scroll-mt-28 rounded-[2rem] border border-[color:var(--line)] bg-white p-8 shadow-[0_16px_40px_rgba(13,39,87,0.05)]">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">Kunskapsbank</p>
           <h2 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-[color:var(--ink)]">
             Mallar, regler och arbetsstöd på ett ställe

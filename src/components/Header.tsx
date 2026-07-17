@@ -67,12 +67,14 @@ export async function Header() {
               >
                 Profil
               </Link>
-              <Link
-                href="/auth/signout"
-                className="rounded-xl bg-[color:var(--brand)] px-6 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(41,181,120,0.28)] transition hover:bg-[color:var(--brand-2)]"
-              >
-                Logga ut
-              </Link>
+              <form action="/auth/signout" method="post">
+                <button
+                  type="submit"
+                  className="rounded-xl bg-[color:var(--brand)] px-6 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(41,181,120,0.28)] transition hover:bg-[color:var(--brand-2)]"
+                >
+                  Logga ut
+                </button>
+              </form>
             </>
           ) : (
             <>

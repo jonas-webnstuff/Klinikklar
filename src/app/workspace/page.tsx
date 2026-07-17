@@ -230,7 +230,15 @@ const ledningssystemRequirementItems = [
   { key: "management_system_scope", label: "Omfattning" },
   { key: "management_system_owner", label: "Ansvarig" },
   { key: "management_system_processes", label: "Processer och uppföljning" },
+  {
+    key: "management_system_followup_log",
+    label: "Bevis på månatlig/kvartalsvis uppföljning i drift",
+  },
   { key: "management_system_documents", label: "Styrande dokument" },
+  {
+    key: "management_system_decision_log",
+    label: "Formellt beslut, fastställande och versionsstyrning",
+  },
   { key: "management_system_next_review", label: "Nästa planerade uppföljning" },
 ];
 
@@ -971,6 +979,63 @@ function WorkspacePageContent() {
 
     setAnswerValue("management_system_documents", withChecklist);
     setWorkspaceMessage("Årskontroll-checklista har infogats i Styrande dokument.");
+  }
+
+  function finalizeManagementSystemDecision() {
+    const version = getAnswerValue("management_system_version").trim();
+    const approvedBy = getAnswerValue("management_system_approved_by").trim();
+
+    if (!version || !approvedBy) {
+      setWorkspaceMessage(
+        "Ange version och Godkänd av innan ledningssystemet fastställs."
+      );
+      focusManagementField(!version ? "management_system_version" : "management_system_approved_by");
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = `${today} | Version ${version} | Fastställd av: ${approvedBy}`;
+    const existing = getAnswerValue("management_system_decision_log")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (!existing.includes(entry)) {
+      existing.unshift(entry);
+    }
+
+    setAnswerValue("management_system_updated_at", today);
+    setAnswerValue("management_system_decision_log", existing.join("\n"));
+    setWorkspaceMessage("Ledningssystem fastställt. Versionsstyrning och beslutslogg uppdaterad.");
+  }
+
+  function registerManagementFollowup(cadence: "monthly" | "quarterly") {
+    const owner =
+      getAnswerValue("management_system_owner").trim() ||
+      getAnswerValue("management_system_approved_by").trim() ||
+      "Ej angivet";
+
+    const today = new Date().toISOString().slice(0, 10);
+    const cadenceLabel = cadence === "monthly" ? "Månatlig" : "Kvartalsvis";
+    const entry = `${today} | ${cadenceLabel} uppföljning | Ansvarig: ${owner}`;
+
+    const existing = getAnswerValue("management_system_followup_log")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (!existing.includes(entry)) {
+      existing.unshift(entry);
+    }
+
+    setAnswerValue("management_system_updated_at", today);
+    setAnswerValue("management_system_followup_log", existing.join("\n"));
+
+    const nextReviewDate = new Date();
+    nextReviewDate.setMonth(nextReviewDate.getMonth() + (cadence === "monthly" ? 1 : 3));
+    setAnswerValue("management_system_next_review", nextReviewDate.toISOString().slice(0, 10));
+
+    setWorkspaceMessage(`${cadenceLabel} uppföljning registrerad i loggen.`);
   }
 
   const upsertRoutineEntry = useCallback(
@@ -2387,6 +2452,7 @@ function WorkspacePageContent() {
                 />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <input
+                    id="management-field-management_system_version"
                     value={getAnswerValue("management_system_version")}
                     onChange={(event) =>
                       setAnswerValue("management_system_version", event.target.value)
@@ -2395,6 +2461,7 @@ function WorkspacePageContent() {
                     className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                   />
                   <input
+                    id="management-field-management_system_approved_by"
                     value={getAnswerValue("management_system_approved_by")}
                     onChange={(event) =>
                       setAnswerValue("management_system_approved_by", event.target.value)
@@ -2406,11 +2473,61 @@ function WorkspacePageContent() {
                 <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
                   Senast uppdaterad
                   <input
+                    id="management-field-management_system_updated_at"
                     type="date"
                     value={getAnswerValue("management_system_updated_at")}
                     onChange={(event) =>
                       setAnswerValue("management_system_updated_at", event.target.value)
                     }
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => registerManagementFollowup("monthly")}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                  >
+                    Registrera månatlig uppföljning
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => registerManagementFollowup("quarterly")}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                  >
+                    Registrera kvartalsvis uppföljning
+                  </button>
+                </div>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Uppföljningslogg drift
+                  <textarea
+                    id="management-field-management_system_followup_log"
+                    value={getAnswerValue("management_system_followup_log")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_followup_log", event.target.value)
+                    }
+                    rows={4}
+                    placeholder="Månatlig/kvartalsvis uppföljning visas här"
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={finalizeManagementSystemDecision}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                >
+                  Fastställ och versionssätt ledningssystem
+                </button>
+                <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Besluts- och versionslogg
+                  <textarea
+                    id="management-field-management_system_decision_log"
+                    value={getAnswerValue("management_system_decision_log")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_decision_log", event.target.value)
+                    }
+                    rows={4}
+                    placeholder="Fastställda versioner visas här"
                     className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
                   />
                 </label>

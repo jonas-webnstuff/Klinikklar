@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { canManageCustomers } from "@/lib/admin-access";
+import { isSuperAdminUser } from "@/lib/admin-access";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AdminCustomersClient } from "./AdminCustomersClient";
@@ -10,6 +10,7 @@ type OrganizationRow = {
   org_number: string;
   email: string;
   phone: string | null;
+  plan: "step1" | "step2" | "step3" | null;
   created_at: string;
   clinicCount: number;
   membershipCount: number;
@@ -20,7 +21,7 @@ async function loadOrganizations(): Promise<OrganizationRow[]> {
 
   const { data: organizations, error } = await supabase
     .from("organizations")
-    .select("id, name, org_number, email, phone, created_at")
+    .select("id, name, org_number, email, phone, plan, created_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -72,7 +73,7 @@ export default async function AdminCustomersPage() {
     redirect("/login?next=/admin/customers");
   }
 
-  const allowed = await canManageCustomers(user.id);
+  const allowed = isSuperAdminUser(user.email);
 
   if (!allowed) {
     redirect("/workspace");

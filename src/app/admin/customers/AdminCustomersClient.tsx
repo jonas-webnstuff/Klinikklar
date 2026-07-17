@@ -8,6 +8,7 @@ type OrganizationRow = {
   org_number: string;
   email: string;
   phone: string | null;
+  plan: "step1" | "step2" | "step3" | null;
   created_at: string;
   clinicCount: number;
   membershipCount: number;
@@ -22,6 +23,13 @@ type DraftState = {
   orgNumber: string;
   email: string;
   phone: string;
+  plan: "step1" | "step2" | "step3" | "";
+};
+
+const planLabelMap: Record<"step1" | "step2" | "step3", string> = {
+  step1: "Klinikklar Start",
+  step2: "Klinikklar Drift",
+  step3: "Klinikklar Premium",
 };
 
 export function AdminCustomersClient({ initialOrganizations }: Props) {
@@ -34,6 +42,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
     orgNumber: "",
     email: "",
     phone: "",
+    plan: "",
   });
   const [drafts, setDrafts] = useState<Record<string, DraftState>>(() =>
     Object.fromEntries(
@@ -44,6 +53,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
           orgNumber: item.org_number,
           email: item.email,
           phone: item.phone || "",
+          plan: item.plan || "",
         },
       ])
     )
@@ -84,6 +94,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
         orgNumber: updated.org_number,
         email: updated.email,
         phone: updated.phone || "",
+        plan: updated.plan || "",
       },
     }));
   }
@@ -100,7 +111,10 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
     const response = await fetch("/api/admin/customers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(creatingForm),
+      body: JSON.stringify({
+        ...creatingForm,
+        plan: creatingForm.plan || null,
+      }),
     });
 
     setIsCreating(false);
@@ -113,7 +127,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
 
     const data = (await response.json()) as { organization: OrganizationRow };
     upsertOrganization(data.organization);
-    setCreatingForm({ name: "", orgNumber: "", email: "", phone: "" });
+    setCreatingForm({ name: "", orgNumber: "", email: "", phone: "", plan: "" });
     setMessage("Kund skapad.");
   }
 
@@ -137,6 +151,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
         orgNumber: draft.orgNumber,
         email: draft.email,
         phone: draft.phone,
+        plan: draft.plan || null,
       }),
     });
 
@@ -206,6 +221,21 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
               placeholder="Telefon (valfritt)"
               className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
             />
+            <select
+              value={creatingForm.plan}
+              onChange={(event) =>
+                setCreatingForm((current) => ({
+                  ...current,
+                  plan: event.target.value as DraftState["plan"],
+                }))
+              }
+              className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
+            >
+              <option value="">Välj plan</option>
+              <option value="step1">{planLabelMap.step1}</option>
+              <option value="step2">{planLabelMap.step2}</option>
+              <option value="step3">{planLabelMap.step3}</option>
+            </select>
             <button
               type="button"
               onClick={createOrganization}
@@ -253,6 +283,9 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
                       <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1">
                         {organization.membershipCount} medlemmar
                       </span>
+                      <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1">
+                        Plan: {organization.plan ? planLabelMap[organization.plan] : "Ej vald"}
+                      </span>
                     </div>
                   </div>
 
@@ -298,6 +331,21 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
                       }
                       className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
                     />
+                    <select
+                      value={draft.plan}
+                      onChange={(event) =>
+                        setDrafts((current) => ({
+                          ...current,
+                          [organization.id]: { ...draft, plan: event.target.value as DraftState["plan"] },
+                        }))
+                      }
+                      className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
+                    >
+                      <option value="">Välj plan</option>
+                      <option value="step1">{planLabelMap.step1}</option>
+                      <option value="step2">{planLabelMap.step2}</option>
+                      <option value="step3">{planLabelMap.step3}</option>
+                    </select>
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">

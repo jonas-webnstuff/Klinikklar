@@ -6,8 +6,12 @@ create table if not exists organizations (
   org_number text not null,
   email text not null,
   phone text,
+  plan text check (plan in ('step1', 'step2', 'step3')),
   created_at timestamptz not null default now()
 );
+
+alter table organizations
+  add column if not exists plan text check (plan in ('step1', 'step2', 'step3'));
 
 create unique index if not exists organizations_org_number_idx on organizations(org_number);
 

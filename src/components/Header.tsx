@@ -1,13 +1,13 @@
 import Link from "next/link";
+import { isSuperAdminUser } from "@/lib/admin-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { canManageCustomers } from "@/lib/admin-access";
 
 export async function Header() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const canAdminCustomers = user ? await canManageCustomers(user.id) : false;
+  const canAdminCustomers = isSuperAdminUser(user?.email);
 
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--line)] bg-white/92 backdrop-blur">

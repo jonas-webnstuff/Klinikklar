@@ -9,6 +9,7 @@ const answerSchema = z.object({
 });
 
 const bodySchema = z.object({
+  plan: z.enum(["step1", "step2", "step3"]).optional().nullable(),
   profile: z.object({
     clinicName: z.string().min(1),
     orgNumber: z.string().min(1),
@@ -27,11 +28,12 @@ const bodySchema = z.object({
 
 async function getOrCreateOrganization(
   supabase: ReturnType<typeof createSupabaseAdminClient>,
-  profile: z.infer<typeof bodySchema>["profile"]
+  profile: z.infer<typeof bodySchema>["profile"],
+  selectedPlan: z.infer<typeof bodySchema>["plan"]
 ) {
   const { data: existing } = await supabase
     .from("organizations")
-    .select("id")
+    .select("id, plan")
     .eq("org_number", profile.orgNumber)
     .limit(1)
     .maybeSingle();
@@ -45,6 +47,15 @@ async function getOrCreateOrganization(
       })
       .eq("id", existing.id);
 
+    if (!existing.plan && selectedPlan) {
+      await supabase
+        .from("organizations")
+        .update({
+          plan: selectedPlan,
+        })
+        .eq("id", existing.id);
+    }
+
     return existing.id;
   }
 
@@ -54,6 +65,7 @@ async function getOrCreateOrganization(
       name: profile.clinicName,
       org_number: profile.orgNumber,
       email: profile.email,
+      plan: selectedPlan || null,
     })
     .select("id")
     .single();
@@ -198,7 +210,10 @@ export async function POST(request: Request) {
 
     const supabase = createSupabaseAdminClient();
 
-    const organizationId = await getOrCreateOrganization(supabase, payload.profile);
+    const selectedPlan = payload.plan || null;
+
+    const organizationId = await getOrCreateOrganization(supabase, payload.profile, selectedPlan);
+
     await ensureUserProfile(supabase, user.id, payload.profile);
     await ensureOrganizationMembership(supabase, user.id, organizationId);
     const clinicId = await getOrCreateClinic(supabase, organizationId, payload.profile);

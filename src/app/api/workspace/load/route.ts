@@ -28,13 +28,14 @@ export async function POST(request: Request) {
           name: string;
           org_number: string;
           email: string;
+          plan: string | null;
         }
       | null = null;
 
     if (orgNumber) {
       const { data } = await supabase
         .from("organizations")
-        .select("id, name, org_number, email")
+        .select("id, name, org_number, email, plan")
         .eq("org_number", orgNumber)
         .limit(1)
         .maybeSingle();
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
       if (targetOrganizationId) {
         const { data } = await supabase
           .from("organizations")
-          .select("id, name, org_number, email")
+          .select("id, name, org_number, email, plan")
           .eq("id", targetOrganizationId)
           .limit(1)
           .maybeSingle();
@@ -133,6 +134,7 @@ export async function POST(request: Request) {
         municipality: clinic.municipality,
         email: organization.email,
       },
+      plan: organization.plan,
       answers,
     });
   } catch (error) {

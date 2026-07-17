@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { canManageCustomers } from "@/lib/admin-access";
+import { isSuperAdminUser } from "@/lib/admin-access";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -9,6 +9,7 @@ const createSchema = z.object({
   orgNumber: z.string().trim().min(1),
   email: z.string().trim().email(),
   phone: z.string().trim().optional().default(""),
+  plan: z.enum(["step1", "step2", "step3"]).optional().nullable(),
 });
 
 const updateSchema = z.object({
@@ -17,6 +18,7 @@ const updateSchema = z.object({
   orgNumber: z.string().trim().min(1),
   email: z.string().trim().email(),
   phone: z.string().trim().optional().default(""),
+  plan: z.enum(["step1", "step2", "step3"]).optional().nullable(),
 });
 
 async function requireAdminAccess() {
@@ -29,7 +31,7 @@ async function requireAdminAccess() {
     return { error: NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 }) };
   }
 
-  const allowed = await canManageCustomers(user.id);
+  const allowed = isSuperAdminUser(user.email);
 
   if (!allowed) {
     return { error: NextResponse.json({ error: "Du har inte behörighet att administrera kunder." }, { status: 403 }) };
@@ -50,7 +52,7 @@ export async function GET() {
 
     const { data: organizations, error } = await supabase
       .from("organizations")
-      .select("id, name, org_number, email, phone, created_at")
+      .select("id, name, org_number, email, phone, plan, created_at")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -116,8 +118,9 @@ export async function POST(request: Request) {
         org_number: payload.orgNumber,
         email: payload.email,
         phone: payload.phone || null,
+        plan: payload.plan || null,
       })
-      .select("id, name, org_number, email, phone, created_at")
+      .select("id, name, org_number, email, phone, plan, created_at")
       .single();
 
     if (error) throw error;
@@ -149,9 +152,10 @@ export async function PATCH(request: Request) {
         org_number: payload.orgNumber,
         email: payload.email,
         phone: payload.phone || null,
+        plan: payload.plan || null,
       })
       .eq("id", payload.id)
-      .select("id, name, org_number, email, phone, created_at")
+      .select("id, name, org_number, email, phone, plan, created_at")
       .single();
 
     if (error) throw error;

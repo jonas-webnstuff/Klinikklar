@@ -117,6 +117,50 @@ type ControlFormState = {
   nextDueDate: string;
 };
 
+type AiAssistFeature =
+  | "risk_analysis"
+  | "routine"
+  | "incident_investigation"
+  | "management_system"
+  | "controls";
+
+type AiAssistResponse =
+  | {
+      feature: "risk_analysis";
+      title: string;
+      description: string;
+      probability: number;
+      consequence: number;
+      ownerRole: string;
+      dueDate: string;
+    }
+  | {
+      feature: "routine";
+      area: string;
+      changeLog: string;
+      owner: string;
+      nextReview: string;
+    }
+  | {
+      feature: "incident_investigation";
+      description: string;
+      immediateAction: string;
+    }
+  | {
+      feature: "management_system";
+      owner: string;
+      processes: string;
+      documents: string;
+    }
+  | {
+      feature: "controls";
+      title: string;
+      description: string;
+      frequency: ControlTaskFrequency;
+      ownerRole: string;
+      nextDueDate: string;
+    };
+
 const planLabels: Record<PlanLevel, string> = {
   step1: "Klinikklar Start",
   step2: "Klinikklar Drift",
@@ -332,6 +376,13 @@ function WorkspacePageContent() {
   const [isControlsLoading, setIsControlsLoading] = useState(false);
   const [isControlSubmitting, setIsControlSubmitting] = useState(false);
   const [controlMessage, setControlMessage] = useState("");
+  const [aiAssistLoading, setAiAssistLoading] = useState<Record<AiAssistFeature, boolean>>({
+    risk_analysis: false,
+    routine: false,
+    incident_investigation: false,
+    management_system: false,
+    controls: false,
+  });
 
   useEffect(() => {
     const plan = searchParams.get("plan");
@@ -417,6 +468,7 @@ function WorkspacePageContent() {
         found: boolean;
         profile?: ProfileState;
         answers?: AnswersState;
+        plan?: PlanLevel | null;
       };
 
       if (!data.found) {
@@ -425,6 +477,10 @@ function WorkspacePageContent() {
 
       if (data.profile) {
         setProfile(data.profile);
+      }
+
+      if (data.plan === "step1" || data.plan === "step2" || data.plan === "step3") {
+        setActivePlan(data.plan);
       }
 
       if (data.answers) {
@@ -486,6 +542,7 @@ function WorkspacePageContent() {
   const canUseIncidentModule = hasPlanAccess("step2");
   const canUseRiskModule = hasPlanAccess("step2");
   const canUseControlModule = hasPlanAccess("step2");
+  const canUsePremiumAi = hasPlanAccess("step3");
   const isOverview = activeView === "overview";
   const isApplicationView = activeView === "dokument";
   const showSection = (view: Exclude<WorkspaceView, "overview">) =>
@@ -588,6 +645,120 @@ function WorkspacePageContent() {
       },
     }));
   };
+
+  async function requestAiAssistance(feature: AiAssistFeature) {
+    if (!canUsePremiumAi) {
+      return null;
+    }
+
+    setAiAssistLoading((prev) => ({ ...prev, [feature]: true }));
+
+    const response = await fetch("/api/ai/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        feature,
+        clinicName: profile.clinicName,
+        municipality: profile.municipality,
+        careScope: answers.care_scope?.answer || "",
+        qualityProcess: answers.quality_process?.answer || "",
+        staffing: answers.staffing?.answer || "",
+        incidentRoutine: answers.incident_routine?.answer || "",
+        currentRisk: riskForm,
+        currentIncident: incidentForm,
+        currentControl: controlForm,
+        currentManagementSystem: {
+          owner: getAnswerValue("management_system_owner"),
+          processes: getAnswerValue("management_system_processes"),
+          documents: getAnswerValue("management_system_documents"),
+        },
+        currentRoutine: {
+          area: getAnswerValue("routine_updates_area"),
+          changeLog: getAnswerValue("routine_updates_change_log"),
+          owner: getAnswerValue("routine_updates_owner"),
+          nextReview: getAnswerValue("routine_updates_next_review"),
+        },
+      }),
+    });
+
+    setAiAssistLoading((prev) => ({ ...prev, [feature]: false }));
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      const message = data.error || "Kunde inte skapa AI-forslag.";
+
+      if (feature === "risk_analysis") setRiskMessage(message);
+      if (feature === "incident_investigation") setIncidentMessage(message);
+      if (feature === "controls") setControlMessage(message);
+      if (feature === "routine" || feature === "management_system") setWorkspaceMessage(message);
+      return null;
+    }
+
+    return (await response.json()) as AiAssistResponse;
+  }
+
+  async function suggestRiskAnalysis() {
+    const suggestion = await requestAiAssistance("risk_analysis");
+    if (!suggestion || suggestion.feature !== "risk_analysis") return;
+
+    setRiskForm({
+      title: suggestion.title,
+      description: suggestion.description,
+      probability: suggestion.probability,
+      consequence: suggestion.consequence,
+      ownerRole: suggestion.ownerRole,
+      dueDate: suggestion.dueDate,
+    });
+    setRiskMessage("AI-forslag infogat i riskanalysen.");
+  }
+
+  async function suggestRoutineUpdate() {
+    const suggestion = await requestAiAssistance("routine");
+    if (!suggestion || suggestion.feature !== "routine") return;
+
+    setAnswerValue("routine_updates_area", suggestion.area);
+    setAnswerValue("routine_updates_change_log", suggestion.changeLog);
+    setAnswerValue("routine_updates_owner", suggestion.owner);
+    setAnswerValue("routine_updates_next_review", suggestion.nextReview);
+    setWorkspaceMessage("AI-forslag infogat for rutiner och uppdateringar.");
+  }
+
+  async function writeIncidentInvestigation() {
+    const suggestion = await requestAiAssistance("incident_investigation");
+    if (!suggestion || suggestion.feature !== "incident_investigation") return;
+
+    setIncidentForm((prev) => ({
+      ...prev,
+      description: suggestion.description,
+      immediateAction: suggestion.immediateAction,
+    }));
+    setIncidentMessage("AI-utredning infogad i avvikelsen.");
+  }
+
+  async function generateManagementSystemDraft() {
+    const suggestion = await requestAiAssistance("management_system");
+    if (!suggestion || suggestion.feature !== "management_system") return;
+
+    setAnswerValue("management_system_owner", suggestion.owner);
+    setAnswerValue("management_system_processes", suggestion.processes);
+    setAnswerValue("management_system_documents", suggestion.documents);
+    setWorkspaceMessage("AI-utkast infogat i ledningssystemet.");
+  }
+
+  async function suggestControls() {
+    const suggestion = await requestAiAssistance("controls");
+    if (!suggestion || suggestion.feature !== "controls") return;
+
+    setControlForm({
+      title: suggestion.title,
+      description: suggestion.description,
+      frequency: suggestion.frequency,
+      ownerRole: suggestion.ownerRole,
+      nextDueDate: suggestion.nextDueDate,
+    });
+    setControlMessage("AI-forslag infogat i kontrollpunkten.");
+  }
 
   async function loadApplicationReadiness() {
     const response = await fetch("/api/application/readiness", {
@@ -918,6 +1089,7 @@ function WorkspacePageContent() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        plan: activePlan,
         profile,
         answers,
         requirements,
@@ -966,6 +1138,7 @@ function WorkspacePageContent() {
       found: boolean;
       profile?: ProfileState;
       answers?: AnswersState;
+      plan?: PlanLevel | null;
     };
 
     if (!data.found) {
@@ -975,6 +1148,10 @@ function WorkspacePageContent() {
 
     if (data.profile) {
       setProfile(data.profile);
+    }
+
+    if (data.plan === "step1" || data.plan === "step2" || data.plan === "step3") {
+      setActivePlan(data.plan);
     }
 
     if (data.answers) {
@@ -1264,6 +1441,16 @@ function WorkspacePageContent() {
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">
                 Månatlig uppföljning
               </p>
+              {canUsePremiumAi ? (
+                <button
+                  type="button"
+                  onClick={generateManagementSystemDraft}
+                  disabled={aiAssistLoading.management_system}
+                  className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  {aiAssistLoading.management_system ? "AI arbetar..." : "AI: Generera utkast"}
+                </button>
+              ) : null}
               <div className="mt-3 space-y-3">
                 <input
                   value={getAnswerValue("management_system_owner")}
@@ -1306,6 +1493,16 @@ function WorkspacePageContent() {
             <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Rutiner och uppdateringar</p>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">Löpande</p>
+              {canUsePremiumAi ? (
+                <button
+                  type="button"
+                  onClick={suggestRoutineUpdate}
+                  disabled={aiAssistLoading.routine}
+                  className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  {aiAssistLoading.routine ? "AI arbetar..." : "AI: Skapa rutin"}
+                </button>
+              ) : null}
               <div className="mt-3 space-y-3">
                 <input
                   value={getAnswerValue("routine_updates_area")}
@@ -1541,6 +1738,16 @@ function WorkspacePageContent() {
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny avvikelse</p>
+              {canUsePremiumAi ? (
+                <button
+                  type="button"
+                  onClick={writeIncidentInvestigation}
+                  disabled={aiAssistLoading.incident_investigation}
+                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  {aiAssistLoading.incident_investigation ? "AI arbetar..." : "AI: Skriv utredning"}
+                </button>
+              ) : null}
               <input
                 value={incidentForm.title}
                 onChange={(event) =>
@@ -1683,6 +1890,16 @@ function WorkspacePageContent() {
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny risk</p>
+              {canUsePremiumAi ? (
+                <button
+                  type="button"
+                  onClick={suggestRiskAnalysis}
+                  disabled={aiAssistLoading.risk_analysis}
+                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  {aiAssistLoading.risk_analysis ? "AI arbetar..." : "AI: Föreslå riskanalys"}
+                </button>
+              ) : null}
               <input
                 value={riskForm.title}
                 onChange={(event) => setRiskForm((prev) => ({ ...prev, title: event.target.value }))}
@@ -1824,6 +2041,16 @@ function WorkspacePageContent() {
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny kontrollpunkt</p>
+              {canUsePremiumAi ? (
+                <button
+                  type="button"
+                  onClick={suggestControls}
+                  disabled={aiAssistLoading.controls}
+                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  {aiAssistLoading.controls ? "AI arbetar..." : "AI: Föreslå kontroller"}
+                </button>
+              ) : null}
               <input
                 value={controlForm.title}
                 onChange={(event) => setControlForm((prev) => ({ ...prev, title: event.target.value }))}

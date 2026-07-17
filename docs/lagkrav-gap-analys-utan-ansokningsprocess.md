@@ -35,11 +35,11 @@ Status: Delvis uppfyllt
 Styrkor:
 - Funktioner för registrering, statushantering och uppföljning finns.
 - Dokumenterad avvikelsehanteringsrutin finns.
+- Enkel avvikelseprocess utan onödiga blockeringar för små kliniker.
+- Ansvar och eskalering kan kommuniceras via introduktion i små team.
 
 Gap:
-- Lex Maria-beslutsordning behöver formaliseras och tillämpas vid relevanta händelser.
-- Effekten av åtgärder behöver följas upp i allvarliga eller återkommande avvikelser (behöver inte vara systemblockerande i varje ärende).
-- Eskaleringsvägar och ansvar behöver vara beslutade och kommunicerade till berörd personal (introduktion räcker som grund i små team).
+- Formell dokumentation av beslutad avvikelserutin med ansvarig roll och eskaleringsväg krävs (redan rutiniserad).
 
 ### 3) Riskhantering
 

@@ -51,8 +51,7 @@ Styrkor:
 
 Gap:
 - Enhetlig metodik och tröskelvärden för prioritering behöver beslutas och dokumenteras i enkel modell.
-- Systematiskt bevis på uppföljning av högprioriterade risker över tid saknas.
-- Tydlig koppling risk -> åtgärd -> verifierad effekt behöver förstärkas i arbetssätt och evidens.
+- Höga risker ska ha uppdaterad status och åtgärdsplan i systemet.
 
 ### 4) Årshjul och egenkontroller
 
@@ -63,9 +62,8 @@ Styrkor:
 - Dokumenterad kontrollrutin för årshjul finns.
 
 Gap:
-- Obligatorisk resultatrad (utfall, avvikelse ja/nej, åtgärd, deadline, verifiering) behöver säkerställas med enkel mall i varje kontrollcykel.
+- Resultatrad (utfall, avvikelse ja/nej, åtgärd, deadline) behöver dokumenteras med enkel mall i varje kontrollcykel.
 - Rutin för försenade kontroller behöver dokumenterad tillämpning (kan hanteras i ordinarie uppföljningsmöte i små kliniker).
-- Sign-off och ansvar per stängd kontroll behöver visas konsekvent.
 
 ### 5) Informationssäkerhet, åtkomst och dataskydd
 
@@ -76,9 +74,9 @@ Styrkor:
 - Skyddstänk kring sekretess och personuppgifter finns i rutindokument.
 
 Gap:
-- Full verifiering av åtkomstregler mellan användare/organisationer saknas i testunderlag.
-- Rutiner för gallring, logggranskning och incidenthantering för personuppgifter behöver verifieras och dokumenteras i en praktisk miniminivå.
-- Enkel behörighetsmatris och återkommande access review saknas i underlaget.
+- Åtkomstregler mellan användare/organisationer behöver verifieras i testunderlag.
+- Enkel behörighetsmatris per roll behöver dokumenteras.
+- Rutiner för logggranskning vid behov behöver beslutas.
 
 ### 6) Spårbarhet, audit trail och tillsynsbar evidens
 
@@ -89,9 +87,9 @@ Styrkor:
 - Struktur för uppföljning finns i systemet.
 
 Gap:
-- Kritiska tester i pilotmatris är inte passerade (särskilt auth/RLS och export i verifierad inloggad körning).
-- Audit trail behöver verifieras med faktiska testbevis i end-to-end-flöden.
-- Tydlig beviskedja vid tillsyn behöver sammanställas: identifierad brist -> åtgärd -> uppföljt utfall.
+- Auth/RLS-separation mellan organisationer behöver testas och verifieras.
+- Kritiska funktioner (registrering, statusbyte, stängning) behöver loggas.
+- Spårbarhet för avvikelse/risk/kontroll behöver fungera end-to-end.
 
 ## Riskklassning Av Kvarstående Gap
 
@@ -100,10 +98,8 @@ Gap:
   - Ej slutförd verifiering av audit trail i kritiska flöden.
   - Avsaknad av formellt beslutad och fastställd rutinportfölj i drift.
 - Medel:
-  - Ojämt dokumenterad uppföljning av åtgärdseffekt i allvarliga eller återkommande ärenden.
-  - Ej fullständigt dokumenterad dataskydds- och access review-process.
-- Låg:
-  - Språklig konsekvens och UX-förtydliganden (pågår och har förbättrats).
+  - Ojämt dokumenterad uppföljning av åtgärder i allvarliga eller återkommande ärenden.
+  - Ej dokumenterad enkel behörighetsmatris och access review-rutiner.
 
 ## Prioriterad Åtgärdsplan (Go/No-Go)
 
@@ -112,8 +108,8 @@ Gap:
 1. Formellt fastställ rutinerna för avvikelse, risk och årshjul.
 - Leverabel: signerade versioner med beslutsdatum, ansvarig funktion och revideringsintervall.
 
-2. Kör och dokumentera auth/RLS-verifiering med minst två testkonton.
-- Leverabel: testprotokoll med pass/fail och skärmdumpar/loggar.
+2. Kör och dokumentera auth/RLS-verifiering med testkonton.
+- Leverabel: testprotokoll med pass/fail för grundläggande separation mellan organisationer.
 
 3. Verifiera audit trail i kritiska flöden.
 - Leverabel: bevis på loggning för statusbyte, skapande, uppdatering och stängning.
@@ -129,19 +125,19 @@ Gap:
 6. Inför proportionerad effektuppföljning för allvarliga eller återkommande ärenden.
 - Leverabel: dokumenterad check med datum, ansvarig och uppföljt utfall i relevanta ärenden.
 
-7. Upprätta och tillämpa enkel behörighetsmatris + access review.
-- Leverabel: matris per roll och återkommande granskning (exempelvis kvartalsvis).
+7. Upprätta enkel behörighetsmatris per roll.
+- Leverabel: dokumenterad matris för tandläkare, tandvårdskonsult, administratör och ansvarig.
 
 8. Dokumentera dataskyddsrutiner för gallring, logggranskning och incidenthantering.
 - Leverabel: beslutad rutin + genomförd första kontroll.
 
 ### P2 (mognad)
 
-9. Etablera KPI-dashboard för compliance.
-- Exempel: andel öppna avvikelser > 30 dagar, andel försenade kontroller, andel höga risker utan aktiv åtgärdsplan.
+9. Etablera enkel uppföljning och rapportering för ledning.
+- Exempel: öppna avvikelser, status på åtgärder, försenade kontroller.
 
-10. Genomför internrevision på kvartalsbasis.
-- Leverabel: revisionsprotokoll med avvikelseklassning och åtgärdsuppföljning.
+10. Genomför årlig granskning av rutiner och system.
+- Leverabel: enkelt granskningsmöte med protokoll och eventuella uppdateringar.
 
 ## Rekommenderad Beslutsstatus Nu
 

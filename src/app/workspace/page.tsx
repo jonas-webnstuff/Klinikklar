@@ -80,6 +80,7 @@ type RiskItem = {
   id: string;
   title: string;
   description: string;
+  actionPlan?: string | null;
   probability: number;
   consequence: number;
   status: RiskStatus;
@@ -91,6 +92,7 @@ type RiskItem = {
 type RiskFormState = {
   title: string;
   description: string;
+  actionPlan: string;
   probability: number;
   consequence: number;
   ownerRole: string;
@@ -128,6 +130,45 @@ type RoutineEntry = {
   updatedAt: string;
 };
 
+type RegulationWatchEntry = {
+  id: string;
+  source: string;
+  title: string;
+  summary: string;
+  impact: string;
+  actionOwner: string;
+  dueDate: string;
+  status: "planned" | "in_progress" | "done";
+  createdAt: string;
+};
+
+type RevisionEntry = {
+  id: string;
+  title: string;
+  scope: string;
+  findings: string;
+  actionOwner: string;
+  dueDate: string;
+  status: "planned" | "in_progress" | "closed";
+  createdAt: string;
+};
+
+type InternalControlEntry = {
+  id: string;
+  area: string;
+  controlPoint: string;
+  result: "ok" | "deviation";
+  action: string;
+  actionOwner: string;
+  dueDate: string;
+  createdAt: string;
+};
+
+type PremiumOfficerResponse = {
+  answer: string;
+  priorities: string[];
+};
+
 type AiAssistFeature =
   | "risk_analysis"
   | "routine"
@@ -140,6 +181,7 @@ type AiAssistResponse =
       feature: "risk_analysis";
       title: string;
       description: string;
+      actionPlan?: string;
       probability: number;
       consequence: number;
       ownerRole: string;
@@ -212,6 +254,7 @@ const initialIncidentForm: IncidentFormState = {
 const initialRiskForm: RiskFormState = {
   title: "",
   description: "",
+  actionPlan: "",
   probability: 3,
   consequence: 3,
   ownerRole: "",
@@ -224,6 +267,34 @@ const initialControlForm: ControlFormState = {
   frequency: "monthly",
   ownerRole: "",
   nextDueDate: "",
+};
+
+const initialRegulationWatchForm = {
+  source: "",
+  title: "",
+  summary: "",
+  impact: "",
+  actionOwner: "",
+  dueDate: "",
+  status: "planned" as const,
+};
+
+const initialRevisionForm = {
+  title: "",
+  scope: "",
+  findings: "",
+  actionOwner: "",
+  dueDate: "",
+  status: "planned" as const,
+};
+
+const initialInternalControlLogForm = {
+  area: "",
+  controlPoint: "",
+  result: "ok" as const,
+  action: "",
+  actionOwner: "",
+  dueDate: "",
 };
 const ledningssystemRequirementItems = [
   { key: "management_system_purpose", label: "Syfte" },
@@ -285,6 +356,59 @@ const annualControlTemplates = [
   {
     title: "Uppföljning av höga risker och åtgärdsplaner",
     description: "Granska risker med hög prioritet, ansvar, tidsfrister och effekten av riskreducerande åtgärder.",
+  },
+] as const;
+
+const commonRiskTemplates = [
+  {
+    title: "Bristande sterilhantering mellan patienter",
+    description:
+      "Risk att instrument eller behandlingsrum inte steriliseras eller desinfekteras korrekt mellan patienter, vilket kan påverka patientsäkerheten.",
+    actionPlan:
+      "Genomför omedelbar kontroll av sterilrutinen, säkerställ ansvarig roll per arbetspass och följ upp med stickprov inom 30 dagar.",
+    probability: 3,
+    consequence: 5,
+    ownerRole: "Verksamhetschef",
+  },
+  {
+    title: "Bristfällig journalföring eller signering",
+    description:
+      "Risk att journalanteckningar blir ofullständiga, osignerade eller inte speglar utförd vård, vilket kan påverka spårbarhet och patientsäkerhet.",
+    actionPlan:
+      "Inför journalstickprov varje månad, återkoppla avvikelser i teamet och uppdatera rutin för dokumentationskontroll.",
+    probability: 3,
+    consequence: 4,
+    ownerRole: "Medicinskt ansvarig tandläkare",
+  },
+  {
+    title: "Otillräcklig bemanning vid frånvaro",
+    description:
+      "Risk att sjukdom eller annan frånvaro leder till hög arbetsbelastning, försenade kontroller eller brister i hygien och dokumentation.",
+    actionPlan:
+      "Dokumentera backup-plan för frånvaro, säkra ersättningsresurs och följ upp påverkan på öppna avvikelser och kontroller veckovis.",
+    probability: 4,
+    consequence: 3,
+    ownerRole: "Verksamhetschef",
+  },
+  {
+    title: "Fel i läkemedels- och materialhantering",
+    description:
+      "Risk att läkemedel eller förbrukningsmaterial används efter utgångsdatum eller förvaras felaktigt.",
+    actionPlan:
+      "Inför månadsvis kontroll av hållbarhet och förvaring, dokumentera ansvarig och registrera avvikelse direkt vid brist.",
+    probability: 2,
+    consequence: 4,
+    ownerRole: "Kvalitetsansvarig",
+  },
+  {
+    title: "Bristande uppföljning av rapporterade avvikelser",
+    description:
+      "Risk att rapporterade avvikelser inte leder till åtgärd, lärande eller uppdaterad rutin, vilket gör att samma fel återkommer.",
+    actionPlan:
+      "Gå igenom öppna avvikelser i månatlig uppföljning, tilldela ägare och säkerställ att varje allvarlig avvikelse har dokumenterad åtgärd.",
+    probability: 3,
+    consequence: 4,
+    ownerRole: "Kvalitetsansvarig",
   },
 ] as const;
 
@@ -494,6 +618,14 @@ function WorkspacePageContent() {
   const [activeRoutineRequirementKey, setActiveRoutineRequirementKey] = useState(
     routineRequirementPoints[0].key
   );
+  const [premiumOfficerQuestion, setPremiumOfficerQuestion] = useState("");
+  const [premiumOfficerResponse, setPremiumOfficerResponse] =
+    useState<PremiumOfficerResponse | null>(null);
+  const [isPremiumOfficerLoading, setIsPremiumOfficerLoading] = useState(false);
+  const [premiumMessage, setPremiumMessage] = useState("");
+  const [regulationWatchForm, setRegulationWatchForm] = useState(initialRegulationWatchForm);
+  const [revisionForm, setRevisionForm] = useState(initialRevisionForm);
+  const [internalControlLogForm, setInternalControlLogForm] = useState(initialInternalControlLogForm);
 
   useEffect(() => {
     const plan = searchParams.get("plan");
@@ -718,6 +850,107 @@ function WorkspacePageContent() {
       return [];
     }
   }, [answers]);
+  const regulationWatchEntries = useMemo<RegulationWatchEntry[]>(() => {
+    const raw = answers.premium_regulation_watch_entries?.answer;
+
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.filter((entry): entry is RegulationWatchEntry => {
+        if (!entry || typeof entry !== "object") return false;
+        const candidate = entry as Partial<RegulationWatchEntry>;
+        return (
+          typeof candidate.id === "string" &&
+          typeof candidate.source === "string" &&
+          typeof candidate.title === "string" &&
+          typeof candidate.summary === "string" &&
+          typeof candidate.impact === "string" &&
+          typeof candidate.actionOwner === "string" &&
+          typeof candidate.dueDate === "string" &&
+          (candidate.status === "planned" ||
+            candidate.status === "in_progress" ||
+            candidate.status === "done") &&
+          typeof candidate.createdAt === "string"
+        );
+      });
+    } catch {
+      return [];
+    }
+  }, [answers]);
+  const revisionEntries = useMemo<RevisionEntry[]>(() => {
+    const raw = answers.premium_revision_entries?.answer;
+
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.filter((entry): entry is RevisionEntry => {
+        if (!entry || typeof entry !== "object") return false;
+        const candidate = entry as Partial<RevisionEntry>;
+        return (
+          typeof candidate.id === "string" &&
+          typeof candidate.title === "string" &&
+          typeof candidate.scope === "string" &&
+          typeof candidate.findings === "string" &&
+          typeof candidate.actionOwner === "string" &&
+          typeof candidate.dueDate === "string" &&
+          (candidate.status === "planned" ||
+            candidate.status === "in_progress" ||
+            candidate.status === "closed") &&
+          typeof candidate.createdAt === "string"
+        );
+      });
+    } catch {
+      return [];
+    }
+  }, [answers]);
+  const internalControlEntries = useMemo<InternalControlEntry[]>(() => {
+    const raw = answers.premium_internal_control_entries?.answer;
+
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.filter((entry): entry is InternalControlEntry => {
+        if (!entry || typeof entry !== "object") return false;
+        const candidate = entry as Partial<InternalControlEntry>;
+        return (
+          typeof candidate.id === "string" &&
+          typeof candidate.area === "string" &&
+          typeof candidate.controlPoint === "string" &&
+          (candidate.result === "ok" || candidate.result === "deviation") &&
+          typeof candidate.action === "string" &&
+          typeof candidate.actionOwner === "string" &&
+          typeof candidate.dueDate === "string" &&
+          typeof candidate.createdAt === "string"
+        );
+      });
+    } catch {
+      return [];
+    }
+  }, [answers]);
   const routineCoverageMissingPoints = useMemo(
     () =>
       routineRequirementPoints
@@ -922,6 +1155,191 @@ function WorkspacePageContent() {
       },
     }));
   };
+
+  const setJsonAnswerValue = (key: string, value: unknown) => {
+    setAnswerValue(key, JSON.stringify(value));
+  };
+
+  async function requestPremiumOfficerAdvice() {
+    if (!canUsePremiumAi) {
+      return;
+    }
+
+    const question = premiumOfficerQuestion.trim();
+
+    if (!question) {
+      setPremiumMessage("Skriv en fråga till AI Compliance Officer först.");
+      return;
+    }
+
+    setIsPremiumOfficerLoading(true);
+    setPremiumMessage("");
+
+    const response = await fetch("/api/ai/officer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        question,
+        profile,
+        stats: {
+          incidentsOpen: incidentSummary.open,
+          risksOpen: riskSummary.open,
+          controlsOverdue: controlSummary.overdue,
+        },
+      }),
+    });
+
+    setIsPremiumOfficerLoading(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setPremiumMessage(data.error || "Kunde inte hämta rekommendation från AI Compliance Officer.");
+      return;
+    }
+
+    const data = (await response.json()) as PremiumOfficerResponse;
+    setPremiumOfficerResponse(data);
+
+    const historyRaw = getAnswerValue("premium_ai_officer_history");
+    let history: Array<{
+      id: string;
+      question: string;
+      answer: string;
+      priorities: string[];
+      createdAt: string;
+    }> = [];
+
+    if (historyRaw) {
+      try {
+        const parsed = JSON.parse(historyRaw) as unknown;
+        if (Array.isArray(parsed)) {
+          history = parsed.filter((item): item is (typeof history)[number] => {
+            if (!item || typeof item !== "object") return false;
+            const candidate = item as Partial<(typeof history)[number]>;
+            return (
+              typeof candidate.id === "string" &&
+              typeof candidate.question === "string" &&
+              typeof candidate.answer === "string" &&
+              Array.isArray(candidate.priorities) &&
+              typeof candidate.createdAt === "string"
+            );
+          });
+        }
+      } catch {
+        history = [];
+      }
+    }
+
+    history.unshift({
+      id: `ai-officer-${Date.now()}`,
+      question,
+      answer: data.answer,
+      priorities: data.priorities,
+      createdAt: new Date().toISOString(),
+    });
+
+    setJsonAnswerValue("premium_ai_officer_history", history.slice(0, 20));
+    setPremiumMessage("AI Compliance Officer svar registrerat.");
+  }
+
+  function addRegulationWatchEntry() {
+    const title = regulationWatchForm.title.trim();
+
+    if (!title) {
+      setPremiumMessage("Ange rubrik för regelbevakning.");
+      return;
+    }
+
+    const next: RegulationWatchEntry = {
+      id: `reg-watch-${Date.now()}`,
+      source: regulationWatchForm.source.trim() || "IVO / Socialstyrelsen",
+      title,
+      summary: regulationWatchForm.summary.trim(),
+      impact: regulationWatchForm.impact.trim(),
+      actionOwner: regulationWatchForm.actionOwner.trim() || "Verksamhetschef",
+      dueDate: regulationWatchForm.dueDate,
+      status: regulationWatchForm.status,
+      createdAt: new Date().toISOString(),
+    };
+
+    setJsonAnswerValue("premium_regulation_watch_entries", [next, ...regulationWatchEntries]);
+    setRegulationWatchForm(initialRegulationWatchForm);
+    setPremiumMessage("Regelbevakningspost sparad.");
+  }
+
+  function removeRegulationWatchEntry(entryId: string) {
+    setJsonAnswerValue(
+      "premium_regulation_watch_entries",
+      regulationWatchEntries.filter((entry) => entry.id !== entryId)
+    );
+    setPremiumMessage("Regelbevakningspost borttagen.");
+  }
+
+  function addRevisionEntry() {
+    const title = revisionForm.title.trim();
+
+    if (!title) {
+      setPremiumMessage("Ange rubrik för revision.");
+      return;
+    }
+
+    const next: RevisionEntry = {
+      id: `revision-${Date.now()}`,
+      title,
+      scope: revisionForm.scope.trim(),
+      findings: revisionForm.findings.trim(),
+      actionOwner: revisionForm.actionOwner.trim() || "Kvalitetsansvarig",
+      dueDate: revisionForm.dueDate,
+      status: revisionForm.status,
+      createdAt: new Date().toISOString(),
+    };
+
+    setJsonAnswerValue("premium_revision_entries", [next, ...revisionEntries]);
+    setRevisionForm(initialRevisionForm);
+    setPremiumMessage("Revisionspost sparad.");
+  }
+
+  function removeRevisionEntry(entryId: string) {
+    setJsonAnswerValue(
+      "premium_revision_entries",
+      revisionEntries.filter((entry) => entry.id !== entryId)
+    );
+    setPremiumMessage("Revisionspost borttagen.");
+  }
+
+  function addInternalControlEntry() {
+    const area = internalControlLogForm.area.trim();
+    const controlPoint = internalControlLogForm.controlPoint.trim();
+
+    if (!area || !controlPoint) {
+      setPremiumMessage("Ange område och kontrollpunkt för internkontroll.");
+      return;
+    }
+
+    const next: InternalControlEntry = {
+      id: `internal-control-${Date.now()}`,
+      area,
+      controlPoint,
+      result: internalControlLogForm.result,
+      action: internalControlLogForm.action.trim(),
+      actionOwner: internalControlLogForm.actionOwner.trim() || "Ansvarig roll",
+      dueDate: internalControlLogForm.dueDate,
+      createdAt: new Date().toISOString(),
+    };
+
+    setJsonAnswerValue("premium_internal_control_entries", [next, ...internalControlEntries]);
+    setInternalControlLogForm(initialInternalControlLogForm);
+    setPremiumMessage("Internkontrollpost sparad.");
+  }
+
+  function removeInternalControlEntry(entryId: string) {
+    setJsonAnswerValue(
+      "premium_internal_control_entries",
+      internalControlEntries.filter((entry) => entry.id !== entryId)
+    );
+    setPremiumMessage("Internkontrollpost borttagen.");
+  }
 
   const ensureRoutineDocumentReferences = (text: string) => {
     const references = [
@@ -1258,6 +1676,7 @@ function WorkspacePageContent() {
     setRiskForm({
       title: suggestion.title,
       description: suggestion.description,
+      actionPlan: suggestion.actionPlan || "",
       probability: suggestion.probability,
       consequence: suggestion.consequence,
       ownerRole: suggestion.ownerRole,
@@ -1613,6 +2032,18 @@ function WorkspacePageContent() {
       return;
     }
 
+    if (!riskForm.ownerRole.trim() || !riskForm.dueDate.trim()) {
+      setRiskMessage("Ange ansvarig roll och uppföljningsdatum för risken.");
+      return;
+    }
+
+    const riskValue = riskForm.probability * riskForm.consequence;
+
+    if (riskValue >= 15 && !riskForm.actionPlan.trim()) {
+      setRiskMessage("Högrisk (>=15) kräver dokumenterad åtgärdsplan.");
+      return;
+    }
+
     setIsRiskSubmitting(true);
     setRiskMessage("");
 
@@ -1649,6 +2080,77 @@ function WorkspacePageContent() {
     }
 
     await loadRisks();
+  }
+
+  async function createCommonRiskTemplates() {
+    if (!canUseRiskModule) {
+      return;
+    }
+
+    setIsRiskSubmitting(true);
+    setRiskMessage("");
+
+    const listResponse = await fetch("/api/risks/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!listResponse.ok) {
+      setIsRiskSubmitting(false);
+      const data = (await listResponse.json()) as { error?: string };
+      setRiskMessage(data.error || "Kunde inte läsa befintliga risker.");
+      return;
+    }
+
+    const listData = (await listResponse.json()) as { risks: RiskItem[] };
+    const existingTitles = new Set((listData.risks || []).map((risk) => risk.title.trim().toLowerCase()));
+
+    const dueDate = (() => {
+      const date = new Date();
+      date.setDate(date.getDate() + 30);
+      return date.toISOString().slice(0, 10);
+    })();
+
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const template of commonRiskTemplates) {
+      const normalizedTitle = template.title.trim().toLowerCase();
+
+      if (existingTitles.has(normalizedTitle)) {
+        skipped += 1;
+        continue;
+      }
+
+      const response = await fetch("/api/risks/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: template.title,
+          description: template.description,
+          actionPlan: template.actionPlan,
+          probability: template.probability,
+          consequence: template.consequence,
+          ownerRole: template.ownerRole,
+          dueDate,
+        }),
+      });
+
+      if (response.ok) {
+        created += 1;
+        existingTitles.add(normalizedTitle);
+      } else {
+        failed += 1;
+      }
+    }
+
+    setIsRiskSubmitting(false);
+    await loadRisks();
+    setRiskMessage(
+      `Riskmallar klara. Skapade: ${created}. Hoppade över: ${skipped}. Misslyckade: ${failed}.`
+    );
   }
 
   const loadControls = useCallback(async () => {
@@ -2161,6 +2663,157 @@ function WorkspacePageContent() {
           ) : null}
         </div>
       </header>
+
+      {canUsePremiumAi && isOverview ? (
+        <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+                Premium-funktioner
+              </p>
+              <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">
+                AI Compliance Officer, Regelbevakning, Revision och Internkontroll
+              </h2>
+            </div>
+            <p className="text-sm text-[color:var(--muted)]">Poster sparas i arbetsytan</p>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">AI Compliance Officer</p>
+              <textarea
+                value={premiumOfficerQuestion}
+                onChange={(event) => setPremiumOfficerQuestion(event.target.value)}
+                rows={3}
+                placeholder="Ställ en fråga om prioritering, efterlevnad eller nästa steg"
+                className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => void requestPremiumOfficerAdvice()}
+                disabled={isPremiumOfficerLoading}
+                className="mt-2 rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {isPremiumOfficerLoading ? "AI arbetar..." : "Analysera"}
+              </button>
+              {premiumOfficerResponse ? (
+                <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-white p-3 text-sm text-[color:var(--ink)]">
+                  <p>{premiumOfficerResponse.answer}</p>
+                  {premiumOfficerResponse.priorities.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs text-[color:var(--muted)]">
+                      {premiumOfficerResponse.priorities.map((item, index) => (
+                        <li key={`${item}-${index}`}>{`• ${item}`}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+            </article>
+
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Regelbevakning</p>
+              <input
+                value={regulationWatchForm.title}
+                onChange={(event) =>
+                  setRegulationWatchForm((prev) => ({ ...prev, title: event.target.value }))
+                }
+                placeholder="Ny regeländring / kravsignal"
+                className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <textarea
+                value={regulationWatchForm.impact}
+                onChange={(event) =>
+                  setRegulationWatchForm((prev) => ({ ...prev, impact: event.target.value }))
+                }
+                rows={2}
+                placeholder="Påverkan och åtgärd"
+                className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={addRegulationWatchEntry}
+                className="mt-2 rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                Spara
+              </button>
+              <p className="mt-2 text-xs text-[color:var(--muted)]">
+                Sparade poster: {regulationWatchEntries.length}
+              </p>
+              {regulationWatchEntries[0] ? (
+                <div className="mt-2 rounded-xl border border-[color:var(--line)] bg-white p-3 text-xs text-[color:var(--ink)]">
+                  <p className="font-semibold">Senast: {regulationWatchEntries[0].title}</p>
+                  <button
+                    type="button"
+                    onClick={() => removeRegulationWatchEntry(regulationWatchEntries[0].id)}
+                    className="mt-1 rounded-lg border border-[color:var(--line)] px-2 py-1 font-semibold"
+                  >
+                    Ta bort senaste
+                  </button>
+                </div>
+              ) : null}
+            </article>
+
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Revision</p>
+              <input
+                value={revisionForm.title}
+                onChange={(event) => setRevisionForm((prev) => ({ ...prev, title: event.target.value }))}
+                placeholder="Revisionstillfälle"
+                className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <textarea
+                value={revisionForm.findings}
+                onChange={(event) =>
+                  setRevisionForm((prev) => ({ ...prev, findings: event.target.value }))
+                }
+                rows={2}
+                placeholder="Fynd / observationer"
+                className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={addRevisionEntry}
+                className="mt-2 rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                Spara
+              </button>
+              <p className="mt-2 text-xs text-[color:var(--muted)]">Sparade revisioner: {revisionEntries.length}</p>
+            </article>
+
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Internkontroll</p>
+              <input
+                value={internalControlLogForm.area}
+                onChange={(event) =>
+                  setInternalControlLogForm((prev) => ({ ...prev, area: event.target.value }))
+                }
+                placeholder="Område"
+                className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <input
+                value={internalControlLogForm.controlPoint}
+                onChange={(event) =>
+                  setInternalControlLogForm((prev) => ({ ...prev, controlPoint: event.target.value }))
+                }
+                placeholder="Kontrollpunkt"
+                className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={addInternalControlEntry}
+                className="mt-2 rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                Spara
+              </button>
+              <p className="mt-2 text-xs text-[color:var(--muted)]">
+                Sparade internkontroller: {internalControlEntries.length}
+              </p>
+            </article>
+          </div>
+
+          {premiumMessage ? <p className="mt-3 text-sm text-[color:var(--muted)]">{premiumMessage}</p> : null}
+        </section>
+      ) : null}
 
       {showSection("ledningssystem") ? (
         <section id="ledningssystem" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
@@ -3142,14 +3795,24 @@ function WorkspacePageContent() {
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny risk</p>
               {canUsePremiumAi ? (
-                <button
-                  type="button"
-                  onClick={suggestRiskAnalysis}
-                  disabled={aiAssistLoading.risk_analysis}
-                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                >
-                  {aiAssistLoading.risk_analysis ? "AI arbetar..." : "AI: Föreslå riskanalys"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={suggestRiskAnalysis}
+                    disabled={aiAssistLoading.risk_analysis}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {aiAssistLoading.risk_analysis ? "AI arbetar..." : "AI: Föreslå riskanalys"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={createCommonRiskTemplates}
+                    disabled={isRiskSubmitting}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {isRiskSubmitting ? "Lägger in riskmallar..." : "Lägg in vanliga riskmallar"}
+                  </button>
+                </div>
               ) : null}
               <input
                 value={riskForm.title}
@@ -3198,7 +3861,7 @@ function WorkspacePageContent() {
                 <input
                   value={riskForm.ownerRole}
                   onChange={(event) => setRiskForm((prev) => ({ ...prev, ownerRole: event.target.value }))}
-                  placeholder="Ansvarig roll (valfritt)"
+                  placeholder="Ansvarig roll (obligatorisk)"
                   className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
                 />
                 <input
@@ -3208,9 +3871,21 @@ function WorkspacePageContent() {
                   className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
                 />
               </div>
+              <textarea
+                value={riskForm.actionPlan}
+                onChange={(event) => setRiskForm((prev) => ({ ...prev, actionPlan: event.target.value }))}
+                placeholder="Åtgärdsplan (obligatorisk vid högrisk: riskvärde >= 15)"
+                rows={3}
+                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+              />
               <p className="text-xs text-[color:var(--muted)]">
                 Riskvärde: <span className="font-semibold text-[color:var(--ink)]">{riskForm.probability * riskForm.consequence}</span>
               </p>
+              {riskForm.probability * riskForm.consequence >= 15 ? (
+                <p className="text-xs font-semibold text-amber-700">
+                  Högrisk identifierad: dokumenterad åtgärdsplan krävs innan risken kan stängas.
+                </p>
+              ) : null}
               <button
                 type="button"
                 onClick={createRisk}
@@ -3235,6 +3910,11 @@ function WorkspacePageContent() {
                   <article key={risk.id} className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
                     <p className="text-sm font-semibold text-[color:var(--ink)]">{risk.title}</p>
                     <p className="mt-1 text-sm text-[color:var(--muted)]">{risk.description}</p>
+                    {risk.actionPlan ? (
+                      <p className="mt-2 text-xs text-[color:var(--muted)]">
+                        Åtgärdsplan: {risk.actionPlan}
+                      </p>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
                         Riskvärde: {risk.probability * risk.consequence}

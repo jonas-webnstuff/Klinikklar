@@ -45,12 +45,34 @@ export async function POST() {
 
     if (error) throw error;
 
+    const riskIds = (data || []).map((item) => item.id);
+    let actionsByRiskId = new Map<string, string>();
+
+    if (riskIds.length > 0) {
+      const { data: actions, error: actionsError } = await supabase
+        .from("improvement_actions")
+        .select("source_id, action_description, created_at")
+        .eq("organization_id", organizationId)
+        .eq("source_type", "risk")
+        .in("source_id", riskIds)
+        .order("created_at", { ascending: false });
+
+      if (actionsError) throw actionsError;
+
+      for (const action of actions || []) {
+        if (action.source_id && action.action_description && !actionsByRiskId.has(action.source_id)) {
+          actionsByRiskId.set(action.source_id, action.action_description);
+        }
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       risks: (data || []).map((item) => ({
         id: item.id,
         title: item.title,
         description: item.description,
+        actionPlan: actionsByRiskId.get(item.id) || null,
         probability: item.probability,
         consequence: item.consequence,
         status: item.status,

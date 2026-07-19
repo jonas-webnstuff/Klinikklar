@@ -115,7 +115,7 @@ const pricingPlans = [
     price: "1 995 kr",
     billing: "/mån",
     description: "För kliniker som vill ha premiumfunktioner, hög AI-nivå och avancerad revisionsberedskap.",
-    footerNote: "Startavgift 4 995 kr",
+    footerNote: "Startavgift 19 900 kr",
     features: [
       "AI Compliance Officer",
       "Regelbevakning",

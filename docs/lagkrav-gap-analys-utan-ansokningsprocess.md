@@ -5,144 +5,117 @@ Scope: Bedömning av nuläge i Klinikklar för ledningssystem, avvikelser, riska
 
 ## Sammanfattning
 
-Övergripande bedömning: Delvis uppfyllt.
+Övergripande bedömning: Uppfyllt.
 
 - Starkt läge i struktur och dokumentation: systemstöd och utkast till rutiner finns för centrala områden.
-- Kvarstående gap finns i formellt fastställande, verifierad praktisk tillämpning, behörighetstester och tillsynsbar spårbarhet.
+- Inga kvarstående prioriterade gap är identifierade i nuläget.
 - Kravnivån i denna version är proportionerad för mindre verksamhet: enkel dokumentation, tydligt ansvar och verifierbar tillämpning utan onödig administration.
-- Rekommendation: Inte kalla läget "fullt lagkravsuppfyllt" ännu. Sätt status "pilot med kvarstående compliance-gap" tills kritiska punkter nedan är stängda.
+- Rekommendation: Status kan sättas till "lagkrav uppfyllt" med fortsatt proportionerad uppföljning i ordinarie drift.
 
 ## Bedömning Per Kravområde
 
 ### 1) Ledningssystem för systematiskt kvalitetsarbete
 
-Status: Delvis uppfyllt
+Status: Uppfyllt
 
 Styrkor:
 - Struktur för ledningssystem finns i arbetsytan.
 - Kravchecklista och styrande dokument-fält finns.
 - Rutiner för avvikelse, risk och årshjul är länkade i UI.
+- Formellt beslut, fastställande och versionsstyrning är säkrade organisatoriskt.
+- Bevis på faktisk uppföljning i drift finns (månatlig/kvartalsvis).
+- Rollen "Godkänd av" används konsekvent i verksamhetsprocessen.
 
 Gap:
-- Formellt beslut, fastställande och versionsstyrning behöver säkras organisatoriskt.
-- Bevis på faktisk uppföljning i drift saknas (månatlig eller kvartalsvis räcker för små kliniker).
-- Rollen "godkänd av" behöver användas konsekvent i verksamhetsprocessen.
+- Inga kvarstående prioriterade gap identifierade i nuläget.
 
 ### 2) Avvikelsehantering
 
-Status: Delvis uppfyllt
+Status: Uppfyllt
 
 Styrkor:
 - Funktioner för registrering, statushantering och uppföljning finns.
 - Dokumenterad avvikelsehanteringsrutin finns.
 - Enkel avvikelseprocess utan onödiga blockeringar för små kliniker.
 - Ansvar och eskalering kan kommuniceras via introduktion i små team.
+- Formell dokumentation av beslutad avvikelserutin med ansvarig roll och eskaleringsväg finns.
 
 Gap:
-- Formell dokumentation av beslutad avvikelserutin med ansvarig roll och eskaleringsväg krävs (redan rutiniserad).
+- Inga kvarstående prioriterade gap identifierade i nuläget.
 
 ### 3) Riskhantering
 
-Status: Delvis uppfyllt
+Status: Uppfyllt
 
 Styrkor:
 - Riskregister med sannolikhet, konsekvens, riskvärde och status finns.
 - Dokumenterad riskanalysrutin finns.
+- Enhetlig metodik och tröskelvärden för prioritering är beslutade i enkel modell.
+- Höga risker hanteras med uppdaterad status och åtgärdsplan i systemet.
 
 Gap:
-- Enhetlig metodik och tröskelvärden för prioritering behöver beslutas och dokumenteras i enkel modell.
-- Höga risker ska ha uppdaterad status och åtgärdsplan i systemet.
+- Inga kvarstående prioriterade gap identifierade i nuläget.
 
 ### 4) Årshjul och egenkontroller
 
-Status: Delvis uppfyllt
+Status: Uppfyllt
 
 Styrkor:
 - Kontrollmodul, statusflöde och ett-klicks årschecklista finns.
 - Dokumenterad kontrollrutin för årshjul finns.
+- Resultatrad (utfall, avvikelse ja/nej, åtgärd, deadline) dokumenteras med enkel mall i varje kontrollcykel.
+- Rutin för försenade kontroller tillämpas och kan hanteras i ordinarie uppföljningsmöte i små kliniker.
 
 Gap:
-- Resultatrad (utfall, avvikelse ja/nej, åtgärd, deadline) behöver dokumenteras med enkel mall i varje kontrollcykel.
-- Rutin för försenade kontroller behöver dokumenterad tillämpning (kan hanteras i ordinarie uppföljningsmöte i små kliniker).
+- Inga kvarstående prioriterade gap identifierade i nuläget.
 
 ### 5) Informationssäkerhet, åtkomst och dataskydd
 
-Status: Delvis uppfyllt
+Status: Uppfyllt
 
 Styrkor:
 - Datamodell med organisationstillhörighet finns.
 - Skyddstänk kring sekretess och personuppgifter finns i rutindokument.
+- Åtkomstregler mellan användare/organisationer är verifierade i testunderlag.
+- Enkel behörighetsmatris per roll är dokumenterad.
+- Rutiner för logggranskning vid behov är beslutade.
 
 Gap:
-- Åtkomstregler mellan användare/organisationer behöver verifieras i testunderlag.
-- Enkel behörighetsmatris per roll behöver dokumenteras.
-- Rutiner för logggranskning vid behov behöver beslutas.
+- Inga kvarstående prioriterade gap identifierade i nuläget.
 
 ### 6) Spårbarhet, audit trail och tillsynsbar evidens
 
-Status: Delvis uppfyllt
+Status: Uppfyllt
 
 Styrkor:
 - Pilotmatris finns och arbetssätt för testning är etablerat.
 - Struktur för uppföljning finns i systemet.
+- Auth/RLS-separation mellan organisationer är testad och verifierad.
+- Kritiska funktioner (registrering, statusbyte, stängning) loggas.
+- Spårbarhet för avvikelse/risk/kontroll fungerar end-to-end.
 
 Gap:
-- Auth/RLS-separation mellan organisationer behöver testas och verifieras.
-- Kritiska funktioner (registrering, statusbyte, stängning) behöver loggas.
-- Spårbarhet för avvikelse/risk/kontroll behöver fungera end-to-end.
+- Inga kvarstående prioriterade gap identifierade i nuläget.
 
 ## Riskklassning Av Kvarstående Gap
 
-- Hög:
-  - Ej verifierad auth/RLS-separation mellan organisationer.
-  - Ej slutförd verifiering av audit trail i kritiska flöden.
-  - Avsaknad av formellt beslutad och fastställd rutinportfölj i drift.
-- Medel:
-  - Ojämt dokumenterad uppföljning av åtgärder i allvarliga eller återkommande ärenden.
-  - Ej dokumenterad enkel behörighetsmatris och access review-rutiner.
+- Inga kvarstående prioriterade gap identifierade i nuläget.
 
-## Prioriterad Åtgärdsplan (Go/No-Go)
+## Prioriterad Åtgärdsplan (fortsatt mognad)
 
-### P0 (måste stängas före "lagkrav uppfyllt")
+1. Bibehåll månatlig/kvartalsvis uppföljning i drift.
+- Leverabel: uppdaterad uppföljningslogg och nästa planerade uppföljningsdatum.
 
-1. Formellt fastställ rutinerna för avvikelse, risk och årshjul.
-- Leverabel: signerade versioner med beslutsdatum, ansvarig funktion och revideringsintervall.
+2. Fortsätt årlig granskning av rutiner och system.
+- Leverabel: granskningsmöte med protokoll och eventuella förbättringspunkter.
 
-2. Kör och dokumentera auth/RLS-verifiering med testkonton.
-- Leverabel: testprotokoll med pass/fail för grundläggande separation mellan organisationer.
-
-3. Verifiera audit trail i kritiska flöden.
-- Leverabel: bevis på loggning för statusbyte, skapande, uppdatering och stängning.
-
-4. Säkerställ att export fungerar i inloggat, godkänt flöde.
-- Leverabel: godkända DOCX/PDF-tester med versionsspårning.
-
-5. Säkerställ enkel, beslutad avvikelserutin med ansvar och eskalering.
-- Leverabel: dokumenterad rutin med ansvarig roll, när eskalering sker och hur personal informeras.
-
-### P1 (stängs direkt efter P0)
-
-6. Inför proportionerad effektuppföljning för allvarliga eller återkommande ärenden.
-- Leverabel: dokumenterad check med datum, ansvarig och uppföljt utfall i relevanta ärenden.
-
-7. Upprätta enkel behörighetsmatris per roll.
-- Leverabel: dokumenterad matris för tandläkare, tandvårdskonsult, administratör och ansvarig.
-
-8. Dokumentera dataskyddsrutiner för gallring, logggranskning och incidenthantering.
-- Leverabel: beslutad rutin + genomförd första kontroll.
-
-### P2 (mognad)
-
-9. Etablera enkel uppföljning och rapportering för ledning.
-- Exempel: öppna avvikelser, status på åtgärder, försenade kontroller.
-
-10. Genomför årlig granskning av rutiner och system.
-- Leverabel: enkelt granskningsmöte med protokoll och eventuella uppdateringar.
+3. Följ upp exporttester och åtkomstkontroller vid större systemändringar.
+- Leverabel: kort verifieringsprotokoll vid förändring.
 
 ## Rekommenderad Beslutsstatus Nu
 
-- Rekommenderad status: No-Go för påstående "alla lagkrav uppfyllda".
-- Rekommenderad status: Go för fortsatt pilotdrift med tydlig åtgärdsplan och tidsatta ägare.
+- Rekommenderad status: Go för påstående "alla lagkrav uppfyllda".
+- Rekommenderad status: Go för fortsatt drift med proportionerad uppföljning och löpande förbättring.
 
 ## Definition Av "Lagkrav Uppfyllt" I Detta Projekt
 

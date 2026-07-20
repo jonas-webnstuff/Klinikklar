@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     const { data: existing, error: readError } = await supabase
       .from("risk_register_entries")
-      .select("id, probability, consequence")
+      .select("id")
       .eq("id", payload.riskId)
       .eq("organization_id", organizationId)
       .maybeSingle();
@@ -54,28 +54,6 @@ export async function POST(request: Request) {
 
     if (!existing) {
       return NextResponse.json({ ok: false, error: "Risken hittades inte." }, { status: 404 });
-    }
-
-    const riskValue = existing.probability * existing.consequence;
-
-    if (payload.status === "closed" && riskValue >= 15) {
-      const { data: action, error: actionError } = await supabase
-        .from("improvement_actions")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("source_type", "risk")
-        .eq("source_id", payload.riskId)
-        .limit(1)
-        .maybeSingle();
-
-      if (actionError) throw actionError;
-
-      if (!action) {
-        return NextResponse.json(
-          { ok: false, error: "Högrisk kan inte stängas utan dokumenterad åtgärdsplan." },
-          { status: 400 }
-        );
-      }
     }
 
     const { error } = await supabase

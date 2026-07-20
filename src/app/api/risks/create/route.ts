@@ -8,9 +8,8 @@ const bodySchema = z.object({
   description: z.string().min(5),
   probability: z.number().int().min(1).max(5),
   consequence: z.number().int().min(1).max(5),
-  ownerRole: z.string().min(1),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  actionPlan: z.string().optional().default(""),
+  ownerRole: z.string().optional().default(""),
+  dueDate: z.string().optional().default(""),
 });
 
 async function resolveUserOrganizationId(
@@ -51,15 +50,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const riskValue = payload.probability * payload.consequence;
-
-    if (riskValue >= 15 && !payload.actionPlan.trim()) {
-      return NextResponse.json(
-        { ok: false, error: "Högrisk (>=15) kräver dokumenterad åtgärdsplan." },
-        { status: 400 }
-      );
-    }
-
     const { data, error } = await supabase
       .from("risk_register_entries")
       .insert({
@@ -68,29 +58,14 @@ export async function POST(request: Request) {
         description: payload.description,
         probability: payload.probability,
         consequence: payload.consequence,
-        owner_role: payload.ownerRole,
-        due_date: payload.dueDate,
+        owner_role: payload.ownerRole || null,
+        due_date: payload.dueDate || null,
         status: "open",
       })
       .select("id")
       .single();
 
     if (error) throw error;
-
-    if (payload.actionPlan.trim()) {
-      const { error: actionError } = await supabase.from("improvement_actions").insert({
-        organization_id: organizationId,
-        source_type: "risk",
-        source_id: data.id,
-        title: `Åtgärdsplan: ${payload.title}`,
-        action_description: payload.actionPlan.trim(),
-        owner_role: payload.ownerRole,
-        due_date: payload.dueDate,
-        status: "planned",
-      });
-
-      if (actionError) throw actionError;
-    }
 
     return NextResponse.json({ ok: true, id: data.id });
   } catch (error) {

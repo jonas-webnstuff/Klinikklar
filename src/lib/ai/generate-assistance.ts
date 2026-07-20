@@ -70,7 +70,6 @@ const riskOutputSchema = z.object({
   consequence: z.number().min(1).max(5),
   ownerRole: z.string(),
   dueDate: z.string(),
-  actionPlan: z.string().optional(),
 });
 
 const routineOutputSchema = z.object({
@@ -181,8 +180,6 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
         consequence: input.currentRisk?.consequence || 4,
         ownerRole: input.currentRisk?.ownerRole || "Verksamhetschef",
         dueDate: input.currentRisk?.dueDate || isoDateAfter(30),
-        actionPlan:
-          "Planera och dokumentera en konkret åtgärd med ansvarig roll, deadline och uppföljningspunkt i nästa kvalitetsmöte.",
       };
     case "routine":
       return {
@@ -232,7 +229,7 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
 function outputInstructions(feature: GenerateAssistanceInput["feature"]) {
   switch (feature) {
     case "risk_analysis":
-      return `Returnera enbart JSON med exakt dessa fält: {"feature":"risk_analysis","title":"...","description":"...","probability":1-5,"consequence":1-5,"ownerRole":"...","dueDate":"YYYY-MM-DD","actionPlan":"..."}`;
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"risk_analysis","title":"...","description":"...","probability":1-5,"consequence":1-5,"ownerRole":"...","dueDate":"YYYY-MM-DD"}`;
     case "routine":
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"routine","area":"...","changeLog":"...","owner":"...","nextReview":"YYYY-MM-DD"}`;
     case "incident_investigation":

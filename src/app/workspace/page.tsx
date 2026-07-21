@@ -583,6 +583,7 @@ function WorkspacePageContent() {
   );
   const [supportMessage, setSupportMessage] = useState("");
   const [isSupportSubmitting, setIsSupportSubmitting] = useState(false);
+  const [isRevisionExporting, setIsRevisionExporting] = useState(false);
   const [routineMessage, setRoutineMessage] = useState("");
   const [aiAssistLoading, setAiAssistLoading] = useState<Record<AiAssistFeature, boolean>>({
     risk_analysis: false,
@@ -2550,6 +2551,148 @@ function WorkspacePageContent() {
     URL.revokeObjectURL(url);
   }
 
+  async function exportRevisionPackage(format: "docx" | "pdf") {
+    if (!canUsePremiumAi) {
+      return;
+    }
+
+    setIsRevisionExporting(true);
+
+    try {
+      const now = new Date();
+      const dateStamp = now.toISOString().slice(0, 10);
+      const exportedAt = now.toLocaleString("sv-SE");
+      const period = now.toLocaleDateString("sv-SE", { year: "numeric", month: "long" });
+      const clinicLabel = profile.clinicName.trim() || "Ej angiven";
+
+      const revisionChecklistLines = revisionChecklistItems.map((item) => {
+        const status = revisionStatusMap[item.key] || "missing";
+        const label = status === "missing" ? "Saknas" : status === "in_progress" ? "Pågår" : "Klar";
+        return `- ${item.label}: ${label}`;
+      });
+
+      const highPriorityRisks = risks
+        .filter((risk) => risk.probability * risk.consequence >= 15)
+        .slice(0, 10)
+        .map(
+          (risk) =>
+            `- ${risk.title} | Riskvärde ${risk.probability * risk.consequence} | Status ${riskStatusLabels[risk.status]}`
+        );
+
+      const openIncidents = incidents
+        .filter((incident) => incident.status !== "closed")
+        .slice(0, 10)
+        .map(
+          (incident) =>
+            `- ${incident.title} | Allvar ${incidentSeverityLabels[incident.severity]} | Status ${incidentStatusLabels[incident.status]}`
+        );
+
+      const overdueControls = controls
+        .filter((control) => control.status === "overdue")
+        .slice(0, 10)
+        .map(
+          (control) =>
+            `- ${control.title} | Frekvens ${controlFrequencyLabels[control.frequency]} | Status ${controlStatusLabels[control.status]}`
+        );
+
+      const regulationLines = regulationWatchEntries.slice(0, 10).map((entry) => {
+        const deadline = entry.actionDeadline || "Ej satt";
+        const owner = entry.ownerRole || "Ej satt";
+        return `- ${entry.title} | Källa ${entry.source} | Status ${regulationStatusLabels[entry.status]} | Ansvarig ${owner} | Deadline ${deadline}`;
+      });
+
+      const supportLines = supportTickets.slice(0, 10).map(
+        (ticket) =>
+          `- ${ticket.id} | ${ticket.subject} | Prioritet ${ticket.priority.toUpperCase()} | Status ${ticket.status}`
+      );
+
+      const content = [
+        "Klinikklar Premium - Revisionspaket",
+        `Klinik: ${clinicLabel}`,
+        `Period: ${period}`,
+        `Exporterad: ${exportedAt}`,
+        "",
+        "A. Ledningssystemstatus",
+        `- Ansvarig: ${getAnswerValue("management_system_owner") || "Ej satt"}`,
+        `- Godkänd av: ${getAnswerValue("management_system_approved_by") || "Ej satt"}`,
+        `- Nästa uppföljning: ${getAnswerValue("management_system_next_review") || "Ej satt"}`,
+        `- Saknade ledningssystempunkter: ${ledningssystemMissingFields.length}`,
+        "",
+        "B. Revisionsberedskap",
+        `- Revisionsgrad: ${revisionProgress.percent}%`,
+        ...revisionChecklistLines,
+        "",
+        "C. Risker",
+        `- Totalt: ${riskSummary.total}`,
+        `- Öppna: ${riskSummary.open}`,
+        `- Hög prioritet: ${riskSummary.highPriority}`,
+        ...(highPriorityRisks.length > 0
+          ? ["Prioriterade risker:", ...highPriorityRisks]
+          : ["Prioriterade risker:", "- Inga högprioriterade risker registrerade."]),
+        "",
+        "D. Avvikelser",
+        `- Totalt: ${incidentSummary.total}`,
+        `- Öppna: ${incidentSummary.open}`,
+        `- Hög/kritisk allvarlighetsgrad: ${incidentSummary.criticalOrHigh}`,
+        ...(openIncidents.length > 0
+          ? ["Öppna avvikelser:", ...openIncidents]
+          : ["Öppna avvikelser:", "- Inga öppna avvikelser."]),
+        "",
+        "E. Årshjul och kontroller",
+        `- Totalt: ${controlSummary.total}`,
+        `- Planerade: ${controlSummary.pending}`,
+        `- Försenade: ${controlSummary.overdue}`,
+        ...(overdueControls.length > 0
+          ? ["Försenade kontroller:", ...overdueControls]
+          : ["Försenade kontroller:", "- Inga försenade kontroller."]),
+        "",
+        "F. Regelbevakning",
+        `- Aktiva poster: ${pendingRegulationsCount}`,
+        ...(regulationLines.length > 0
+          ? ["Senaste regelposter:", ...regulationLines]
+          : ["Senaste regelposter:", "- Inga regelposter registrerade."]),
+        "",
+        "G. Prioriterad support",
+        ...(supportLines.length > 0
+          ? ["Senaste ärenden:", ...supportLines]
+          : ["Senaste ärenden:", "- Inga supportärenden registrerade."]),
+        "",
+        "Kommentar",
+        "AI-förslag och prioriteringar ska granskas och verifieras manuellt innan extern användning.",
+      ].join("\n");
+
+      const title = `revisionspaket-${clinicLabel}-${dateStamp}`;
+
+      const response = await fetch("/api/documents/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          format,
+          title,
+          content,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Kunde inte exportera revisionspaket.");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = window.document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${title}.${format}`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+
+      setWorkspaceMessage("Revisionspaket exporterat.");
+    } catch {
+      setWorkspaceMessage("Kunde inte exportera revisionspaket.");
+    } finally {
+      setIsRevisionExporting(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10 md:px-10">
       <header className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-6 shadow-sm">
@@ -3429,6 +3572,24 @@ function WorkspacePageContent() {
                       rows={3}
                       className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
                     />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void exportRevisionPackage("docx")}
+                        disabled={isRevisionExporting}
+                        className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        {isRevisionExporting ? "Exporterar..." : "Exportera revisionspaket Word"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void exportRevisionPackage("pdf")}
+                        disabled={isRevisionExporting}
+                        className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        {isRevisionExporting ? "Exporterar..." : "Exportera revisionspaket PDF"}
+                      </button>
+                    </div>
                   </div>
                 </article>
 

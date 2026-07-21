@@ -133,9 +133,12 @@ type RegulationWatchEntry = {
   title: string;
   source: string;
   effectiveDate: string;
+  ownerRole: string;
+  actionDeadline: string;
+  changeSummary: string;
   impact: "low" | "medium" | "high";
   recommendedAction: string;
-  status: "new" | "planned" | "completed";
+  status: "planned" | "in_progress" | "completed";
   createdAt: string;
 };
 
@@ -143,6 +146,9 @@ type RegulationWatchFormState = {
   title: string;
   source: string;
   effectiveDate: string;
+  ownerRole: string;
+  actionDeadline: string;
+  changeSummary: string;
   impact: "low" | "medium" | "high";
   recommendedAction: string;
 };
@@ -283,6 +289,9 @@ const initialRegulationWatchForm: RegulationWatchFormState = {
   title: "",
   source: "",
   effectiveDate: "",
+  ownerRole: "",
+  actionDeadline: "",
+  changeSummary: "",
   impact: "medium",
   recommendedAction: "",
 };
@@ -396,6 +405,12 @@ const riskStatusLabels: Record<RiskStatus, string> = {
   open: "Öppen",
   mitigating: "Åtgärdas",
   closed: "Stängd",
+};
+
+const regulationStatusLabels: Record<RegulationWatchEntry["status"], string> = {
+  planned: "Planerad",
+  in_progress: "Pågående",
+  completed: "Klar",
 };
 
 const clinicProfileHelp: HelpEntry[] = [
@@ -844,15 +859,20 @@ function WorkspacePageContent() {
               ? item.impact
               : "medium";
           const status =
-            item.status === "new" || item.status === "planned" || item.status === "completed"
+            item.status === "planned" ||
+            item.status === "in_progress" ||
+            item.status === "completed"
               ? item.status
-              : "new";
+              : "planned";
 
           return {
             id: typeof item.id === "string" && item.id ? item.id : `reg-${Date.now()}`,
             title: typeof item.title === "string" ? item.title : "",
             source: typeof item.source === "string" ? item.source : "",
             effectiveDate: typeof item.effectiveDate === "string" ? item.effectiveDate : "",
+            ownerRole: typeof item.ownerRole === "string" ? item.ownerRole : "",
+            actionDeadline: typeof item.actionDeadline === "string" ? item.actionDeadline : "",
+            changeSummary: typeof item.changeSummary === "string" ? item.changeSummary : "",
             impact,
             recommendedAction:
               typeof item.recommendedAction === "string" ? item.recommendedAction : "",
@@ -1837,20 +1857,48 @@ function WorkspacePageContent() {
     setWorkspaceMessage("AI har föreslagit påverkan och rekommenderad åtgärd för regelbevakningen.");
   }
 
+  function buildRegulationChangeSummary(form: RegulationWatchFormState) {
+    const effective = form.effectiveDate
+      ? `Träder i kraft ${form.effectiveDate}.`
+      : "Ikraftträdande behöver verifieras.";
+    const impactText =
+      form.impact === "high"
+        ? "Hög påverkan på verksamheten."
+        : form.impact === "medium"
+          ? "Medelhög påverkan på verksamheten."
+          : "Begränsad påverkan på verksamheten.";
+    const action = form.recommendedAction.trim()
+      ? `Föreslagen åtgärd: ${form.recommendedAction.trim()}`
+      : "Föreslagen åtgärd saknas och behöver kompletteras.";
+
+    return `${effective} ${impactText} ${action}`;
+  }
+
   function saveRegulationWatchEntry() {
-    if (!regulationWatchForm.title.trim() || !regulationWatchForm.source.trim()) {
-      setWorkspaceMessage("Ange regeländring och källa innan posten sparas.");
+    if (
+      !regulationWatchForm.title.trim() ||
+      !regulationWatchForm.source.trim() ||
+      !regulationWatchForm.ownerRole.trim() ||
+      !regulationWatchForm.actionDeadline
+    ) {
+      setWorkspaceMessage("Ange regeländring, källa, ansvarig roll och deadline innan posten sparas.");
       return;
     }
+
+    const changeSummary = regulationWatchForm.changeSummary.trim() ||
+      buildRegulationChangeSummary(regulationWatchForm);
 
     const entry: RegulationWatchEntry = {
       id: `reg-${Date.now()}`,
       title: regulationWatchForm.title.trim(),
       source: regulationWatchForm.source.trim(),
       effectiveDate: regulationWatchForm.effectiveDate,
+      ownerRole: regulationWatchForm.ownerRole.trim(),
+      actionDeadline: regulationWatchForm.actionDeadline,
+      changeSummary,
       impact: regulationWatchForm.impact,
       recommendedAction: regulationWatchForm.recommendedAction.trim(),
-      status: "new",
+      status: "planned",
       createdAt: new Date().toISOString(),
     };
 
@@ -3188,6 +3236,40 @@ function WorkspacePageContent() {
                       }
                       className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
                     />
+                    <input
+                      value={regulationWatchForm.ownerRole}
+                      onChange={(event) =>
+                        setRegulationWatchForm((prev) => ({
+                          ...prev,
+                          ownerRole: event.target.value,
+                        }))
+                      }
+                      placeholder="Ansvarig roll"
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="date"
+                      value={regulationWatchForm.actionDeadline}
+                      onChange={(event) =>
+                        setRegulationWatchForm((prev) => ({
+                          ...prev,
+                          actionDeadline: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <textarea
+                      value={regulationWatchForm.changeSummary}
+                      onChange={(event) =>
+                        setRegulationWatchForm((prev) => ({
+                          ...prev,
+                          changeSummary: event.target.value,
+                        }))
+                      }
+                      rows={3}
+                      placeholder="Andringssammanfattning (vad har andrats och varfor paverkar det oss?)"
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
                     <textarea
                       value={regulationWatchForm.recommendedAction}
                       onChange={(event) =>
@@ -3227,6 +3309,15 @@ function WorkspacePageContent() {
                       <div key={entry.id} className="rounded-lg border border-[color:var(--line)] bg-[color:var(--panel)] p-2">
                         <p className="text-sm font-semibold text-[color:var(--ink)]">{entry.title}</p>
                         <p className="text-xs text-[color:var(--muted)]">{entry.source}</p>
+                        {entry.changeSummary ? (
+                          <p className="mt-1 text-xs text-[color:var(--muted)]">{entry.changeSummary}</p>
+                        ) : null}
+                        <p className="mt-1 text-xs text-[color:var(--muted)]">
+                          Ansvarig: {entry.ownerRole || "Ej satt"} • Deadline: {entry.actionDeadline || "Ej satt"}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-[color:var(--ink)]">
+                          Status: {regulationStatusLabels[entry.status]}
+                        </p>
                         <div className="mt-2 flex gap-2">
                           <button
                             type="button"
@@ -3234,6 +3325,13 @@ function WorkspacePageContent() {
                             className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
                           >
                             Planerad
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateRegulationWatchStatus(entry.id, "in_progress")}
+                            className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                          >
+                            Pågående
                           </button>
                           <button
                             type="button"

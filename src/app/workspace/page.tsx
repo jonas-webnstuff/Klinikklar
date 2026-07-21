@@ -1241,6 +1241,111 @@ function WorkspacePageContent() {
     };
   }, [premiumKpiEvents, regulationWatchEntries, supportTickets]);
 
+  const premiumKpiTrend = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+      return {
+        key,
+        label: date.toLocaleDateString("sv-SE", { month: "short" }),
+      };
+    });
+
+    const byMonth = new Map(
+      months.map((month) => [
+        month.key,
+        {
+          ...month,
+          regulations: 0,
+          revisionExports: 0,
+          supportTickets: 0,
+          slaAnsweredWithin: 0,
+          slaAnsweredTotal: 0,
+        },
+      ])
+    );
+
+    const getMonthKey = (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "";
+      }
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    };
+
+    for (const entry of regulationWatchEntries) {
+      const key = getMonthKey(entry.createdAt);
+      const month = byMonth.get(key);
+      if (month) {
+        month.regulations += 1;
+      }
+    }
+
+    for (const event of premiumKpiEvents) {
+      if (event.type !== "revision_export") {
+        continue;
+      }
+      const key = getMonthKey(event.createdAt);
+      const month = byMonth.get(key);
+      if (month) {
+        month.revisionExports += 1;
+      }
+    }
+
+    for (const ticket of supportTickets) {
+      const createdKey = getMonthKey(ticket.createdAt);
+      const createdMonth = byMonth.get(createdKey);
+      if (createdMonth) {
+        createdMonth.supportTickets += 1;
+      }
+
+      if (ticket.status !== "answered") {
+        continue;
+      }
+
+      const respondedAt = ticket.respondedAt || ticket.createdAt;
+      const answeredKey = getMonthKey(respondedAt);
+      const answeredMonth = byMonth.get(answeredKey);
+      if (!answeredMonth) {
+        continue;
+      }
+
+      const createdAtMs = new Date(ticket.createdAt).getTime();
+      const respondedAtMs = new Date(respondedAt).getTime();
+
+      if (Number.isNaN(createdAtMs) || Number.isNaN(respondedAtMs)) {
+        continue;
+      }
+
+      const targetHours = ticket.responseTargetHours || supportSlaTargetHours[ticket.priority];
+      const dueAtMs = createdAtMs + targetHours * 60 * 60 * 1000;
+
+      answeredMonth.slaAnsweredTotal += 1;
+      if (respondedAtMs <= dueAtMs) {
+        answeredMonth.slaAnsweredWithin += 1;
+      }
+    }
+
+    return months.map((month) => {
+      const values = byMonth.get(month.key);
+      const slaPercent =
+        values && values.slaAnsweredTotal > 0
+          ? Math.round((values.slaAnsweredWithin / values.slaAnsweredTotal) * 100)
+          : null;
+
+      return {
+        key: month.key,
+        label: month.label,
+        regulations: values?.regulations || 0,
+        revisionExports: values?.revisionExports || 0,
+        supportTickets: values?.supportTickets || 0,
+        slaPercent,
+      };
+    });
+  }, [premiumKpiEvents, regulationWatchEntries, supportTickets]);
+
   const managementSystemSummary = useMemo(() => {
     const latestRoutineEntry = routineEntries
       .slice()
@@ -3547,6 +3652,25 @@ function WorkspacePageContent() {
                   <p className="mt-1 text-xs text-[color:var(--muted)]">Adoption: {premiumKpiSummary.adoptionPercent}% ({premiumKpiSummary.activeModules}/3 moduler)</p>
                 </article>
               </div>
+
+              <article className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Trend senaste 6 manader
+                </p>
+                <div className="mt-3 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+                  {premiumKpiTrend.map((month) => (
+                    <div key={month.key} className="rounded-lg border border-[color:var(--line)] bg-[color:var(--panel)] p-2">
+                      <p className="text-xs font-semibold text-[color:var(--ink)]">{month.label}</p>
+                      <p className="mt-1 text-xs text-[color:var(--muted)]">Regler: {month.regulations}</p>
+                      <p className="text-xs text-[color:var(--muted)]">Export: {month.revisionExports}</p>
+                      <p className="text-xs text-[color:var(--muted)]">Support: {month.supportTickets}</p>
+                      <p className="text-xs text-[color:var(--muted)]">
+                        SLA: {month.slaPercent === null ? "-" : `${month.slaPercent}%`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </article>
 
               <div className="grid gap-4 xl:grid-cols-3">
                 <article className="rounded-xl border border-[color:var(--line)] bg-white p-4">

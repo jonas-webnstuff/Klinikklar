@@ -17,7 +17,7 @@ const statusLabels: Record<ApplicationStatus, string> = {
   draft: "Utkast",
   in_review: "Klar för granskning",
   ready_to_submit: "Godkänd",
-  submitted: "Inskickad",
+  submitted: "Klar att skicka",
 };
 
 function canTransition(

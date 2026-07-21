@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -13,8 +14,12 @@ const bodySchema = z.object({
   profile: z.object({
     clinicName: z.string().min(1),
     orgNumber: z.string().min(1),
+    address: z.string().min(1),
     municipality: z.string().min(1),
+    region: z.string().min(1),
     email: z.string().email(),
+    hasRadiology: z.boolean().optional().default(false),
+    hasSedation: z.boolean().optional().default(false),
   }),
   answers: z.record(z.string(), answerSchema),
   requirements: z.array(
@@ -91,7 +96,12 @@ async function getOrCreateClinic(
     await supabase
       .from("clinics")
       .update({
+        name: profile.clinicName,
+        address: profile.address,
         municipality: profile.municipality,
+        region: profile.region,
+        has_radiology: profile.hasRadiology,
+        has_sedation: profile.hasSedation,
       })
       .eq("id", existing.id);
 
@@ -103,11 +113,11 @@ async function getOrCreateClinic(
     .insert({
       organization_id: organizationId,
       name: profile.clinicName,
-      address: "Ej angivet",
+      address: profile.address,
       municipality: profile.municipality,
-      region: "Ej angivet",
-      has_radiology: false,
-      has_sedation: false,
+      region: profile.region,
+      has_radiology: profile.hasRadiology,
+      has_sedation: profile.hasSedation,
     })
     .select("id")
     .single();
@@ -235,13 +245,43 @@ export async function POST(request: Request) {
       if (responsesError) throw responsesError;
     }
 
-    const requirementRows = payload.requirements.map((item) => ({
-      application_id: applicationId,
-      code: item.code,
-      title: item.title,
-      status: item.status === "complete" ? "complete" : "missing",
-      missing_reason: item.status === "complete" ? null : "Saknar tillräckligt underlag",
-    }));
+    const managementSystemRequiredKeys = [
+      "management_system_purpose",
+      "management_system_scope",
+      "management_system_owner",
+      "management_system_approved_by",
+      "management_system_processes",
+      "management_system_documents",
+      "management_system_followup_log",
+      "management_system_decision_log",
+      "management_system_next_review",
+    ];
+
+    const requirementRows = complianceRequirements.map((requirement) => {
+      let isComplete = false;
+
+      if (requirement.code === "R-02") {
+        isComplete = managementSystemRequiredKeys.every((key) =>
+          Boolean(payload.answers[key]?.answer?.trim())
+        );
+      } else {
+        const mappedItems = questionnaireItems.filter((item) =>
+          item.mapsToRequirements.includes(requirement.code)
+        );
+
+        isComplete =
+          mappedItems.length > 0 &&
+          mappedItems.every((item) => Boolean(payload.answers[item.key]?.answer?.trim()));
+      }
+
+      return {
+        application_id: applicationId,
+        code: requirement.code,
+        title: requirement.title,
+        status: isComplete ? "complete" : "missing",
+        missing_reason: isComplete ? null : "Saknar tillräckligt underlag",
+      };
+    });
 
     if (requirementRows.length > 0) {
       const { error: requirementsError } = await supabase

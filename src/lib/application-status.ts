@@ -108,6 +108,53 @@ export async function computeReadinessChecklist(
   supabase: SupabaseAdmin,
   applicationId: string
 ): Promise<ReadinessChecklist> {
+  const { data: application, error: applicationError } = await supabase
+    .from("applications")
+    .select("organization_id, clinic_id")
+    .eq("id", applicationId)
+    .maybeSingle();
+
+  if (applicationError) throw applicationError;
+
+  const organizationId = application?.organization_id;
+  const clinicId = application?.clinic_id;
+
+  let hasOrganization = false;
+  let hasClinic = false;
+
+  if (organizationId) {
+    const { data: organization, error: organizationError } = await supabase
+      .from("organizations")
+      .select("name, org_number, email")
+      .eq("id", organizationId)
+      .maybeSingle();
+
+    if (organizationError) throw organizationError;
+
+    hasOrganization = Boolean(
+      organization?.name?.trim() &&
+        organization?.org_number?.trim() &&
+        organization?.email?.trim()
+    );
+  }
+
+  if (clinicId) {
+    const { data: clinic, error: clinicError } = await supabase
+      .from("clinics")
+      .select("name, address, municipality, region")
+      .eq("id", clinicId)
+      .maybeSingle();
+
+    if (clinicError) throw clinicError;
+
+    hasClinic = Boolean(
+      clinic?.name?.trim() &&
+        clinic?.address?.trim() &&
+        clinic?.municipality?.trim() &&
+        clinic?.region?.trim()
+    );
+  }
+
   const { data: responses, error: responsesError } = await supabase
     .from("questionnaire_responses")
     .select("question_key, answer")
@@ -149,20 +196,22 @@ export async function computeReadinessChecklist(
     requirementCount > 0 && completeRequirementCount === requirementCount;
 
   let evidenceCount = 0;
+  let evidenceLinked = false;
+
   if (requirementIds.length > 0) {
     const { data: evidenceRows, error: evidenceError } = await supabase
       .from("evidence")
-      .select("id")
+      .select("id, requirement_id")
       .in("requirement_id", requirementIds);
 
     if (evidenceError) throw evidenceError;
-    evidenceCount = (evidenceRows || []).length;
+    const rows = evidenceRows || [];
+    evidenceCount = rows.length;
+
+    const coveredRequirementIds = new Set(rows.map((row) => row.requirement_id));
+    evidenceLinked = requirementIds.every((requirementId) => coveredRequirementIds.has(requirementId));
   }
 
-  const evidenceLinked = evidenceCount > 0;
-
-  const hasOrganization = true;
-  const hasClinic = true;
   const canMoveToReady = hasOrganization && hasClinic && questionnaireComplete && requirementsComplete;
   const canSubmit = canMoveToReady && evidenceLinked;
 

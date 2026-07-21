@@ -15,8 +15,12 @@ import type {
 type ProfileState = {
   clinicName: string;
   orgNumber: string;
+  address: string;
   municipality: string;
+  region: string;
   email: string;
+  hasRadiology: boolean;
+  hasSedation: boolean;
 };
 
 type AnswersState = Record<string, { answer: string; followUpAnswer: string }>;
@@ -262,8 +266,12 @@ const planAccessRank: Record<PlanLevel, number> = {
 const initialProfile: ProfileState = {
   clinicName: "",
   orgNumber: "",
+  address: "",
   municipality: "",
+  region: "",
   email: "",
+  hasRadiology: false,
+  hasSedation: false,
 };
 
 const initialAnswers: AnswersState = Object.fromEntries(
@@ -472,6 +480,32 @@ const clinicProfileHelp: HelpEntry[] = [
       "Om flera verksamhetsställen finns bör varje plats kunna särskiljas senare.",
     ],
     helpExample: "Stockholm",
+    ivoSectionTitle: "IVO: tillstånd för privat tandvård",
+    ivoUrl: "https://www.ivo.se/vard-omsorgsgivare/tillstand/privat-tandvard/",
+  },
+  {
+    id: "address",
+    label: "Besöksadress",
+    helpDescription:
+      "Ange fullständig besöksadress för verksamhetsstället. Adress och ort används i underlag för att tydliggöra var vården bedrivs.",
+    helpChecklist: [
+      "Ange gatuadress och nummer för aktuell klinik.",
+      "Säkerställ att adressen matchar övriga ansökningsunderlag.",
+    ],
+    helpExample: "Sveavägen 10, 111 57 Stockholm",
+    ivoSectionTitle: "IVO: tillstånd för privat tandvård",
+    ivoUrl: "https://www.ivo.se/vard-omsorgsgivare/tillstand/privat-tandvard/",
+  },
+  {
+    id: "region",
+    label: "Region",
+    helpDescription:
+      "Ange region/län där kliniken bedriver verksamhet. Detta kompletterar kommunuppgiften i ansökningsunderlaget.",
+    helpChecklist: [
+      "Ange aktuell region för verksamhetsstället.",
+      "Säkerställ att regionen är konsekvent i underlag och rutindokument.",
+    ],
+    helpExample: "Region Stockholm",
     ivoSectionTitle: "IVO: tillstånd för privat tandvård",
     ivoUrl: "https://www.ivo.se/vard-omsorgsgivare/tillstand/privat-tandvard/",
   },
@@ -1516,7 +1550,11 @@ function WorkspacePageContent() {
 
   const canGenerate =
     profile.clinicName.trim() &&
+    profile.address.trim() &&
     profile.municipality.trim() &&
+    profile.region.trim() &&
+    profile.orgNumber.trim() &&
+    profile.email.trim() &&
     answers.care_scope?.answer.trim() &&
     answers.quality_process?.answer.trim() &&
     answers.staffing?.answer.trim() &&
@@ -2304,7 +2342,7 @@ function WorkspacePageContent() {
 
   async function updateApplicationStatus(status: ApplicationStatus) {
     if (status === "submitted" && submissionBlockers.length > 0) {
-      setWorkspaceMessage(`Kan inte markera som inskickad. Komplettera: ${submissionBlockers.join(" | ")}.`);
+      setWorkspaceMessage(`Kan inte markera som klar att skicka. Komplettera: ${submissionBlockers.join(" | ")}.`);
       router.push("/workspace/ledningssystem");
       return;
     }
@@ -2659,8 +2697,28 @@ function WorkspacePageContent() {
   }, [hasHydratedWorkspace]);
 
   async function saveWorkspace() {
+    if (!profile.clinicName.trim()) {
+      setWorkspaceMessage("Ange klinikens namn innan du sparar.");
+      return;
+    }
+
     if (!profile.orgNumber.trim()) {
       setWorkspaceMessage("Ange organisationsnummer innan du sparar.");
+      return;
+    }
+
+    if (!profile.address.trim()) {
+      setWorkspaceMessage("Ange besöksadress innan du sparar.");
+      return;
+    }
+
+    if (!profile.municipality.trim()) {
+      setWorkspaceMessage("Ange kommun innan du sparar.");
+      return;
+    }
+
+    if (!profile.region.trim()) {
+      setWorkspaceMessage("Ange region innan du sparar.");
       return;
     }
 
@@ -4710,6 +4768,84 @@ function WorkspacePageContent() {
         <p className="mt-2 text-sm text-[color:var(--muted)]">
           Fyll i uppgifterna steg för steg. Svaren används som grund för dokument och ansökan.
         </p>
+
+        <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Grunduppgifter verksamhet</p>
+            <button
+              type="button"
+              onClick={() => setOpenHelpKey((current) => (current === "clinicName" ? null : "clinicName"))}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[color:var(--line)] bg-white text-sm font-bold text-[color:var(--brand)]"
+              aria-label="Info om grunduppgifter"
+            >
+              i
+            </button>
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <input
+              value={profile.clinicName}
+              onChange={(event) => setProfile((prev) => ({ ...prev, clinicName: event.target.value }))}
+              placeholder="Klinikens namn"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <input
+              value={profile.orgNumber}
+              onChange={(event) => setProfile((prev) => ({ ...prev, orgNumber: event.target.value }))}
+              placeholder="Organisationsnummer"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <input
+              value={profile.address}
+              onChange={(event) => setProfile((prev) => ({ ...prev, address: event.target.value }))}
+              placeholder="Besöksadress"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <input
+              value={profile.municipality}
+              onChange={(event) => setProfile((prev) => ({ ...prev, municipality: event.target.value }))}
+              placeholder="Kommun"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <input
+              value={profile.region}
+              onChange={(event) => setProfile((prev) => ({ ...prev, region: event.target.value }))}
+              placeholder="Region"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <input
+              type="email"
+              value={profile.email}
+              onChange={(event) => setProfile((prev) => ({ ...prev, email: event.target.value }))}
+              placeholder="E-post"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-4 text-sm text-[color:var(--ink)]">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={profile.hasRadiology}
+                onChange={(event) =>
+                  setProfile((prev) => ({ ...prev, hasRadiology: event.target.checked }))
+                }
+              />
+              Har röntgen
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={profile.hasSedation}
+                onChange={(event) =>
+                  setProfile((prev) => ({ ...prev, hasSedation: event.target.checked }))
+                }
+              />
+              Har sedering
+            </label>
+          </div>
+        </div>
+
         <div className="mt-4 space-y-5">
           {questionnaireItems.map((item) => (
             <div key={item.key} className="relative rounded-2xl bg-[color:var(--panel)] p-4">
@@ -4859,14 +4995,14 @@ function WorkspacePageContent() {
                   ? "Klar för granskning"
                   : applicationStatus === "ready_to_submit"
                     ? "Godkänd"
-                    : "Inskickad"}
+                    : "Klar att skicka"}
             </div>
           </div>
 
           <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-semibold text-[color:var(--ink)]">
-                {isApplicationSubmitted ? "Ansökan är inskickad" : "Ansökningsläge"}
+                {isApplicationSubmitted ? "Ansökan är markerad som klar att skicka" : "Ansökningsläge"}
               </p>
               <div className="flex flex-wrap gap-2">
                 {applicationStatus !== "draft" ? (
@@ -4910,7 +5046,7 @@ function WorkspacePageContent() {
                         : `Komplettera: ${submissionBlockers.join(" | ")}`
                     }
                   >
-                    Markera inskickad
+                    Markera klar att skicka
                   </button>
                 ) : null}
               </div>
@@ -4971,7 +5107,7 @@ function WorkspacePageContent() {
 
                   {isApplicationSubmitted ? (
                     <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                      Ansökan är inskickad och låst för ändringar.
+                      Ansökan är markerad som klar att skicka och låst för ändringar.
                     </p>
                   ) : (
                     <label className="mt-3 flex items-center gap-2 text-sm text-[color:var(--ink)]">

@@ -63,8 +63,8 @@ const stages: Array<{
   },
   {
     key: "submitted",
-    title: "Inskickad",
-    description: "Ansökan är skickad och låst för vidare ändringar.",
+    title: "Klar att skicka",
+    description: "Underlaget är låst och redo för manuell inskick till IVO.",
   },
 ];
 
@@ -72,7 +72,7 @@ const stageLabels: Record<ApplicationStatus, string> = {
   draft: "Utkast",
   in_review: "Klar för granskning",
   ready_to_submit: "Godkänd",
-  submitted: "Inskickad",
+  submitted: "Klar att skicka",
 };
 
 export default function AnsokanPage() {
@@ -97,6 +97,11 @@ export default function AnsokanPage() {
   const readinessItems = useMemo(
     () => [
       {
+        key: "profile",
+        label: "Grunduppgifter för verksamheten är kompletta",
+        done: Boolean(checklist?.hasOrganization && checklist?.hasClinic),
+      },
+      {
         key: "questionnaire",
         label: "Frågeguiden är ifylld",
         done: checklist?.questionnaireComplete || false,
@@ -108,7 +113,7 @@ export default function AnsokanPage() {
       },
       {
         key: "evidence",
-        label: "Minst ett evidensunderlag är kopplat",
+        label: "Evidens finns för varje krav",
         done: checklist?.evidenceLinked || false,
       },
     ],
@@ -344,7 +349,7 @@ export default function AnsokanPage() {
               disabled={!checklist?.canSubmit}
               className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
             >
-              Markera som inskickad
+              Markera som klar att skicka
             </button>
           ) : null}
         </div>

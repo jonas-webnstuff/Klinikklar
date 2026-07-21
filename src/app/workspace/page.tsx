@@ -164,6 +164,8 @@ type SupportTicketItem = {
   priority: SupportTicketPriority;
   message: string;
   status: "submitted" | "in_progress" | "answered";
+  responseTargetHours?: number;
+  respondedAt?: string;
   createdAt: string;
 };
 
@@ -411,6 +413,18 @@ const regulationStatusLabels: Record<RegulationWatchEntry["status"], string> = {
   planned: "Planerad",
   in_progress: "Pågående",
   completed: "Klar",
+};
+
+const supportStatusLabels: Record<SupportTicketItem["status"], string> = {
+  submitted: "Skickad",
+  in_progress: "Pågår",
+  answered: "Besvarad",
+};
+
+const supportSlaTargetHours: Record<SupportTicketPriority, number> = {
+  normal: 8,
+  high: 4,
+  urgent: 2,
 };
 
 const clinicProfileHelp: HelpEntry[] = [
@@ -930,45 +944,52 @@ function WorkspacePageContent() {
         return [];
       }
 
-      return parsed
-        .map((candidate) => {
-          if (!candidate || typeof candidate !== "object") {
-            return null;
-          }
+      const result: SupportTicketItem[] = [];
 
-          const item = candidate as Partial<SupportTicketItem>;
-          const priority: SupportTicketPriority =
-            item.priority === "normal" || item.priority === "urgent" || item.priority === "high"
-              ? item.priority
-              : "high";
-          const status =
-            item.status === "in_progress" || item.status === "answered" || item.status === "submitted"
-              ? item.status
-              : "submitted";
-          const area =
-            item.area === "regelbevakning" ||
-            item.area === "revision" ||
-            item.area === "internkontroll" ||
-            item.area === "risk" ||
-            item.area === "avvikelser" ||
-            item.area === "other"
-              ? item.area
-              : "other";
+      for (const candidate of parsed) {
+        if (!candidate || typeof candidate !== "object") {
+          continue;
+        }
 
-          return {
-            id: typeof item.id === "string" && item.id ? item.id : `sup-${Date.now()}`,
-            subject: typeof item.subject === "string" ? item.subject : "",
-            area,
-            priority,
-            message: typeof item.message === "string" ? item.message : "",
-            status,
-            createdAt:
-              typeof item.createdAt === "string" && item.createdAt
-                ? item.createdAt
-                : new Date().toISOString(),
-          };
-        })
-        .filter((entry): entry is SupportTicketItem => Boolean(entry));
+        const item = candidate as Partial<SupportTicketItem>;
+        const priority: SupportTicketPriority =
+          item.priority === "normal" || item.priority === "urgent" || item.priority === "high"
+            ? item.priority
+            : "high";
+        const status =
+          item.status === "in_progress" || item.status === "answered" || item.status === "submitted"
+            ? item.status
+            : "submitted";
+        const area =
+          item.area === "regelbevakning" ||
+          item.area === "revision" ||
+          item.area === "internkontroll" ||
+          item.area === "risk" ||
+          item.area === "avvikelser" ||
+          item.area === "other"
+            ? item.area
+            : "other";
+
+        result.push({
+          id: typeof item.id === "string" && item.id ? item.id : `sup-${Date.now()}`,
+          subject: typeof item.subject === "string" ? item.subject : "",
+          area,
+          priority,
+          message: typeof item.message === "string" ? item.message : "",
+          status,
+          responseTargetHours:
+            typeof item.responseTargetHours === "number" && item.responseTargetHours > 0
+              ? item.responseTargetHours
+              : supportSlaTargetHours[priority],
+          respondedAt: typeof item.respondedAt === "string" ? item.respondedAt : "",
+          createdAt:
+            typeof item.createdAt === "string" && item.createdAt
+              ? item.createdAt
+              : new Date().toISOString(),
+        });
+      }
+
+      return result;
     } catch {
       return [];
     }
@@ -1096,6 +1117,45 @@ function WorkspacePageContent() {
 
     return summary;
   }, [controls]);
+
+  const supportSlaSummary = useMemo(() => {
+    const now = Date.now();
+    let answeredWithinSla = 0;
+    let answeredTotal = 0;
+    let openWithinSla = 0;
+    let openOverdue = 0;
+
+    for (const ticket of supportTickets) {
+      const createdAtMs = new Date(ticket.createdAt).getTime();
+      const targetHours = ticket.responseTargetHours || supportSlaTargetHours[ticket.priority];
+      const dueAtMs = createdAtMs + targetHours * 60 * 60 * 1000;
+
+      if (ticket.status === "answered") {
+        answeredTotal += 1;
+        const respondedAtMs = ticket.respondedAt ? new Date(ticket.respondedAt).getTime() : createdAtMs;
+        if (respondedAtMs <= dueAtMs) {
+          answeredWithinSla += 1;
+        }
+      } else {
+        if (now <= dueAtMs) {
+          openWithinSla += 1;
+        } else {
+          openOverdue += 1;
+        }
+      }
+    }
+
+    const answeredPercent =
+      answeredTotal > 0 ? Math.round((answeredWithinSla / answeredTotal) * 100) : 100;
+
+    return {
+      answeredWithinSla,
+      answeredTotal,
+      answeredPercent,
+      openWithinSla,
+      openOverdue,
+    };
+  }, [supportTickets]);
 
   const managementSystemSummary = useMemo(() => {
     const latestRoutineEntry = routineEntries
@@ -1288,6 +1348,32 @@ function WorkspacePageContent() {
 
   const addSupportTicket = (ticket: SupportTicketItem) => {
     const next = [ticket, ...supportTickets.filter((item) => item.id !== ticket.id)];
+    setAnswerValue("priority_support_tickets", JSON.stringify(next));
+  };
+
+  const updateSupportTicketStatus = (
+    ticketId: string,
+    status: SupportTicketItem["status"]
+  ) => {
+    const next = supportTickets.map((ticket) => {
+      if (ticket.id !== ticketId) {
+        return ticket;
+      }
+
+      if (status === "answered") {
+        return {
+          ...ticket,
+          status,
+          respondedAt: new Date().toISOString(),
+        };
+      }
+
+      return {
+        ...ticket,
+        status,
+      };
+    });
+
     setAnswerValue("priority_support_tickets", JSON.stringify(next));
   };
 
@@ -1960,6 +2046,7 @@ function WorkspacePageContent() {
       priority: supportTicketForm.priority,
       message: supportTicketForm.message.trim(),
       status: "submitted",
+      responseTargetHours: supportSlaTargetHours[supportTicketForm.priority],
       createdAt: data.submittedAt || new Date().toISOString(),
     });
 
@@ -3599,6 +3686,31 @@ function WorkspacePageContent() {
                     Skapa prioriterat Premium-ärende med spårbar ticket-logg.
                   </p>
 
+                  <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                      SLA-oversikt
+                    </p>
+                    <p className="mt-2 text-xs text-[color:var(--muted)]">
+                      Mal: Akut 2h, Hog 4h, Normal 8h.
+                    </p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-2">
+                        <p className="text-xs text-[color:var(--muted)]">Besvarade inom SLA</p>
+                        <p className="text-sm font-semibold text-[color:var(--ink)]">
+                          {supportSlaSummary.answeredWithinSla}/{supportSlaSummary.answeredTotal} ({supportSlaSummary.answeredPercent}%)
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-2">
+                        <p className="text-xs text-[color:var(--muted)]">Oppna inom SLA</p>
+                        <p className="text-sm font-semibold text-emerald-700">{supportSlaSummary.openWithinSla}</p>
+                      </div>
+                      <div className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 sm:col-span-2">
+                        <p className="text-xs text-[color:var(--muted)]">Oppna forsenade</p>
+                        <p className="text-sm font-semibold text-amber-700">{supportSlaSummary.openOverdue}</p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="mt-3 space-y-2">
                     <input
                       value={supportTicketForm.subject}
@@ -3669,8 +3781,40 @@ function WorkspacePageContent() {
                       <div key={ticket.id} className="rounded-lg border border-[color:var(--line)] bg-[color:var(--panel)] p-2">
                         <p className="text-sm font-semibold text-[color:var(--ink)]">{ticket.subject}</p>
                         <p className="text-xs text-[color:var(--muted)]">
-                          {ticket.id} • {ticket.priority.toUpperCase()} • {ticket.status}
+                          {ticket.id} • {ticket.priority.toUpperCase()} • {supportStatusLabels[ticket.status]}
                         </p>
+                        <p className="text-xs text-[color:var(--muted)]">
+                          Svarsmal: {ticket.responseTargetHours || supportSlaTargetHours[ticket.priority]}h
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {ticket.status !== "submitted" ? (
+                            <button
+                              type="button"
+                              onClick={() => updateSupportTicketStatus(ticket.id, "submitted")}
+                              className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                            >
+                              Skickad
+                            </button>
+                          ) : null}
+                          {ticket.status !== "in_progress" ? (
+                            <button
+                              type="button"
+                              onClick={() => updateSupportTicketStatus(ticket.id, "in_progress")}
+                              className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                            >
+                              Pågår
+                            </button>
+                          ) : null}
+                          {ticket.status !== "answered" ? (
+                            <button
+                              type="button"
+                              onClick={() => updateSupportTicketStatus(ticket.id, "answered")}
+                              className="rounded-lg bg-[color:var(--brand)] px-2 py-1 text-xs font-semibold text-white"
+                            >
+                              Besvarad
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </div>

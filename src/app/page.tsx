@@ -75,7 +75,7 @@ const pricingPlans = [
     title: "Klinikklar Drift",
     price: "995 kr",
     billing: "/mån",
-    description: "För kliniker som redan gjort ansökan men saknar ledningssystem och löpande struktur.",
+    description: "För kliniker som redan gjort ansökan men saknar ledningssystem och löpande struktur utan AI-stöd.",
     footerNote: "Startavgift 4 995 kr",
     features: [
       "Ledningssystem",
@@ -83,7 +83,6 @@ const pricingPlans = [
       "Rutiner",
       "Riskanalyser",
       "Årshjul",
-      "AI-förslag",
     ],
     ctaLabel: "Välj Drift",
     ctaHref: "/login?next=/workspace&plan=step2",

@@ -15,22 +15,39 @@ export function HeaderNav({ isAuthenticated, canAdminCustomers }: HeaderNavProps
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const view = searchParams.get("view");
+  const isWorkspaceRoot = pathname === "/workspace";
+  const isLedningssystemPath = pathname.startsWith("/workspace/ledningssystem");
+  const isAvvikelserPath = pathname.startsWith("/workspace/avvikelser");
+  const isRiskanalyserPath = pathname.startsWith("/workspace/riskanalyser");
+  const isArshjulPath = pathname.startsWith("/workspace/arshjul");
 
   return (
     <nav className="hidden items-center gap-6 text-[15px] font-medium text-[color:var(--ink)] lg:mr-4 lg:flex xl:mr-8 xl:gap-8">
       {isAuthenticated ? (
         <>
           <Link
-            href="/workspace"
-            className={`${baseLinkClass} ${pathname === "/workspace" && !view ? activeLinkClass : ""}`}
+            href="/workspace/ledningssystem"
+            className={`${baseLinkClass} ${isLedningssystemPath || (isWorkspaceRoot && view === "ledningssystem") ? activeLinkClass : ""}`}
           >
-            Startsida
+            Ledningssystem
           </Link>
           <Link
-            href="/workspace?view=ledningssystem"
-            className={`${baseLinkClass} ${pathname === "/workspace" && view === "ledningssystem" ? activeLinkClass : ""}`}
+            href="/workspace/riskanalyser"
+            className={`${baseLinkClass} ${isRiskanalyserPath || (isWorkspaceRoot && view === "riskanalyser") ? activeLinkClass : ""}`}
           >
-            Arbetsyta
+            Riskanalyser
+          </Link>
+          <Link
+            href="/workspace/avvikelser"
+            className={`${baseLinkClass} ${isAvvikelserPath || (isWorkspaceRoot && view === "avvikelser") ? activeLinkClass : ""}`}
+          >
+            Avvikelser
+          </Link>
+          <Link
+            href="/workspace/arshjul"
+            className={`${baseLinkClass} ${isArshjulPath || (isWorkspaceRoot && view === "arshjul") ? activeLinkClass : ""}`}
+          >
+            Årshjul
           </Link>
           <Link
             href="/ansokan"

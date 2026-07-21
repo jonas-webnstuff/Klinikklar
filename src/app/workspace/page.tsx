@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
 import type {
   ControlTaskFrequency,
@@ -527,9 +527,10 @@ const ledningssystemModules = [
 ];
 
 function WorkspacePageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [activePlan, setActivePlan] = useState<PlanLevel>("step2");
-  const [activeView, setActiveView] = useState<WorkspaceView>("overview");
   const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("draft");
   const [readiness, setReadiness] = useState<ReadinessChecklist>({
     canMoveToReady: false,
@@ -587,6 +588,20 @@ function WorkspacePageContent() {
     if (plan === "step1" || plan === "step2" || plan === "step3") {
       setActivePlan(plan);
     }
+  }, [searchParams]);
+
+  const activeView: WorkspaceView = useMemo(() => {
+    const pathView = pathname.split("/")[2];
+
+    if (
+      pathView === "ledningssystem" ||
+      pathView === "avvikelser" ||
+      pathView === "riskanalyser" ||
+      pathView === "arshjul" ||
+      pathView === "dokument"
+    ) {
+      return pathView;
+    }
 
     const view = searchParams.get("view");
 
@@ -597,12 +612,11 @@ function WorkspacePageContent() {
       view === "arshjul" ||
       view === "dokument"
     ) {
-      setActiveView(view);
-      return;
+      return view;
     }
 
-    setActiveView("overview");
-  }, [searchParams]);
+    return "overview";
+  }, [pathname, searchParams]);
 
   const helpEntries: HelpEntry[] = [
     ...clinicProfileHelp,
@@ -1160,7 +1174,7 @@ function WorkspacePageContent() {
       actions.push({
         id: "ledningssystem",
         text: `Komplettera ledningssystem (${labels}${suffix})`,
-        href: "/workspace?view=ledningssystem",
+        href: "/workspace/ledningssystem",
       });
     }
 
@@ -1168,7 +1182,7 @@ function WorkspacePageContent() {
       actions.push({
         id: "routines",
         text: `Spara rutiner för ${routineCoverageMissingPoints.length} lagkravspunkter`,
-        href: "/workspace?view=ledningssystem",
+        href: "/workspace/ledningssystem",
       });
     }
 
@@ -1176,7 +1190,7 @@ function WorkspacePageContent() {
       actions.push({
         id: "risks",
         text: `${riskSummary.highPriority} risker med hög prioritet behöver åtgärdsplan`,
-        href: "/workspace?view=riskanalyser",
+        href: "/workspace/riskanalyser",
       });
     }
 
@@ -1184,7 +1198,7 @@ function WorkspacePageContent() {
       actions.push({
         id: "controls",
         text: `${controlSummary.overdue} kontroller i årshjulet är försenade`,
-        href: "/workspace?view=arshjul",
+        href: "/workspace/arshjul",
       });
     }
 
@@ -1192,7 +1206,7 @@ function WorkspacePageContent() {
       actions.push({
         id: "incidents",
         text: `${incidentSummary.criticalOrHigh} avvikelser med hög/kritisk allvarlighetsgrad`,
-        href: "/workspace?view=avvikelser",
+        href: "/workspace/avvikelser",
       });
     }
 
@@ -1939,7 +1953,7 @@ function WorkspacePageContent() {
   async function updateApplicationStatus(status: ApplicationStatus) {
     if (status === "submitted" && submissionBlockers.length > 0) {
       setWorkspaceMessage(`Kan inte markera som inskickad. Komplettera: ${submissionBlockers.join(" | ")}.`);
-      setActiveView("ledningssystem");
+      router.push("/workspace/ledningssystem");
       return;
     }
 
@@ -2305,7 +2319,7 @@ function WorkspacePageContent() {
 
     if (!getAnswerValue("management_system_approved_by").trim()) {
       setWorkspaceMessage("Ange Godkänd av i Ledningssystem innan du sparar.");
-      setActiveView("ledningssystem");
+      router.push("/workspace/ledningssystem");
       focusManagementField("management_system_approved_by");
       return;
     }
@@ -2507,102 +2521,6 @@ function WorkspacePageContent() {
         <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
           Aktiv nivå: {planLabels[activePlan]}
         </p>
-        <div className="mt-5 flex flex-wrap items-center gap-2">
-          {isApplicationView ? (
-            <>
-              <a
-                href="/workspace"
-                className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-              >
-                Till startsida
-              </a>
-              <a
-                href="/workspace?view=ledningssystem"
-                className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-              >
-                Till arbetsyta
-              </a>
-            </>
-          ) : (
-            <>
-              <a
-                href="/workspace"
-                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-                  isOverview
-                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
-                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
-                }`}
-              >
-                Översikt
-              </a>
-              <a
-                href="/workspace?view=ledningssystem"
-                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-                  activeView === "ledningssystem"
-                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
-                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
-                }`}
-              >
-                Ledningssystem
-              </a>
-              <a
-                href="/workspace?view=avvikelser"
-                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-                  activeView === "avvikelser"
-                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
-                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
-                }`}
-              >
-                Avvikelser
-              </a>
-              <a
-                href="/workspace?view=riskanalyser"
-                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-                  activeView === "riskanalyser"
-                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
-                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
-                }`}
-              >
-                Riskanalyser
-              </a>
-              <a
-                href="/workspace?view=arshjul"
-                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-                  activeView === "arshjul"
-                    ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
-                    : "border-[color:var(--line)] bg-white text-[color:var(--ink)]"
-                }`}
-              >
-                Årshjul
-              </a>
-              <a
-                href="/ansokan"
-                className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-              >
-                Ansökan
-              </a>
-            </>
-          )}
-        </div>
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <button
-            onClick={saveWorkspace}
-            disabled={isSaving}
-            className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            {isSaving ? "Sparar..." : "Spara"}
-          </button>
-          <button
-            onClick={loadWorkspace}
-            disabled={isLoadingWorkspace}
-            className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-          >
-            {isLoadingWorkspace ? "Hämtar..." : "Hämta uppgifter"}
-          </button>
-          {workspaceMessage ? (
-            <p className="text-sm text-[color:var(--muted)]">{workspaceMessage}</p>
-          ) : null}
-        </div>
       </header>
 
       {showSection("ledningssystem") ? (
@@ -2644,19 +2562,19 @@ function WorkspacePageContent() {
 
           <div className="mt-5 flex flex-wrap gap-2">
             <a
-              href="/workspace?view=avvikelser"
+              href="/workspace/avvikelser"
               className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
             >
               Gå till avvikelser
             </a>
             <a
-              href="/workspace?view=riskanalyser"
+              href="/workspace/riskanalyser"
               className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
             >
               Gå till riskanalyser
             </a>
             <a
-              href="/workspace?view=arshjul"
+              href="/workspace/arshjul"
               className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
             >
               Gå till årshjul
@@ -3541,7 +3459,7 @@ function WorkspacePageContent() {
             </p>
             <div className="mt-auto pt-4">
               <a
-                href="/workspace?view=ledningssystem"
+                href="/workspace/ledningssystem"
                 className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
               >
                 Öppna ledningssystem
@@ -3557,7 +3475,7 @@ function WorkspacePageContent() {
             <p className="mt-1 text-xs text-[color:var(--muted)]">Öppna risker: {riskSummary.open}</p>
             <div className="mt-auto pt-4">
               <a
-                href="/workspace?view=riskanalyser"
+                href="/workspace/riskanalyser"
                 className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
               >
                 Öppna riskanalyser
@@ -3571,7 +3489,7 @@ function WorkspacePageContent() {
             <p className="mt-1 text-xs text-[color:var(--muted)]">Planerade: {controlSummary.pending}</p>
             <div className="mt-auto pt-4">
               <a
-                href="/workspace?view=arshjul"
+                href="/workspace/arshjul"
                 className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
               >
                 Öppna årshjul
@@ -3587,7 +3505,7 @@ function WorkspacePageContent() {
             <p className="mt-1 text-xs text-[color:var(--muted)]">Öppna avvikelser: {incidentSummary.open}</p>
             <div className="mt-auto pt-4">
               <a
-                href="/workspace?view=avvikelser"
+                href="/workspace/avvikelser"
                 className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
               >
                 Öppna avvikelser

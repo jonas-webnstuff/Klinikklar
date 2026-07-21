@@ -17,6 +17,7 @@ export function HeaderNav({ isAuthenticated, canAdminCustomers }: HeaderNavProps
   const view = searchParams.get("view");
   const isWorkspaceRoot = pathname === "/workspace";
   const isLedningssystemPath = pathname.startsWith("/workspace/ledningssystem");
+  const isRutinerPath = pathname.startsWith("/workspace/rutiner");
   const isAvvikelserPath = pathname.startsWith("/workspace/avvikelser");
   const isRiskanalyserPath = pathname.startsWith("/workspace/riskanalyser");
   const isArshjulPath = pathname.startsWith("/workspace/arshjul");
@@ -30,6 +31,12 @@ export function HeaderNav({ isAuthenticated, canAdminCustomers }: HeaderNavProps
             className={`${baseLinkClass} ${isLedningssystemPath || (isWorkspaceRoot && view === "ledningssystem") ? activeLinkClass : ""}`}
           >
             Ledningssystem
+          </Link>
+          <Link
+            href="/workspace/rutiner"
+            className={`${baseLinkClass} ${isRutinerPath || (isWorkspaceRoot && view === "rutiner") ? activeLinkClass : ""}`}
+          >
+            Rutiner
           </Link>
           <Link
             href="/workspace/riskanalyser"

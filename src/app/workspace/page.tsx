@@ -46,6 +46,7 @@ type PlanLevel = "step1" | "step2" | "step3";
 type WorkspaceView =
   | "overview"
   | "ledningssystem"
+  | "rutiner"
   | "avvikelser"
   | "riskanalyser"
   | "arshjul"
@@ -499,7 +500,7 @@ const ledningssystemModules = [
   },
   {
     key: "routine_updates",
-    title: "Rutiner och uppdateringar",
+    title: "Rutiner",
     availableFrom: "step2" as PlanLevel,
     cadence: "Löpande",
     description: "Versionera rutiner och förändringar i driftarbetet.",
@@ -632,6 +633,7 @@ function WorkspacePageContent() {
 
     if (
       pathView === "ledningssystem" ||
+      pathView === "rutiner" ||
       pathView === "avvikelser" ||
       pathView === "riskanalyser" ||
       pathView === "arshjul" ||
@@ -644,6 +646,7 @@ function WorkspacePageContent() {
 
     if (
       view === "ledningssystem" ||
+      view === "rutiner" ||
       view === "avvikelser" ||
       view === "riskanalyser" ||
       view === "arshjul" ||
@@ -1060,6 +1063,10 @@ function WorkspacePageContent() {
       routineRequirementPoints[0],
     [activeRoutineRequirementKey]
   );
+  const selectedRoutineEntry = useMemo(
+    () => routineEntries.find((entry) => entry.requirementKey === activeRoutineRequirementKey) || null,
+    [activeRoutineRequirementKey, routineEntries]
+  );
   const ledningssystemMissingFields = useMemo(
     () =>
       ledningssystemRequirementItems
@@ -1067,6 +1074,21 @@ function WorkspacePageContent() {
         .map(({ label }) => label),
     [answers]
   );
+  const nextMissingManagementField = useMemo(
+    () => ledningssystemRequirementItems.find(({ key }) => !answers[key]?.answer?.trim()) || null,
+    [answers]
+  );
+  const nextMissingRoutinePoint = useMemo(
+    () =>
+      routineRequirementPoints.find(
+        (point) => !routineEntries.some((entry) => entry.requirementKey === point.key)
+      ) || null,
+    [routineEntries]
+  );
+  const completedRoutineCount = useMemo(() => {
+    const uniqueKeys = new Set(routineEntries.map((entry) => entry.requirementKey));
+    return uniqueKeys.size;
+  }, [routineEntries]);
   const hasLedningssystemCoverage = ledningssystemMissingFields.length === 0;
   const isOverview = activeView === "overview";
   const isApplicationView = activeView === "dokument";
@@ -1452,7 +1474,7 @@ function WorkspacePageContent() {
       actions.push({
         id: "routines",
         text: `Spara rutiner för ${routineCoverageMissingPoints.length} lagkravspunkter`,
-        href: "/workspace/ledningssystem",
+        href: "/workspace/rutiner",
       });
     }
 
@@ -3016,124 +3038,118 @@ function WorkspacePageContent() {
             <p className="text-sm text-[color:var(--muted)]">Fokus: återkommande efterlevnad</p>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Status</p>
-              <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">Aktivt ledningsarbete</p>
-              <p className="mt-1 text-sm text-[color:var(--muted)]">Strukturen är redo för löpande uppdatering.</p>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Få överblick först
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-[color:var(--ink)]">
+                Det här behöver du göra nu
+              </h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs text-[color:var(--muted)]">Ledningssystem</p>
+                  <p className="mt-1 text-xl font-semibold text-[color:var(--ink)]">
+                    {ledningssystemMissingFields.length}
+                  </p>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">fält saknas</p>
+                </div>
+                <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs text-[color:var(--muted)]">Rutiner</p>
+                  <p className="mt-1 text-xl font-semibold text-[color:var(--ink)]">
+                    {completedRoutineCount}/{routineRequirementPoints.length}
+                  </p>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">punkter klara</p>
+                </div>
+                <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs text-[color:var(--muted)]">Nästa översyn</p>
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
+                    {managementSystemSummary.nextReview.managementSystem}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-white p-4">
+                <p className="text-sm font-semibold text-[color:var(--ink)]">Rekommenderad ordning</p>
+                <ol className="mt-2 space-y-2 text-sm text-[color:var(--ink)]">
+                  <li>
+                    1. Fyll i eller komplettera ledningssystemets grundfält
+                    {nextMissingManagementField ? `: ${nextMissingManagementField.label}` : ""}
+                  </li>
+                  <li>
+                    2. Spara eller uppdatera nästa rutinpunkt
+                    {nextMissingRoutinePoint ? `: ${nextMissingRoutinePoint.label}` : ""}
+                  </li>
+                  <li>3. Spara ändringarna när båda delarna ser rätt ut</li>
+                </ol>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {nextMissingManagementField ? (
+                    <button
+                      type="button"
+                      onClick={() => focusManagementField(nextMissingManagementField.key)}
+                      className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Gå till nästa saknade fält
+                    </button>
+                  ) : null}
+                  {nextMissingRoutinePoint ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveRoutineRequirementKey(nextMissingRoutinePoint.key);
+                        router.push("/workspace/rutiner");
+                      }}
+                      className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                    >
+                      Gå till nästa rutinpunkt
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </article>
-            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Nästa steg</p>
-              <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">Se rutiner och uppdateringar</p>
-              <p className="mt-1 text-sm text-[color:var(--muted)]">Samla förändringar, versioner och ansvar på ett ställe.</p>
-            </article>
-            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Dokumentation</p>
-              <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">Redigera i appen</p>
-              <p className="mt-1 text-sm text-[color:var(--muted)]">Exportera till Word när innehållet ska delas eller lämnas in.</p>
-            </article>
-            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Ingång</p>
-              <p className="mt-2 text-lg font-semibold text-[color:var(--ink)]">Ansökan</p>
-              <p className="mt-1 text-sm text-[color:var(--muted)]">Frågeguiden och underlagen samlas där inför inskick.</p>
+
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Sammanställning från systemet
+              </p>
+              <p className="mt-2 text-sm text-[color:var(--muted)]">
+                Underlaget hämtas från rutiner, risker, avvikelser, årshjul och ansvarsfält.
+              </p>
+              <div className="mt-4 space-y-2 rounded-xl border border-[color:var(--line)] bg-white p-4 text-sm text-[color:var(--ink)]">
+                <p>Ansvarig ledningssystem: {managementSystemSummary.responsibility.managementOwner}</p>
+                <p>Ansvarig rutiner: {managementSystemSummary.responsibility.routineOwner}</p>
+                <p>Öppna risker: {managementSystemSummary.risks.open}</p>
+                <p>Öppna avvikelser: {managementSystemSummary.incidents.open}</p>
+                <p>Försenade kontroller: {managementSystemSummary.controls.overdue}</p>
+              </div>
+              <button
+                type="button"
+                onClick={insertManagementSystemSummaryDraft}
+                className="mt-4 w-full rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                Infoga sammanställning i utkast
+              </button>
+              <div className="mt-4 text-sm text-[color:var(--muted)]">
+                Relaterat arbete:
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <a href="/workspace/avvikelser" className="font-medium text-[color:var(--ink)] hover:text-[color:var(--brand)]">
+                    Avvikelser
+                  </a>
+                  <a href="/workspace/riskanalyser" className="font-medium text-[color:var(--ink)] hover:text-[color:var(--brand)]">
+                    Riskanalyser
+                  </a>
+                  <a href="/workspace/arshjul" className="font-medium text-[color:var(--ink)] hover:text-[color:var(--brand)]">
+                    Årshjul
+                  </a>
+                  <a href="/ansokan" className="font-medium text-[color:var(--ink)] hover:text-[color:var(--brand)]">
+                    Ansökan
+                  </a>
+                </div>
+              </div>
             </article>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <a
-              href="/workspace/avvikelser"
-              className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-            >
-              Gå till avvikelser
-            </a>
-            <a
-              href="/workspace/riskanalyser"
-              className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-            >
-              Gå till riskanalyser
-            </a>
-            <a
-              href="/workspace/arshjul"
-              className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-            >
-              Gå till årshjul
-            </a>
-            <a
-              href="/ansokan"
-              className="rounded-full bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
-            >
-              Öppna ansökan
-            </a>
-          </div>
-
-          <article className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Ledningssystem: sammanställning från systemet</p>
-            <p className="mt-1 text-sm text-[color:var(--muted)]">
-              Underlaget hämtas automatiskt från Rutiner, Riskanalyser, Avvikelser, Årshjul och ansvarsfält.
-            </p>
-            <button
-              type="button"
-              onClick={insertManagementSystemSummaryDraft}
-              className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
-            >
-              Infoga sammanställning i utkast
-            </button>
-
-            <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Ansvar</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Ledningssystem: {managementSystemSummary.responsibility.managementOwner}</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Rutiner: {managementSystemSummary.responsibility.routineOwner}</p>
-              </div>
-
-              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Rutiner</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Område: {managementSystemSummary.routines.area}</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Nästa uppföljning: {managementSystemSummary.routines.nextReview}</p>
-              </div>
-
-              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Riskhantering</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Öppna risker: {managementSystemSummary.risks.open}</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Hög prioritet: {managementSystemSummary.risks.highPriority}</p>
-                <p className="mt-1 text-sm text-[color:var(--muted)]">
-                  {managementSystemSummary.risks.headlines.length > 0
-                    ? `Exempel: ${managementSystemSummary.risks.headlines.join(", ")}`
-                    : "Inga riskrubriker ännu."}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Avvikelsehantering</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Öppna avvikelser: {managementSystemSummary.incidents.open}</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Hög/kritisk: {managementSystemSummary.incidents.criticalOrHigh}</p>
-                <p className="mt-1 text-sm text-[color:var(--muted)]">
-                  {managementSystemSummary.incidents.headlines.length > 0
-                    ? `Exempel: ${managementSystemSummary.incidents.headlines.join(", ")}`
-                    : "Inga avvikelserubriker ännu."}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Egenkontroller (årshjul)</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Väntar: {managementSystemSummary.controls.pending}</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Förfallna: {managementSystemSummary.controls.overdue}</p>
-                <p className="mt-1 text-sm text-[color:var(--muted)]">
-                  {managementSystemSummary.controls.headlines.length > 0
-                    ? `Exempel: ${managementSystemSummary.controls.headlines.join(", ")}`
-                    : "Inga kontrollrubriker ännu."}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Nästa översyn</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Ledningssystem: {managementSystemSummary.nextReview.managementSystem}</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">Rutiner: {managementSystemSummary.nextReview.routines}</p>
-              </div>
-            </div>
-          </article>
-
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div className="mt-6">
             <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ledningssystem</p>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">
@@ -3141,7 +3157,7 @@ function WorkspacePageContent() {
               </p>
               <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-                  Kravchecklista (R-02)
+                  Det här saknas eller finns redan
                 </p>
                 <ul className="mt-2 space-y-1 text-sm text-[color:var(--ink)]">
                   {ledningssystemRequirementItems.map(({ key, label }) => {
@@ -3213,7 +3229,7 @@ function WorkspacePageContent() {
               </div>
               <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-                  Årskontroll-checklista (standard)
+                  Standardunderlag
                 </p>
                 <ul className="mt-2 space-y-1 text-sm text-[color:var(--ink)]">
                   {annualControlChecklistItems.map((item) => (
@@ -3251,6 +3267,9 @@ function WorkspacePageContent() {
                 </div>
               ) : null}
               <div className="mt-3 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Redigera ledningssystem
+                </p>
                 <textarea
                   id="management-field-management_system_purpose"
                   value={getAnswerValue("management_system_purpose")}
@@ -3323,6 +3342,9 @@ function WorkspacePageContent() {
                     className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                   />
                 </div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  Uppföljning och beslut
+                </p>
                 <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
                   Senast uppdaterad
                   <input
@@ -3405,205 +3427,6 @@ function WorkspacePageContent() {
                   {isSaving ? "Sparar..." : "Spara"}
                 </button>
               </div>
-            </article>
-
-            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-              <p className="text-sm font-semibold text-[color:var(--ink)]">Rutiner och uppdateringar</p>
-              <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[color:var(--brand)]">Löpande</p>
-              <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-                  Lagkravspunkter för rutiner
-                </p>
-                <ul className="mt-2 space-y-1 text-sm text-[color:var(--ink)]">
-                  {routineRequirementPoints.map((point) => {
-                    const hasValue = routineEntries.some((entry) => entry.requirementKey === point.key);
-
-                    return (
-                      <li key={point.key} className="flex items-center justify-between gap-3">
-                        <span className="flex items-center gap-2">
-                          <span
-                            className={`h-2 w-2 rounded-full ${
-                              hasValue ? "bg-emerald-500" : "bg-amber-500"
-                            }`}
-                          />
-                          <span>{point.label}</span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          {hasValue ? (
-                            <button
-                              type="button"
-                              onClick={() => focusRoutinePoint(point.key)}
-                              className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
-                            >
-                              Visa
-                            </button>
-                          ) : null}
-                          {!hasValue && canUsePremiumAi ? (
-                            <button
-                              type="button"
-                              onClick={() => void suggestRoutineForPoint(point.key)}
-                              disabled={aiAssistLoading.routine}
-                              className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                            >
-                              AI-generera
-                            </button>
-                          ) : null}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-                {routineCoverageMissingPoints.length > 0 ? (
-                  <p className="mt-2 text-xs text-[color:var(--muted)]">
-                    Saknas: {routineCoverageMissingPoints.join(", ")}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs text-emerald-700">Alla lagkravspunkter har en sparad rutin.</p>
-                )}
-              </div>
-
-              <label className="mt-3 block space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                Välj lagkravspunkt
-                <select
-                  value={activeRoutineRequirementKey}
-                  onChange={(event) => setActiveRoutineRequirementKey(event.target.value)}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal text-[color:var(--ink)]"
-                >
-                  {routineRequirementPoints.map((point) => (
-                    <option key={point.key} value={point.key}>
-                      {point.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {canUsePremiumAi ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void suggestRoutineUpdate()}
-                    disabled={aiAssistLoading.routine}
-                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                  >
-                    {aiAssistLoading.routine ? "AI arbetar..." : "AI: Skapa för vald punkt"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={suggestAllMissingRoutines}
-                    disabled={aiAssistLoading.routine || routineCoverageMissingPoints.length === 0}
-                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                  >
-                    AI: Skapa alla saknade
-                  </button>
-                </div>
-              ) : null}
-
-              <div className="mt-3 space-y-3">
-                <input
-                  id="routine-field-area"
-                  value={getAnswerValue("routine_updates_area")}
-                  onChange={(event) => setAnswerValue("routine_updates_area", event.target.value)}
-                  placeholder="Berört område (ex. steril, journal, bemanning)"
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <textarea
-                  value={getAnswerValue("routine_updates_change_log")}
-                  onChange={(event) =>
-                    setAnswerValue("routine_updates_change_log", event.target.value)
-                  }
-                  placeholder="Vad har ändrats och varför?"
-                  rows={3}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <input
-                  value={getAnswerValue("routine_updates_owner")}
-                  onChange={(event) => setAnswerValue("routine_updates_owner", event.target.value)}
-                  placeholder="Ansvarig för uppdateringen"
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                  Nästa uppföljning
-                  <input
-                    type="date"
-                    value={getAnswerValue("routine_updates_next_review")}
-                    onChange={(event) =>
-                      setAnswerValue("routine_updates_next_review", event.target.value)
-                    }
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={saveRoutineForPoint}
-                  className="w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white"
-                >
-                  Spara rutin för vald punkt
-                </button>
-                {routineMessage ? (
-                  <p className="text-sm text-[color:var(--muted)]">{routineMessage}</p>
-                ) : (
-                  <p className="text-xs text-[color:var(--muted)]">Spara punkt och klicka sedan på Spara längst ned i kortet.</p>
-                )}
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                  Sparade rutiner per punkt
-                </p>
-                {routineRequirementPoints.map((point) => {
-                  const entry = routineEntries.find((item) => item.requirementKey === point.key);
-
-                  return (
-                    <div
-                      key={point.key}
-                      className="rounded-xl border border-[color:var(--line)] bg-white p-3"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[color:var(--ink)]">{point.label}</p>
-                        <span
-                          className={`text-xs font-semibold ${
-                            entry ? "text-emerald-700" : "text-amber-700"
-                          }`}
-                        >
-                          {entry ? "Klar" : "Saknas"}
-                        </span>
-                      </div>
-                      {entry ? (
-                        <>
-                          <p className="mt-1 text-xs text-[color:var(--muted)]">{entry.area}</p>
-                          <p className="mt-1 text-xs text-[color:var(--muted)]">Ansvarig: {entry.owner}</p>
-                          <p className="mt-1 text-xs text-[color:var(--muted)]">Nästa uppföljning: {entry.nextReview}</p>
-                          <div className="mt-2 flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => editRoutineForPoint(point.key)}
-                              className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
-                            >
-                              Redigera
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeRoutineForPoint(point.key)}
-                              className="rounded-lg border border-[color:var(--line)] px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
-                            >
-                              Ta bort
-                            </button>
-                          </div>
-                        </>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => void saveWorkspace()}
-                disabled={isSaving}
-                className="mt-4 w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
-                {isSaving ? "Sparar..." : "Spara"}
-              </button>
             </article>
           </div>
 
@@ -4072,6 +3895,186 @@ function WorkspacePageContent() {
             </section>
           ) : null}
         </section>
+      ) : null}
+
+      {showSection("rutiner") ? (
+      <section id="rutiner" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+              Rutiner
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">
+              Välj punkt och uppdatera en sak i taget
+            </h2>
+          </div>
+          <p className="text-sm text-[color:var(--muted)]">Fokus: löpande förändringar och ansvar</p>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Överblick</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs text-[color:var(--muted)]">Klara punkter</p>
+                <p className="mt-1 text-lg font-semibold text-[color:var(--ink)]">
+                  {completedRoutineCount}/{routineRequirementPoints.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                <p className="text-xs text-[color:var(--muted)]">Nästa saknade</p>
+                <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
+                  {nextMissingRoutinePoint ? nextMissingRoutinePoint.label : "Alla punkter klara"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Välj punkt att arbeta med
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {routineRequirementPoints.map((point) => {
+                  const hasValue = routineEntries.some((entry) => entry.requirementKey === point.key);
+                  const isActivePoint = point.key === activeRoutineRequirementKey;
+
+                  return (
+                    <button
+                      key={point.key}
+                      type="button"
+                      onClick={() => focusRoutinePoint(point.key)}
+                      className={`rounded-xl border px-3 py-3 text-left ${
+                        isActivePoint
+                          ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]"
+                          : "border-[color:var(--line)] bg-[color:var(--panel)]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-[color:var(--ink)]">{point.label}</span>
+                        <span className={`text-xs font-semibold ${hasValue ? "text-emerald-700" : "text-amber-700"}`}>
+                          {hasValue ? "Klar" : "Saknas"}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {canUsePremiumAi ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void suggestRoutineUpdate()}
+                  disabled={aiAssistLoading.routine}
+                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  {aiAssistLoading.routine ? "AI arbetar..." : "AI: Skapa för vald punkt"}
+                </button>
+                <button
+                  type="button"
+                  onClick={suggestAllMissingRoutines}
+                  disabled={aiAssistLoading.routine || routineCoverageMissingPoints.length === 0}
+                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  AI: Skapa alla saknade
+                </button>
+              </div>
+            ) : null}
+          </article>
+
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Nu redigerar du</p>
+            <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                {activeRoutineRequirement.label}
+              </p>
+              <p className="mt-1 text-xs text-[color:var(--muted)]">
+                {selectedRoutineEntry
+                  ? `Senast sparad rutin: ${selectedRoutineEntry.area}`
+                  : "Ingen rutin sparad än för den här punkten."}
+              </p>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              <input
+                id="routine-field-area"
+                value={getAnswerValue("routine_updates_area")}
+                onChange={(event) => setAnswerValue("routine_updates_area", event.target.value)}
+                placeholder="Berört område (ex. steril, journal, bemanning)"
+                className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <textarea
+                value={getAnswerValue("routine_updates_change_log")}
+                onChange={(event) =>
+                  setAnswerValue("routine_updates_change_log", event.target.value)
+                }
+                placeholder="Vad har ändrats och varför?"
+                rows={3}
+                className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <input
+                value={getAnswerValue("routine_updates_owner")}
+                onChange={(event) => setAnswerValue("routine_updates_owner", event.target.value)}
+                placeholder="Ansvarig för uppdateringen"
+                className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                Nästa uppföljning
+                <input
+                  type="date"
+                  value={getAnswerValue("routine_updates_next_review")}
+                  onChange={(event) =>
+                    setAnswerValue("routine_updates_next_review", event.target.value)
+                  }
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={saveRoutineForPoint}
+                className="w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white"
+              >
+                Spara rutin för vald punkt
+              </button>
+              {routineMessage ? (
+                <p className="text-sm text-[color:var(--muted)]">{routineMessage}</p>
+              ) : (
+                <p className="text-xs text-[color:var(--muted)]">Spara punkten när innehållet är klart.</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {selectedRoutineEntry ? (
+                  <button
+                    type="button"
+                    onClick={() => editRoutineForPoint(activeRoutineRequirementKey)}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                  >
+                    Ladda sparad rutin
+                  </button>
+                ) : null}
+                {selectedRoutineEntry ? (
+                  <button
+                    type="button"
+                    onClick={() => removeRoutineForPoint(activeRoutineRequirementKey)}
+                    className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                  >
+                    Ta bort sparad rutin
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void saveWorkspace()}
+              disabled={isSaving}
+              className="mt-4 w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {isSaving ? "Sparar..." : "Spara"}
+            </button>
+          </article>
+        </div>
+      </section>
       ) : null}
 
       {isOverview ? (

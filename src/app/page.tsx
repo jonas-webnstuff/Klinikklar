@@ -58,6 +58,7 @@ const pricingPlans = [
     price: "9 995 kr",
     billing: "engång",
     description: "För kliniker som behöver hjälp med själva ansökan utan löpande abonnemang.",
+    footerNote: "Startavgift 0 kr",
     features: [
       "Ansökningsstöd",
       "Dokumentgenomgång",
@@ -65,7 +66,7 @@ const pricingPlans = [
       "Checklista",
       "Rådgivning",
     ],
-    ctaLabel: "Boka ansökningshjälp",
+    ctaLabel: "Välj Ansökan",
     ctaHref: "#om-oss",
   },
   {
@@ -84,7 +85,7 @@ const pricingPlans = [
       "Årshjul",
       "AI-förslag",
     ],
-    ctaLabel: "Välj Klinikklar Drift",
+    ctaLabel: "Välj Drift",
     ctaHref: "/login?next=/workspace&plan=step2",
   },
   {
@@ -104,7 +105,7 @@ const pricingPlans = [
       "Löpande driftabonnemang krävs",
       "Support",
     ],
-    ctaLabel: "Välj Klinikklar Komplett",
+    ctaLabel: "Välj Komplett",
     ctaHref: "/login?next=/workspace&plan=step1",
     highlighted: true,
   },
@@ -123,7 +124,7 @@ const pricingPlans = [
       "Internkontroll",
       "Prioriterad support",
     ],
-    ctaLabel: "Välj Premium Drift",
+    ctaLabel: "Välj Premium",
     ctaHref: "/login?next=/workspace&plan=step3",
   },
 ];
@@ -268,12 +269,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mt-12 grid gap-8 rounded-[2rem] border border-[color:var(--line)] bg-white px-8 py-9 lg:grid-cols-4">
+      <section className="mt-12 grid gap-8 rounded-[2rem] border border-[color:var(--line)] bg-white px-8 py-9 lg:grid-cols-2 xl:grid-cols-4">
         {featureHighlights.map((item, index) => (
-          <article key={item.title} className="flex items-start gap-4">
+          <article key={item.title} className="flex items-start gap-4 min-w-0">
             <FeatureIcon index={index} />
-            <div>
-              <h2 className="text-[1.4rem] font-semibold tracking-[-0.03em] text-[color:var(--ink)]">
+            <div className="min-w-0">
+              <h2 className="break-words text-[1rem] leading-[1.2] font-semibold tracking-[-0.02em] text-[color:var(--ink)]">
                 {item.title}
               </h2>
               <p className="mt-2 text-[15px] leading-7 text-[color:var(--muted)]">{item.text}</p>
@@ -385,14 +386,10 @@ export default function Home() {
                 <div className="mt-2.5 min-h-[84px]">
                   <p className="text-xs leading-6 text-[color:var(--muted)]">{plan.description}</p>
                 </div>
-                {"footerNote" in plan ? (
-                  <p className="mt-3 min-h-[24px] text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                    {plan.footerNote}
-                  </p>
-                ) : (
-                  <div className="mt-3 min-h-[24px]" />
-                )}
-                <ul className="space-y-1.5 text-xs text-[color:var(--ink)]">
+                <p className="mt-3 min-h-[24px] text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                  {plan.footerNote}
+                </p>
+                <ul className="mt-2 space-y-1.5 pb-5 text-xs text-[color:var(--ink)]">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
                       <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[color:var(--brand)]" />

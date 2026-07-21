@@ -3532,59 +3532,67 @@ function WorkspacePageContent() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <article className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Ledningssystem</p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
               {ledningssystemMissingFields.length === 0
                 ? "Alla grundfält ifyllda"
                 : `${ledningssystemMissingFields.length} punkter saknas`}
             </p>
-            <a
-              href="/workspace?view=ledningssystem"
-              className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
-            >
-              Öppna ledningssystem
-            </a>
+            <div className="mt-auto pt-4">
+              <a
+                href="/workspace?view=ledningssystem"
+                className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+              >
+                Öppna ledningssystem
+              </a>
+            </div>
           </article>
 
-          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <article className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Risker</p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
               Hög prioritet: {riskSummary.highPriority}
             </p>
             <p className="mt-1 text-xs text-[color:var(--muted)]">Öppna risker: {riskSummary.open}</p>
-            <a
-              href="/workspace?view=riskanalyser"
-              className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
-            >
-              Öppna riskanalyser
-            </a>
+            <div className="mt-auto pt-4">
+              <a
+                href="/workspace?view=riskanalyser"
+                className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+              >
+                Öppna riskanalyser
+              </a>
+            </div>
           </article>
 
-          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <article className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Årshjul</p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">Försenade kontroller: {controlSummary.overdue}</p>
             <p className="mt-1 text-xs text-[color:var(--muted)]">Planerade: {controlSummary.pending}</p>
-            <a
-              href="/workspace?view=arshjul"
-              className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
-            >
-              Öppna årshjul
-            </a>
+            <div className="mt-auto pt-4">
+              <a
+                href="/workspace?view=arshjul"
+                className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+              >
+                Öppna årshjul
+              </a>
+            </div>
           </article>
 
-          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <article className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Avvikelser</p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
               Hög/kritisk: {incidentSummary.criticalOrHigh}
             </p>
             <p className="mt-1 text-xs text-[color:var(--muted)]">Öppna avvikelser: {incidentSummary.open}</p>
-            <a
-              href="/workspace?view=avvikelser"
-              className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
-            >
-              Öppna avvikelser
-            </a>
+            <div className="mt-auto pt-4">
+              <a
+                href="/workspace?view=avvikelser"
+                className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+              >
+                Öppna avvikelser
+              </a>
+            </div>
           </article>
         </div>
 

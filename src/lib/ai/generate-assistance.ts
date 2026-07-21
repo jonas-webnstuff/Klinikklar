@@ -6,6 +6,8 @@ const featureSchema = z.enum([
   "incident_investigation",
   "management_system",
   "controls",
+  "regulation_watch",
+  "revision_readiness",
 ]);
 
 const inputSchema = z.object({
@@ -60,6 +62,25 @@ const inputSchema = z.object({
       nextReview: z.string().default(""),
     })
     .optional(),
+  currentRegulationWatch: z
+    .object({
+      title: z.string().default(""),
+      source: z.string().default(""),
+      effectiveDate: z.string().default(""),
+      impact: z.enum(["low", "medium", "high"]).default("medium"),
+      recommendedAction: z.string().default(""),
+    })
+    .optional(),
+  currentRevisionReadiness: z
+    .object({
+      missingLedningssystem: z.array(z.string()).default([]),
+      openRisks: z.number().default(0),
+      highPriorityRisks: z.number().default(0),
+      openIncidents: z.number().default(0),
+      overdueControls: z.number().default(0),
+      revisionPercent: z.number().default(0),
+    })
+    .optional(),
 });
 
 const riskOutputSchema = z.object({
@@ -102,12 +123,27 @@ const controlsOutputSchema = z.object({
   nextDueDate: z.string(),
 });
 
+const regulationWatchOutputSchema = z.object({
+  feature: z.literal("regulation_watch"),
+  impact: z.enum(["low", "medium", "high"]),
+  recommendedAction: z.string(),
+});
+
+const revisionReadinessOutputSchema = z.object({
+  feature: z.literal("revision_readiness"),
+  focus: z.string(),
+  evidenceList: z.string(),
+  nextReviewDate: z.string(),
+});
+
 const outputSchema = z.discriminatedUnion("feature", [
   riskOutputSchema,
   routineOutputSchema,
   incidentOutputSchema,
   managementSystemOutputSchema,
   controlsOutputSchema,
+  regulationWatchOutputSchema,
+  revisionReadinessOutputSchema,
 ]);
 
 export type GenerateAssistanceInput = z.infer<typeof inputSchema>;
@@ -156,6 +192,18 @@ function featureGuidance(feature: GenerateAssistanceInput["feature"]) {
         "Föreslå en konkret kontrollpunkt som faktiskt går att utföra och följa upp i årshjulet.",
         "Knyt kontrollen till hygien, journalgranskning, avvikelser, kompetens eller utrustning.",
         "Välj rimlig frekvens och ge en tydlig beskrivning av vad som ska kontrolleras.",
+      ].join(" ");
+    case "regulation_watch":
+      return [
+        "Bedöm påverkan av en regeländring för privat tandvård i praktiken.",
+        "Ge en konkret rekommenderad åtgärd med tydlig ansvarspunkt och tidsram.",
+        "Välj påverkan low, medium eller high baserat på patientsäkerhet och driftpåverkan.",
+      ].join(" ");
+    case "revision_readiness":
+      return [
+        "Prioritera revisionsberedskap med fokus på underlag som ofta efterfrågas.",
+        "Skapa en kort evidenslista som är möjlig att samla under nästa period.",
+        "Sätt ett realistiskt nästa datum för intern revisionsöversyn.",
       ].join(" ");
   }
 }
@@ -223,6 +271,29 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
         ownerRole: input.currentControl?.ownerRole || "Kvalitetsansvarig",
         nextDueDate: input.currentControl?.nextDueDate || isoDateAfter(30),
       };
+    case "regulation_watch": {
+      const elevatedSignals =
+        (input.currentRevisionReadiness?.highPriorityRisks || 0) +
+          (input.currentRevisionReadiness?.overdueControls || 0) >
+        2;
+
+      return {
+        feature: "regulation_watch",
+        impact: elevatedSignals ? "high" : input.currentRegulationWatch?.impact || "medium",
+        recommendedAction:
+          input.currentRegulationWatch?.recommendedAction ||
+          "Gör en snabb gap-analys mot berörda rutiner, uppdatera styrande dokument och planera intern information inom 30 dagar.",
+      };
+    }
+    case "revision_readiness":
+      return {
+        feature: "revision_readiness",
+        focus:
+          "Säkra spårbarhet mellan risker, avvikelser, kontroller och beslut i ledningssystemet.",
+        evidenceList:
+          "- Uppdaterad versionslogg\n- Senaste riskgenomgång\n- Avvikelselogg med åtgärdsstatus\n- Genomförda kontroller i årshjul",
+        nextReviewDate: isoDateAfter(30),
+      };
   }
 }
 
@@ -238,6 +309,10 @@ function outputInstructions(feature: GenerateAssistanceInput["feature"]) {
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"management_system","owner":"...","processes":"...","documents":"..."}`;
     case "controls":
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"controls","title":"...","description":"...","frequency":"weekly|monthly|quarterly|yearly|ad_hoc","ownerRole":"...","nextDueDate":"YYYY-MM-DD"}`;
+    case "regulation_watch":
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"regulation_watch","impact":"low|medium|high","recommendedAction":"..."}`;
+    case "revision_readiness":
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"revision_readiness","focus":"...","evidenceList":"...","nextReviewDate":"YYYY-MM-DD"}`;
   }
 }
 
@@ -260,6 +335,8 @@ function buildPrompt(input: GenerateAssistanceInput) {
     `Nuvarande rutinutkast: ${JSON.stringify(input.currentRoutine || {})}`,
     `Nuvarande avvikelseutkast: ${JSON.stringify(input.currentIncident || {})}`,
     `Nuvarande ledningssystemutkast: ${JSON.stringify(input.currentManagementSystem || {})}`,
+    `Nuvarande regelbevakning: ${JSON.stringify(input.currentRegulationWatch || {})}`,
+    `Nuvarande revisionsberedskap: ${JSON.stringify(input.currentRevisionReadiness || {})}`,
     `Nuvarande kontrollutkast: ${JSON.stringify(input.currentControl || {})}`,
     "Om befintliga fält redan innehåller relevant information ska du bygga vidare på den i stället för att byta ämne.",
     "Ge konkreta, trovärdiga och kortfattade formuleringar som en klinik faktiskt kan använda direkt i sitt arbete.",

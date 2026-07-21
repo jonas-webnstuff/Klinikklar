@@ -10,6 +10,8 @@ const bodySchema = z.object({
     "incident_investigation",
     "management_system",
     "controls",
+    "regulation_watch",
+    "revision_readiness",
   ]),
   clinicName: z.string().default(""),
   municipality: z.string().default(""),
@@ -22,6 +24,8 @@ const bodySchema = z.object({
   currentIncident: z.any().optional(),
   currentManagementSystem: z.any().optional(),
   currentControl: z.any().optional(),
+  currentRegulationWatch: z.any().optional(),
+  currentRevisionReadiness: z.any().optional(),
 });
 
 export async function POST(request: Request) {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { isSuperAdminUser } from "@/lib/admin-access";
+import { HeaderNav } from "@/components/HeaderNav";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function Header() {
@@ -20,44 +21,7 @@ export async function Header() {
           </span>
           <span className="font-display text-[2rem] font-semibold tracking-[-0.04em]">Klinikklar</span>
         </Link>
-        <nav className="hidden items-center gap-6 text-[15px] font-medium text-[color:var(--ink)] lg:mr-4 lg:flex xl:mr-8 xl:gap-8">
-          {user ? (
-            <>
-              <Link href="/workspace" className="transition hover:text-[color:var(--brand)]">
-                Startsida
-              </Link>
-              <Link href="/workspace?view=ledningssystem" className="transition hover:text-[color:var(--brand)]">
-                Arbetsyta
-              </Link>
-              <Link href="/ansokan" className="transition hover:text-[color:var(--brand)]">
-                Ansökan
-              </Link>
-              {canAdminCustomers ? (
-                <Link href="/admin/customers" className="transition hover:text-[color:var(--brand)]">
-                  Admin
-                </Link>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <Link href="/#sa-fungerar-det" className="transition hover:text-[color:var(--brand)]">
-                Så fungerar det
-              </Link>
-              <Link href="/#funktioner" className="transition hover:text-[color:var(--brand)]">
-                Funktioner
-              </Link>
-              <Link href="/#priser" className="transition hover:text-[color:var(--brand)]">
-                Priser
-              </Link>
-              <Link href="/#om-oss" className="transition hover:text-[color:var(--brand)]">
-                Om oss
-              </Link>
-              <Link href="/#kunskapsbank" className="transition hover:text-[color:var(--brand)]">
-                Kunskapsbank
-              </Link>
-            </>
-          )}
-        </nav>
+        <HeaderNav isAuthenticated={Boolean(user)} canAdminCustomers={canAdminCustomers} />
         <div className="flex items-center gap-3">
           {user ? (
             <>

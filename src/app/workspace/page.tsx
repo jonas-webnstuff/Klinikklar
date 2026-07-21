@@ -128,12 +128,54 @@ type RoutineEntry = {
   updatedAt: string;
 };
 
+type RegulationWatchEntry = {
+  id: string;
+  title: string;
+  source: string;
+  effectiveDate: string;
+  impact: "low" | "medium" | "high";
+  recommendedAction: string;
+  status: "new" | "planned" | "completed";
+  createdAt: string;
+};
+
+type RegulationWatchFormState = {
+  title: string;
+  source: string;
+  effectiveDate: string;
+  impact: "low" | "medium" | "high";
+  recommendedAction: string;
+};
+
+type RevisionChecklistStatus = "missing" | "in_progress" | "complete";
+
+type SupportTicketPriority = "normal" | "high" | "urgent";
+
+type SupportTicketItem = {
+  id: string;
+  subject: string;
+  area: "regelbevakning" | "revision" | "internkontroll" | "risk" | "avvikelser" | "other";
+  priority: SupportTicketPriority;
+  message: string;
+  status: "submitted" | "in_progress" | "answered";
+  createdAt: string;
+};
+
+type SupportTicketFormState = {
+  subject: string;
+  area: "regelbevakning" | "revision" | "internkontroll" | "risk" | "avvikelser" | "other";
+  priority: SupportTicketPriority;
+  message: string;
+};
+
 type AiAssistFeature =
   | "risk_analysis"
   | "routine"
   | "incident_investigation"
   | "management_system"
-  | "controls";
+  | "controls"
+  | "regulation_watch"
+  | "revision_readiness";
 
 type AiAssistResponse =
   | {
@@ -170,6 +212,17 @@ type AiAssistResponse =
       frequency: ControlTaskFrequency;
       ownerRole: string;
       nextDueDate: string;
+    }
+  | {
+      feature: "regulation_watch";
+      impact: "low" | "medium" | "high";
+      recommendedAction: string;
+    }
+  | {
+      feature: "revision_readiness";
+      focus: string;
+      evidenceList: string;
+      nextReviewDate: string;
     };
 
 const planLabels: Record<PlanLevel, string> = {
@@ -225,6 +278,29 @@ const initialControlForm: ControlFormState = {
   ownerRole: "",
   nextDueDate: "",
 };
+
+const initialRegulationWatchForm: RegulationWatchFormState = {
+  title: "",
+  source: "",
+  effectiveDate: "",
+  impact: "medium",
+  recommendedAction: "",
+};
+
+const initialSupportTicketForm: SupportTicketFormState = {
+  subject: "",
+  area: "other",
+  priority: "high",
+  message: "",
+};
+
+const revisionChecklistItems = [
+  { key: "documents", label: "Styrande dokument uppdaterade" },
+  { key: "risks", label: "Riskregister uppdaterat" },
+  { key: "incidents", label: "Avvikelser utredda och åtgärdade" },
+  { key: "controls", label: "Årshjul och kontroller genomförda" },
+  { key: "ownership", label: "Ansvar, godkännande och versionslogg tydlig" },
+] as const;
 const ledningssystemRequirementItems = [
   { key: "management_system_purpose", label: "Syfte" },
   { key: "management_system_scope", label: "Omfattning" },
@@ -483,6 +559,14 @@ function WorkspacePageContent() {
   const [isControlsLoading, setIsControlsLoading] = useState(false);
   const [isControlSubmitting, setIsControlSubmitting] = useState(false);
   const [controlMessage, setControlMessage] = useState("");
+  const [regulationWatchForm, setRegulationWatchForm] = useState<RegulationWatchFormState>(
+    initialRegulationWatchForm
+  );
+  const [supportTicketForm, setSupportTicketForm] = useState<SupportTicketFormState>(
+    initialSupportTicketForm
+  );
+  const [supportMessage, setSupportMessage] = useState("");
+  const [isSupportSubmitting, setIsSupportSubmitting] = useState(false);
   const [routineMessage, setRoutineMessage] = useState("");
   const [aiAssistLoading, setAiAssistLoading] = useState<Record<AiAssistFeature, boolean>>({
     risk_analysis: false,
@@ -490,6 +574,8 @@ function WorkspacePageContent() {
     incident_investigation: false,
     management_system: false,
     controls: false,
+    regulation_watch: false,
+    revision_readiness: false,
   });
   const [activeRoutineRequirementKey, setActiveRoutineRequirementKey] = useState(
     routineRequirementPoints[0].key
@@ -718,6 +804,140 @@ function WorkspacePageContent() {
       return [];
     }
   }, [answers]);
+  const regulationWatchEntries = useMemo<RegulationWatchEntry[]>(() => {
+    const raw = answers.regulation_watch_entries?.answer;
+
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map((candidate) => {
+          if (!candidate || typeof candidate !== "object") {
+            return null;
+          }
+
+          const item = candidate as Partial<RegulationWatchEntry>;
+          const impact =
+            item.impact === "low" || item.impact === "high" || item.impact === "medium"
+              ? item.impact
+              : "medium";
+          const status =
+            item.status === "new" || item.status === "planned" || item.status === "completed"
+              ? item.status
+              : "new";
+
+          return {
+            id: typeof item.id === "string" && item.id ? item.id : `reg-${Date.now()}`,
+            title: typeof item.title === "string" ? item.title : "",
+            source: typeof item.source === "string" ? item.source : "",
+            effectiveDate: typeof item.effectiveDate === "string" ? item.effectiveDate : "",
+            impact,
+            recommendedAction:
+              typeof item.recommendedAction === "string" ? item.recommendedAction : "",
+            status,
+            createdAt:
+              typeof item.createdAt === "string" && item.createdAt
+                ? item.createdAt
+                : new Date().toISOString(),
+          };
+        })
+        .filter((entry): entry is RegulationWatchEntry => Boolean(entry));
+    } catch {
+      return [];
+    }
+  }, [answers]);
+  const revisionStatusMap = useMemo<Record<string, RevisionChecklistStatus>>(() => {
+    const raw = answers.revision_status_map?.answer;
+
+    if (!raw) {
+      return {};
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!parsed || typeof parsed !== "object") {
+        return {};
+      }
+
+      const result: Record<string, RevisionChecklistStatus> = {};
+
+      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+        if (value === "missing" || value === "in_progress" || value === "complete") {
+          result[key] = value;
+        }
+      }
+
+      return result;
+    } catch {
+      return {};
+    }
+  }, [answers]);
+  const supportTickets = useMemo<SupportTicketItem[]>(() => {
+    const raw = answers.priority_support_tickets?.answer;
+
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map((candidate) => {
+          if (!candidate || typeof candidate !== "object") {
+            return null;
+          }
+
+          const item = candidate as Partial<SupportTicketItem>;
+          const priority: SupportTicketPriority =
+            item.priority === "normal" || item.priority === "urgent" || item.priority === "high"
+              ? item.priority
+              : "high";
+          const status =
+            item.status === "in_progress" || item.status === "answered" || item.status === "submitted"
+              ? item.status
+              : "submitted";
+          const area =
+            item.area === "regelbevakning" ||
+            item.area === "revision" ||
+            item.area === "internkontroll" ||
+            item.area === "risk" ||
+            item.area === "avvikelser" ||
+            item.area === "other"
+              ? item.area
+              : "other";
+
+          return {
+            id: typeof item.id === "string" && item.id ? item.id : `sup-${Date.now()}`,
+            subject: typeof item.subject === "string" ? item.subject : "",
+            area,
+            priority,
+            message: typeof item.message === "string" ? item.message : "",
+            status,
+            createdAt:
+              typeof item.createdAt === "string" && item.createdAt
+                ? item.createdAt
+                : new Date().toISOString(),
+          };
+        })
+        .filter((entry): entry is SupportTicketItem => Boolean(entry));
+    } catch {
+      return [];
+    }
+  }, [answers]);
   const routineCoverageMissingPoints = useMemo(
     () =>
       routineRequirementPoints
@@ -742,8 +962,7 @@ function WorkspacePageContent() {
   const hasLedningssystemCoverage = ledningssystemMissingFields.length === 0;
   const isOverview = activeView === "overview";
   const isApplicationView = activeView === "dokument";
-  const showSection = (view: Exclude<WorkspaceView, "overview">) =>
-    activeView === view || (isOverview && view !== "dokument");
+  const showSection = (view: Exclude<WorkspaceView, "overview">) => activeView === view;
   const submissionBlockers = useMemo(() => {
     const blockers: string[] = [];
 
@@ -903,6 +1122,92 @@ function WorkspacePageContent() {
     controlSummary,
   ]);
 
+  const revisionProgress = useMemo(() => {
+    const total = revisionChecklistItems.length;
+    let complete = 0;
+    let inProgress = 0;
+
+    for (const item of revisionChecklistItems) {
+      const status = revisionStatusMap[item.key] || "missing";
+
+      if (status === "complete") {
+        complete += 1;
+      } else if (status === "in_progress") {
+        inProgress += 1;
+      }
+    }
+
+    return {
+      total,
+      complete,
+      inProgress,
+      missing: Math.max(total - complete - inProgress, 0),
+      percent: total > 0 ? Math.round((complete / total) * 100) : 0,
+    };
+  }, [revisionStatusMap]);
+
+  const pendingRegulationsCount = useMemo(
+    () => regulationWatchEntries.filter((entry) => entry.status !== "completed").length,
+    [regulationWatchEntries]
+  );
+
+  const overviewActions = useMemo(() => {
+    const actions: Array<{ id: string; text: string; href: string }> = [];
+
+    if (ledningssystemMissingFields.length > 0) {
+      const labels = ledningssystemMissingFields.slice(0, 2).join(", ");
+      const suffix = ledningssystemMissingFields.length > 2 ? " ..." : "";
+      actions.push({
+        id: "ledningssystem",
+        text: `Komplettera ledningssystem (${labels}${suffix})`,
+        href: "/workspace?view=ledningssystem",
+      });
+    }
+
+    if (canUseIncidentModule && routineCoverageMissingPoints.length > 0) {
+      actions.push({
+        id: "routines",
+        text: `Spara rutiner för ${routineCoverageMissingPoints.length} lagkravspunkter`,
+        href: "/workspace?view=ledningssystem",
+      });
+    }
+
+    if (canUseRiskModule && riskSummary.highPriority > 0) {
+      actions.push({
+        id: "risks",
+        text: `${riskSummary.highPriority} risker med hög prioritet behöver åtgärdsplan`,
+        href: "/workspace?view=riskanalyser",
+      });
+    }
+
+    if (canUseControlModule && controlSummary.overdue > 0) {
+      actions.push({
+        id: "controls",
+        text: `${controlSummary.overdue} kontroller i årshjulet är försenade`,
+        href: "/workspace?view=arshjul",
+      });
+    }
+
+    if (canUseIncidentModule && incidentSummary.criticalOrHigh > 0) {
+      actions.push({
+        id: "incidents",
+        text: `${incidentSummary.criticalOrHigh} avvikelser med hög/kritisk allvarlighetsgrad`,
+        href: "/workspace?view=avvikelser",
+      });
+    }
+
+    return actions;
+  }, [
+    ledningssystemMissingFields,
+    canUseIncidentModule,
+    routineCoverageMissingPoints,
+    canUseRiskModule,
+    riskSummary.highPriority,
+    canUseControlModule,
+    controlSummary.overdue,
+    incidentSummary.criticalOrHigh,
+  ]);
+
   const canGenerate =
     profile.clinicName.trim() &&
     profile.municipality.trim() &&
@@ -921,6 +1226,34 @@ function WorkspacePageContent() {
         followUpAnswer: prev[key]?.followUpAnswer || "",
       },
     }));
+  };
+
+  const upsertRegulationWatchEntry = (entry: RegulationWatchEntry) => {
+    const next = [entry, ...regulationWatchEntries.filter((item) => item.id !== entry.id)];
+    setAnswerValue("regulation_watch_entries", JSON.stringify(next));
+  };
+
+  const updateRegulationWatchStatus = (
+    entryId: string,
+    status: RegulationWatchEntry["status"]
+  ) => {
+    const next = regulationWatchEntries.map((entry) =>
+      entry.id === entryId ? { ...entry, status } : entry
+    );
+    setAnswerValue("regulation_watch_entries", JSON.stringify(next));
+  };
+
+  const setRevisionChecklistStatus = (key: string, status: RevisionChecklistStatus) => {
+    const nextMap = {
+      ...revisionStatusMap,
+      [key]: status,
+    };
+    setAnswerValue("revision_status_map", JSON.stringify(nextMap));
+  };
+
+  const addSupportTicket = (ticket: SupportTicketItem) => {
+    const next = [ticket, ...supportTickets.filter((item) => item.id !== ticket.id)];
+    setAnswerValue("priority_support_tickets", JSON.stringify(next));
   };
 
   const ensureRoutineDocumentReferences = (text: string) => {
@@ -1232,6 +1565,21 @@ function WorkspacePageContent() {
           owner: getAnswerValue("routine_updates_owner"),
           nextReview: getAnswerValue("routine_updates_next_review"),
         },
+        currentRegulationWatch: {
+          title: regulationWatchForm.title,
+          source: regulationWatchForm.source,
+          effectiveDate: regulationWatchForm.effectiveDate,
+          impact: regulationWatchForm.impact,
+          recommendedAction: regulationWatchForm.recommendedAction,
+        },
+        currentRevisionReadiness: {
+          missingLedningssystem: ledningssystemMissingFields,
+          openRisks: riskSummary.open,
+          highPriorityRisks: riskSummary.highPriority,
+          openIncidents: incidentSummary.open,
+          overdueControls: controlSummary.overdue,
+          revisionPercent: revisionProgress.percent,
+        },
       }),
     });
 
@@ -1459,6 +1807,101 @@ function WorkspacePageContent() {
       nextDueDate: suggestion.nextDueDate,
     });
     setControlMessage("AI-förslag infogat i kontrollpunkten.");
+  }
+
+  async function suggestRegulationWatchAction() {
+    const suggestion = await requestAiAssistance("regulation_watch");
+    if (!suggestion || suggestion.feature !== "regulation_watch") {
+      return;
+    }
+
+    setRegulationWatchForm((prev) => ({
+      ...prev,
+      impact: suggestion.impact,
+      recommendedAction: suggestion.recommendedAction,
+    }));
+    setWorkspaceMessage("AI har föreslagit påverkan och rekommenderad åtgärd för regelbevakningen.");
+  }
+
+  function saveRegulationWatchEntry() {
+    if (!regulationWatchForm.title.trim() || !regulationWatchForm.source.trim()) {
+      setWorkspaceMessage("Ange regeländring och källa innan posten sparas.");
+      return;
+    }
+
+    const entry: RegulationWatchEntry = {
+      id: `reg-${Date.now()}`,
+      title: regulationWatchForm.title.trim(),
+      source: regulationWatchForm.source.trim(),
+      effectiveDate: regulationWatchForm.effectiveDate,
+      impact: regulationWatchForm.impact,
+      recommendedAction: regulationWatchForm.recommendedAction.trim(),
+      status: "new",
+      createdAt: new Date().toISOString(),
+    };
+
+    upsertRegulationWatchEntry(entry);
+    setRegulationWatchForm(initialRegulationWatchForm);
+    setWorkspaceMessage("Regelbevakning sparad.");
+  }
+
+  async function suggestRevisionReadiness() {
+    const suggestion = await requestAiAssistance("revision_readiness");
+    if (!suggestion || suggestion.feature !== "revision_readiness") {
+      return;
+    }
+
+    setAnswerValue("revision_focus", suggestion.focus);
+    setAnswerValue("revision_evidence_list", suggestion.evidenceList);
+    setAnswerValue("revision_next_review", suggestion.nextReviewDate);
+    setWorkspaceMessage("AI har uppdaterat revisionsfokus, evidenslista och nästa översyn.");
+  }
+
+  async function submitPrioritySupportTicket() {
+    if (!supportTicketForm.subject.trim() || !supportTicketForm.message.trim()) {
+      setSupportMessage("Ange ämne och beskrivning innan ärendet skickas.");
+      return;
+    }
+
+    setIsSupportSubmitting(true);
+
+    const response = await fetch("/api/support/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subject: supportTicketForm.subject,
+        area: supportTicketForm.area,
+        priority: supportTicketForm.priority,
+        message: supportTicketForm.message,
+      }),
+    });
+
+    setIsSupportSubmitting(false);
+
+    const data = (await response.json()) as {
+      ok?: boolean;
+      error?: string;
+      ticketId?: string;
+      submittedAt?: string;
+    };
+
+    if (!response.ok || !data.ok || !data.ticketId) {
+      setSupportMessage(data.error || "Kunde inte skicka supportärendet.");
+      return;
+    }
+
+    addSupportTicket({
+      id: data.ticketId,
+      subject: supportTicketForm.subject.trim(),
+      area: supportTicketForm.area,
+      priority: supportTicketForm.priority,
+      message: supportTicketForm.message.trim(),
+      status: "submitted",
+      createdAt: data.submittedAt || new Date().toISOString(),
+    });
+
+    setSupportTicketForm(initialSupportTicketForm);
+    setSupportMessage("Prioriterat supportärende skickat. Ärendet syns i loggen nedan.");
   }
 
   async function loadApplicationReadiness() {
@@ -2781,176 +3224,386 @@ function WorkspacePageContent() {
               </article>
             ))}
           </div>
+
+          {canUsePremiumAi ? (
+            <section className="mt-6 space-y-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                  Premium driftstöd
+                </p>
+                <h3 className="mt-1 text-lg font-semibold text-[color:var(--ink)]">
+                  Regelbevakning, revision och prioriterad support
+                </h3>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-3">
+                <article className="rounded-xl border border-[color:var(--line)] bg-white p-4">
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">Regelbevakning (AI)</p>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">
+                    Registrera regeländringar och få AI-förslag på påverkan och åtgärd.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    <input
+                      value={regulationWatchForm.title}
+                      onChange={(event) =>
+                        setRegulationWatchForm((prev) => ({ ...prev, title: event.target.value }))
+                      }
+                      placeholder="Regeländring"
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={regulationWatchForm.source}
+                      onChange={(event) =>
+                        setRegulationWatchForm((prev) => ({ ...prev, source: event.target.value }))
+                      }
+                      placeholder="Källa (myndighet/länk)"
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="date"
+                      value={regulationWatchForm.effectiveDate}
+                      onChange={(event) =>
+                        setRegulationWatchForm((prev) => ({
+                          ...prev,
+                          effectiveDate: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <textarea
+                      value={regulationWatchForm.recommendedAction}
+                      onChange={(event) =>
+                        setRegulationWatchForm((prev) => ({
+                          ...prev,
+                          recommendedAction: event.target.value,
+                        }))
+                      }
+                      rows={3}
+                      placeholder="Rekommenderad åtgärd"
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={suggestRegulationWatchAction}
+                        disabled={aiAssistLoading.regulation_watch}
+                        className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        {aiAssistLoading.regulation_watch ? "AI arbetar..." : "AI: analysera"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveRegulationWatchEntry}
+                        className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white"
+                      >
+                        Spara post
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                      Aktiva poster: {pendingRegulationsCount}
+                    </p>
+                    {regulationWatchEntries.slice(0, 3).map((entry) => (
+                      <div key={entry.id} className="rounded-lg border border-[color:var(--line)] bg-[color:var(--panel)] p-2">
+                        <p className="text-sm font-semibold text-[color:var(--ink)]">{entry.title}</p>
+                        <p className="text-xs text-[color:var(--muted)]">{entry.source}</p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateRegulationWatchStatus(entry.id, "planned")}
+                            className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                          >
+                            Planerad
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateRegulationWatchStatus(entry.id, "completed")}
+                            className="rounded-lg bg-[color:var(--brand)] px-2 py-1 text-xs font-semibold text-white"
+                          >
+                            Klar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+
+                <article className="rounded-xl border border-[color:var(--line)] bg-white p-4">
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">Revision (AI)</p>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">
+                    Följ revisionsberedskap med checklista och AI-prioritering.
+                  </p>
+                  <div className="mt-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                        Revisionsgrad
+                      </p>
+                      <p className="text-sm font-semibold text-[color:var(--brand)]">
+                        {revisionProgress.percent}%
+                      </p>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-white">
+                      <div
+                        className="h-full rounded-full bg-[color:var(--brand)]"
+                        style={{ width: `${revisionProgress.percent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <ul className="mt-3 space-y-2">
+                    {revisionChecklistItems.map((item) => {
+                      const status = revisionStatusMap[item.key] || "missing";
+
+                      return (
+                        <li key={item.key} className="rounded-lg border border-[color:var(--line)] bg-[color:var(--panel)] p-2">
+                          <p className="text-sm font-medium text-[color:var(--ink)]">{item.label}</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setRevisionChecklistStatus(item.key, "missing")}
+                              className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                            >
+                              Saknas
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRevisionChecklistStatus(item.key, "in_progress")}
+                              className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                            >
+                              Pågår
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRevisionChecklistStatus(item.key, "complete")}
+                              className="rounded-lg bg-[color:var(--brand)] px-2 py-1 text-xs font-semibold text-white"
+                            >
+                              Klar
+                            </button>
+                            <span className="text-xs font-semibold text-[color:var(--muted)]">
+                              Status: {status === "missing" ? "Saknas" : status === "in_progress" ? "Pågår" : "Klar"}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <div className="mt-3 space-y-2">
+                    <button
+                      type="button"
+                      onClick={suggestRevisionReadiness}
+                      disabled={aiAssistLoading.revision_readiness}
+                      className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                    >
+                      {aiAssistLoading.revision_readiness ? "AI arbetar..." : "AI: prioritera revision"}
+                    </button>
+                    <textarea
+                      value={getAnswerValue("revision_focus")}
+                      onChange={(event) => setAnswerValue("revision_focus", event.target.value)}
+                      placeholder="AI-fokus för nästa revision"
+                      rows={2}
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <textarea
+                      value={getAnswerValue("revision_evidence_list")}
+                      onChange={(event) => setAnswerValue("revision_evidence_list", event.target.value)}
+                      placeholder="Evidenslista"
+                      rows={3}
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                  </div>
+                </article>
+
+                <article className="rounded-xl border border-[color:var(--line)] bg-white p-4">
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">Prioriterad support</p>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">
+                    Skapa prioriterat Premium-ärende med spårbar ticket-logg.
+                  </p>
+
+                  <div className="mt-3 space-y-2">
+                    <input
+                      value={supportTicketForm.subject}
+                      onChange={(event) =>
+                        setSupportTicketForm((prev) => ({ ...prev, subject: event.target.value }))
+                      }
+                      placeholder="Ämne"
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <select
+                        value={supportTicketForm.area}
+                        onChange={(event) =>
+                          setSupportTicketForm((prev) => ({
+                            ...prev,
+                            area: event.target.value as SupportTicketFormState["area"],
+                          }))
+                        }
+                        className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                      >
+                        <option value="regelbevakning">Regelbevakning</option>
+                        <option value="revision">Revision</option>
+                        <option value="internkontroll">Internkontroll</option>
+                        <option value="risk">Risk</option>
+                        <option value="avvikelser">Avvikelser</option>
+                        <option value="other">Annat</option>
+                      </select>
+                      <select
+                        value={supportTicketForm.priority}
+                        onChange={(event) =>
+                          setSupportTicketForm((prev) => ({
+                            ...prev,
+                            priority: event.target.value as SupportTicketPriority,
+                          }))
+                        }
+                        className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="high">Hög</option>
+                        <option value="urgent">Akut</option>
+                      </select>
+                    </div>
+                    <textarea
+                      value={supportTicketForm.message}
+                      onChange={(event) =>
+                        setSupportTicketForm((prev) => ({ ...prev, message: event.target.value }))
+                      }
+                      rows={4}
+                      placeholder="Beskriv behovet"
+                      className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={submitPrioritySupportTicket}
+                      disabled={isSupportSubmitting}
+                      className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                    >
+                      {isSupportSubmitting ? "Skickar..." : "Skicka prioriterat ärende"}
+                    </button>
+                    {supportMessage ? <p className="text-xs text-[color:var(--muted)]">{supportMessage}</p> : null}
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+                      Senaste ärenden
+                    </p>
+                    {supportTickets.slice(0, 3).map((ticket) => (
+                      <div key={ticket.id} className="rounded-lg border border-[color:var(--line)] bg-[color:var(--panel)] p-2">
+                        <p className="text-sm font-semibold text-[color:var(--ink)]">{ticket.subject}</p>
+                        <p className="text-xs text-[color:var(--muted)]">
+                          {ticket.id} • {ticket.priority.toUpperCase()} • {ticket.status}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void saveWorkspace()}
+                disabled={isSaving}
+                className="w-full rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {isSaving ? "Sparar..." : "Spara Premium-driftstöd"}
+              </button>
+            </section>
+          ) : null}
         </section>
       ) : null}
 
       {isOverview ? (
-      <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-6 rounded-3xl border border-[color:var(--line)] bg-white p-6">
-          <h2 className="text-xl font-semibold text-[color:var(--ink)]">1. Klinikprofil</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1 text-sm text-[color:var(--muted)]">
-              <span className="flex items-center gap-2">
-                Klinikens namn
-                <button
-                  type="button"
-                  onClick={() => setOpenHelpKey("clinicName")}
-                  className="flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--line)] bg-white text-xs font-bold text-[color:var(--brand)]"
-                  aria-label="Info om Klinikens namn"
-                >
-                  i
-                </button>
-              </span>
-              <input
-                value={profile.clinicName}
-                onChange={(event) =>
-                  setProfile((prev) => ({ ...prev, clinicName: event.target.value }))
-                }
-                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-[color:var(--ink)]"
-              />
-            </label>
-            <label className="space-y-1 text-sm text-[color:var(--muted)]">
-              <span className="flex items-center gap-2">
-                Organisationsnummer
-                <button
-                  type="button"
-                  onClick={() => setOpenHelpKey("orgNumber")}
-                  className="flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--line)] bg-white text-xs font-bold text-[color:var(--brand)]"
-                  aria-label="Info om Organisationsnummer"
-                >
-                  i
-                </button>
-              </span>
-              <input
-                value={profile.orgNumber}
-                onChange={(event) =>
-                  setProfile((prev) => ({ ...prev, orgNumber: event.target.value }))
-                }
-                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-[color:var(--ink)]"
-              />
-            </label>
-            <label className="space-y-1 text-sm text-[color:var(--muted)]">
-              <span className="flex items-center gap-2">
-                Kommun
-                <button
-                  type="button"
-                  onClick={() => setOpenHelpKey("municipality")}
-                  className="flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--line)] bg-white text-xs font-bold text-[color:var(--brand)]"
-                  aria-label="Info om Kommun"
-                >
-                  i
-                </button>
-              </span>
-              <input
-                value={profile.municipality}
-                onChange={(event) =>
-                  setProfile((prev) => ({ ...prev, municipality: event.target.value }))
-                }
-                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-[color:var(--ink)]"
-              />
-            </label>
-            <label className="space-y-1 text-sm text-[color:var(--muted)]">
-              <span className="flex items-center gap-2">
-                E-post
-                <button
-                  type="button"
-                  onClick={() => setOpenHelpKey("email")}
-                  className="flex h-6 w-6 items-center justify-center rounded-full border border-[color:var(--line)] bg-white text-xs font-bold text-[color:var(--brand)]"
-                  aria-label="Info om E-post"
-                >
-                  i
-                </button>
-              </span>
-              <input
-                value={profile.email}
-                onChange={(event) => setProfile((prev) => ({ ...prev, email: event.target.value }))}
-                className="w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-[color:var(--ink)]"
-              />
-            </label>
+      <section className="space-y-6 rounded-3xl border border-[color:var(--line)] bg-white p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+              Startsida
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-[color:var(--ink)]">Enkel åtgärdsöversikt</h2>
+            <p className="mt-2 text-sm text-[color:var(--muted)]">
+              Se vad som behöver göras nu och öppna rätt arbetsyta direkt.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Efterlevnad</p>
+            <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{progressPercent}%</p>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-6">
-          <h2 className="text-xl font-semibold text-[color:var(--ink)]">2. Kontrollpanel</h2>
-          <div className="mt-4 rounded-2xl bg-white p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-[color:var(--muted)]">Efterlevnadsgrad (aktuell period)</p>
-              <p className="text-sm font-semibold text-[color:var(--brand)]">{progressPercent}%</p>
-            </div>
-            <div className="mt-3 h-2 rounded-full bg-[color:var(--line)]">
-              <div
-                className="h-full rounded-full bg-[color:var(--brand)] transition-all"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </div>
-          {canUseIncidentModule || canUseRiskModule || canUseControlModule ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Avvikelser</p>
-                <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{incidentSummary.total}</p>
-                <p className="mt-1 text-xs text-[color:var(--muted)]">Totalt registrerade</p>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Status</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">
-                  Öppna {incidentSummary.open} / Utredning {incidentSummary.investigating} / Stängda {incidentSummary.closed}
-                </p>
-                <p className="mt-1 text-xs text-amber-700">
-                  Hög/Kritisk: {incidentSummary.criticalOrHigh}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Risker</p>
-                <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{riskSummary.total}</p>
-                <p className="mt-1 text-xs text-[color:var(--muted)]">Totalt registrerade</p>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Riskstatus</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">
-                  Öppna {riskSummary.open} / Åtgärdas {riskSummary.mitigating} / Stängda {riskSummary.closed}
-                </p>
-                <p className="mt-1 text-xs text-amber-700">Hög prioritet: {riskSummary.highPriority}</p>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Kontroller</p>
-                <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{controlSummary.total}</p>
-                <p className="mt-1 text-xs text-[color:var(--muted)]">Totalt registrerade</p>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Kontrollstatus</p>
-                <p className="mt-1 text-sm text-[color:var(--ink)]">
-                  Planerade {controlSummary.pending} / Klara {controlSummary.done}
-                </p>
-                <p className="mt-1 text-xs text-amber-700">Försenade: {controlSummary.overdue}</p>
-              </div>
-            </div>
-          ) : null}
-          <ul className="mt-4 space-y-3">
-            {complianceRequirements.map((item) => {
-              const done = completionMap.get(item.code);
-              return (
-                <li
-                  key={item.code}
-                  className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3"
-                >
-                  <p className="text-xs uppercase tracking-[0.16em] text-[color:var(--muted)]">
-                    {item.code}
-                  </p>
-                  <p className="text-sm font-semibold text-[color:var(--ink)]">{item.title}</p>
-                  <p className="text-sm text-[color:var(--muted)]">{item.description}</p>
-                  <p
-                    className={`mt-2 text-xs font-semibold uppercase tracking-[0.12em] ${
-                      done ? "text-emerald-700" : "text-amber-700"
-                    }`}
-                  >
-                    {done ? "Klart" : "Saknas"}
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Ledningssystem</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
+              {ledningssystemMissingFields.length === 0
+                ? "Alla grundfält ifyllda"
+                : `${ledningssystemMissingFields.length} punkter saknas`}
+            </p>
+            <a
+              href="/workspace?view=ledningssystem"
+              className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+            >
+              Öppna ledningssystem
+            </a>
+          </article>
+
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Risker</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
+              Hög prioritet: {riskSummary.highPriority}
+            </p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">Öppna risker: {riskSummary.open}</p>
+            <a
+              href="/workspace?view=riskanalyser"
+              className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+            >
+              Öppna riskanalyser
+            </a>
+          </article>
+
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Årshjul</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">Försenade kontroller: {controlSummary.overdue}</p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">Planerade: {controlSummary.pending}</p>
+            <a
+              href="/workspace?view=arshjul"
+              className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+            >
+              Öppna årshjul
+            </a>
+          </article>
+
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Avvikelser</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
+              Hög/kritisk: {incidentSummary.criticalOrHigh}
+            </p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">Öppna avvikelser: {incidentSummary.open}</p>
+            <a
+              href="/workspace?view=avvikelser"
+              className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+            >
+              Öppna avvikelser
+            </a>
+          </article>
         </div>
+
+        <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold text-[color:var(--ink)]">Behöver åtgärdas nu</p>
+          {overviewActions.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {overviewActions.map((action) => (
+                <li key={action.id} className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2">
+                  <a href={action.href} className="text-sm font-medium text-[color:var(--ink)] hover:text-[color:var(--brand)]">
+                    {action.text}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-emerald-700">Inga akuta åtgärder just nu.</p>
+          )}
+        </article>
       </section>
       ) : null}
 

@@ -176,6 +176,13 @@ type SupportTicketFormState = {
   message: string;
 };
 
+type PremiumKpiEvent = {
+  id: string;
+  type: "revision_export";
+  format: "docx" | "pdf";
+  createdAt: string;
+};
+
 type AiAssistFeature =
   | "risk_analysis"
   | "routine"
@@ -994,6 +1001,51 @@ function WorkspacePageContent() {
       return [];
     }
   }, [answers]);
+  const premiumKpiEvents = useMemo<PremiumKpiEvent[]>(() => {
+    const raw = answers.premium_kpi_events?.answer;
+
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      const result: PremiumKpiEvent[] = [];
+
+      for (const candidate of parsed) {
+        if (!candidate || typeof candidate !== "object") {
+          continue;
+        }
+
+        const item = candidate as Partial<PremiumKpiEvent>;
+        const type = item.type === "revision_export" ? item.type : null;
+        const format = item.format === "docx" || item.format === "pdf" ? item.format : null;
+
+        if (!type || !format) {
+          continue;
+        }
+
+        result.push({
+          id: typeof item.id === "string" && item.id ? item.id : `kpi-${Date.now()}`,
+          type,
+          format,
+          createdAt:
+            typeof item.createdAt === "string" && item.createdAt
+              ? item.createdAt
+              : new Date().toISOString(),
+        });
+      }
+
+      return result;
+    } catch {
+      return [];
+    }
+  }, [answers]);
   const routineCoverageMissingPoints = useMemo(
     () =>
       routineRequirementPoints
@@ -1156,6 +1208,38 @@ function WorkspacePageContent() {
       openOverdue,
     };
   }, [supportTickets]);
+
+  const premiumKpiSummary = useMemo(() => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    const regulationCreatedThisMonth = regulationWatchEntries.filter(
+      (entry) => new Date(entry.createdAt).getTime() >= monthStart
+    ).length;
+
+    const supportCreatedThisMonth = supportTickets.filter(
+      (ticket) => new Date(ticket.createdAt).getTime() >= monthStart
+    ).length;
+
+    const revisionExportsThisMonth = premiumKpiEvents.filter(
+      (event) => event.type === "revision_export" && new Date(event.createdAt).getTime() >= monthStart
+    ).length;
+
+    const activeModules = [
+      regulationWatchEntries.length > 0,
+      supportTickets.length > 0,
+      revisionExportsThisMonth > 0,
+    ].filter(Boolean).length;
+
+    return {
+      monthLabel: now.toLocaleDateString("sv-SE", { year: "numeric", month: "long" }),
+      regulationCreatedThisMonth,
+      supportCreatedThisMonth,
+      revisionExportsThisMonth,
+      activeModules,
+      adoptionPercent: Math.round((activeModules / 3) * 100),
+    };
+  }, [premiumKpiEvents, regulationWatchEntries, supportTickets]);
 
   const managementSystemSummary = useMemo(() => {
     const latestRoutineEntry = routineEntries
@@ -1349,6 +1433,11 @@ function WorkspacePageContent() {
   const addSupportTicket = (ticket: SupportTicketItem) => {
     const next = [ticket, ...supportTickets.filter((item) => item.id !== ticket.id)];
     setAnswerValue("priority_support_tickets", JSON.stringify(next));
+  };
+
+  const addPremiumKpiEvent = (event: PremiumKpiEvent) => {
+    const next = [event, ...premiumKpiEvents.filter((item) => item.id !== event.id)].slice(0, 120);
+    setAnswerValue("premium_kpi_events", JSON.stringify(next));
   };
 
   const updateSupportTicketStatus = (
@@ -2772,6 +2861,13 @@ function WorkspacePageContent() {
       anchor.click();
       URL.revokeObjectURL(url);
 
+      addPremiumKpiEvent({
+        id: `kpi-revision-export-${Date.now()}`,
+        type: "revision_export",
+        format,
+        createdAt: new Date().toISOString(),
+      });
+
       setWorkspaceMessage("Revisionspaket exporterat.");
     } catch {
       setWorkspaceMessage("Kunde inte exportera revisionspaket.");
@@ -3430,6 +3526,26 @@ function WorkspacePageContent() {
                 <h3 className="mt-1 text-lg font-semibold text-[color:var(--ink)]">
                   Regelbevakning, revision och prioriterad support
                 </h3>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <article className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Period</p>
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{premiumKpiSummary.monthLabel}</p>
+                </article>
+                <article className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Regelposter (mån)</p>
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{premiumKpiSummary.regulationCreatedThisMonth}</p>
+                </article>
+                <article className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Revisionspaket (mån)</p>
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{premiumKpiSummary.revisionExportsThisMonth}</p>
+                </article>
+                <article className="rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">SLA-traff</p>
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{supportSlaSummary.answeredPercent}%</p>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">Adoption: {premiumKpiSummary.adoptionPercent}% ({premiumKpiSummary.activeModules}/3 moduler)</p>
+                </article>
               </div>
 
               <div className="grid gap-4 xl:grid-cols-3">

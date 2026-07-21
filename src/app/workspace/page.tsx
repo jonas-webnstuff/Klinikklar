@@ -3270,77 +3270,94 @@ function WorkspacePageContent() {
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
                   Redigera ledningssystem
                 </p>
-                <textarea
-                  id="management-field-management_system_purpose"
-                  value={getAnswerValue("management_system_purpose")}
-                  onChange={(event) => setAnswerValue("management_system_purpose", event.target.value)}
-                  placeholder="Syfte med ledningssystemet (ex. säkerställa lagkrav och systematiskt kvalitetsarbete)"
-                  rows={2}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <textarea
-                  id="management-field-management_system_scope"
-                  value={getAnswerValue("management_system_scope")}
-                  onChange={(event) => setAnswerValue("management_system_scope", event.target.value)}
-                  placeholder="Omfattning (ex. patientmottagning, journalföring, steril, röntgen, personal, läkemedel)"
-                  rows={2}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <input
-                  id="management-field-management_system_owner"
-                  value={getAnswerValue("management_system_owner")}
-                  onChange={(event) => setAnswerValue("management_system_owner", event.target.value)}
-                  placeholder="Ansvarig roll (ex. Verksamhetschef)"
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <textarea
-                  value={getAnswerValue("management_system_process_owners")}
-                  onChange={(event) =>
-                    setAnswerValue("management_system_process_owners", event.target.value)
-                  }
-                  placeholder="Processägare per område (ex. Hygien: Anna, Journal: Johan, Avvikelser: Lisa)"
-                  rows={2}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <textarea
-                  id="management-field-management_system_processes"
-                  value={getAnswerValue("management_system_processes")}
-                  onChange={(event) =>
-                    setAnswerValue("management_system_processes", event.target.value)
-                  }
-                  placeholder="Beskriv huvudprocesser och hur de följs upp"
-                  rows={3}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <textarea
-                  id="management-field-management_system_documents"
-                  value={getAnswerValue("management_system_documents")}
-                  onChange={(event) =>
-                    setAnswerValue("management_system_documents", event.target.value)
-                  }
-                  placeholder="Styrande dokument (rutiner, policyer, riktlinjer)"
-                  rows={3}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input
-                    id="management-field-management_system_version"
-                    value={getAnswerValue("management_system_version")}
-                    onChange={(event) =>
-                      setAnswerValue("management_system_version", event.target.value)
-                    }
-                    placeholder="Version (ex. 1.0, 1.1, 1.2)"
+                <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                    1. Grund och ansvar
+                  </p>
+                  <textarea
+                    id="management-field-management_system_purpose"
+                    value={getAnswerValue("management_system_purpose")}
+                    onChange={(event) => setAnswerValue("management_system_purpose", event.target.value)}
+                    placeholder="Syfte med ledningssystemet (ex. säkerställa lagkrav och systematiskt kvalitetsarbete)"
+                    rows={2}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                  <textarea
+                    id="management-field-management_system_scope"
+                    value={getAnswerValue("management_system_scope")}
+                    onChange={(event) => setAnswerValue("management_system_scope", event.target.value)}
+                    placeholder="Omfattning (ex. patientmottagning, journalföring, steril, röntgen, personal, läkemedel)"
+                    rows={2}
                     className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                   />
                   <input
-                    id="management-field-management_system_approved_by"
-                    value={getAnswerValue("management_system_approved_by")}
-                    onChange={(event) =>
-                      setAnswerValue("management_system_approved_by", event.target.value)
-                    }
-                    placeholder="Godkänd av (ex. Verksamhetschef, styrelse)"
+                    id="management-field-management_system_owner"
+                    value={getAnswerValue("management_system_owner")}
+                    onChange={(event) => setAnswerValue("management_system_owner", event.target.value)}
+                    placeholder="Ansvarig roll (ex. Verksamhetschef)"
                     className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                   />
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                    2. Processer och dokument
+                  </p>
+                  <textarea
+                    value={getAnswerValue("management_system_process_owners")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_process_owners", event.target.value)
+                    }
+                    placeholder="Processägare per område (ex. Hygien: Anna, Journal: Johan, Avvikelser: Lisa)"
+                    rows={2}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                  <textarea
+                    id="management-field-management_system_processes"
+                    value={getAnswerValue("management_system_processes")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_processes", event.target.value)
+                    }
+                    placeholder="Beskriv huvudprocesser och hur de följs upp"
+                    rows={3}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                  <textarea
+                    id="management-field-management_system_documents"
+                    value={getAnswerValue("management_system_documents")}
+                    onChange={(event) =>
+                      setAnswerValue("management_system_documents", event.target.value)
+                    }
+                    placeholder="Styrande dokument (rutiner, policyer, riktlinjer)"
+                    rows={3}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                    3. Version och beslut
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      id="management-field-management_system_version"
+                      value={getAnswerValue("management_system_version")}
+                      onChange={(event) =>
+                        setAnswerValue("management_system_version", event.target.value)
+                      }
+                      placeholder="Version (ex. 1.0, 1.1, 1.2)"
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                    />
+                    <input
+                      id="management-field-management_system_approved_by"
+                      value={getAnswerValue("management_system_approved_by")}
+                      onChange={(event) =>
+                        setAnswerValue("management_system_approved_by", event.target.value)
+                      }
+                      placeholder="Godkänd av (ex. Verksamhetschef, styrelse)"
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                    />
+                  </div>
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
                   Uppföljning och beslut
@@ -3933,32 +3950,38 @@ function WorkspacePageContent() {
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
                 Välj punkt att arbeta med
               </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <ul className="mt-3 space-y-2 text-sm text-[color:var(--ink)]">
                 {routineRequirementPoints.map((point) => {
                   const hasValue = routineEntries.some((entry) => entry.requirementKey === point.key);
                   const isActivePoint = point.key === activeRoutineRequirementKey;
 
                   return (
-                    <button
+                    <li
                       key={point.key}
-                      type="button"
-                      onClick={() => focusRoutinePoint(point.key)}
-                      className={`rounded-xl border px-3 py-3 text-left ${
+                      className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
                         isActivePoint
                           ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]"
                           : "border-[color:var(--line)] bg-[color:var(--panel)]"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-[color:var(--ink)]">{point.label}</span>
-                        <span className={`text-xs font-semibold ${hasValue ? "text-emerald-700" : "text-amber-700"}`}>
-                          {hasValue ? "Klar" : "Saknas"}
-                        </span>
-                      </div>
-                    </button>
+                      <span className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${hasValue ? "bg-emerald-500" : "bg-amber-500"}`} />
+                        <span>{point.label}</span>
+                        {!hasValue ? (
+                          <span className="text-xs font-semibold text-amber-700">Saknas</span>
+                        ) : null}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => focusRoutinePoint(point.key)}
+                        className="rounded-lg border border-[color:var(--line)] bg-white px-2 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                      >
+                        {isActivePoint ? "Vald" : "Välj"}
+                      </button>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </div>
 
             {canUsePremiumAi ? (

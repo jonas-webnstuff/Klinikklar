@@ -245,13 +245,13 @@ type AiAssistResponse =
     };
 
 const planLabels: Record<PlanLevel, string> = {
-  step1: "Klinikklar Start",
+  step1: "Klinikklar Komplett",
   step2: "Klinikklar Drift",
   step3: "Klinikklar Premium",
 };
 
 const planFeatureMap: Record<PlanLevel, string[]> = {
-  step1: ["IVO", "Ledningssystem", "Dokument", "AI", "Checklistor", "Support"],
+  step1: ["IVO", "Ledningssystem", "Dokument", "AI", "Checklistor"],
   step2: ["Uppdateringar", "Avvikelser", "Rutiner", "Riskanalyser", "Årshjul"],
   step3: ["AI Compliance Officer", "Regelbevakning", "AI-förslag", "Revision", "Internkontroll"],
 };
@@ -1718,7 +1718,10 @@ function WorkspacePageContent() {
     const withChecklist = ensureAnnualControlChecklist(withRoutineRefs);
 
     setAnswerValue("management_system_documents", withChecklist);
-    setWorkspaceMessage("Årskontroll-checklista har infogats i Styrande dokument.");
+    setWorkspaceMessage(
+      "Årskontroll-checklista har infogats i Styrande dokument. Granska texten och klicka sedan Spara."
+    );
+    focusManagementField("management_system_documents");
   }
 
   function finalizeManagementSystemDecision() {

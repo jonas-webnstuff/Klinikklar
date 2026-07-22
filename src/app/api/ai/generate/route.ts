@@ -10,7 +10,7 @@ const planRank = {
 } as const;
 
 const planLabels = {
-  step1: "Klinikklar Start",
+  step1: "Klinikklar Komplett",
   step2: "Klinikklar Drift",
   step3: "Klinikklar Premium",
 } as const;

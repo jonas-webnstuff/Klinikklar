@@ -27,7 +27,7 @@ type DraftState = {
 };
 
 const planLabelMap: Record<"step1" | "step2" | "step3", string> = {
-  step1: "Klinikklar Start",
+  step1: "Klinikklar Komplett",
   step2: "Klinikklar Drift",
   step3: "Klinikklar Premium",
 };

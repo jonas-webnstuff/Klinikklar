@@ -23,7 +23,7 @@ const inputSchema = z.object({
 export type GenerateContentInput = z.infer<typeof inputSchema>;
 
 const planLabels: Record<PlanLevel, string> = {
-  step1: "Klinikklar Start",
+  step1: "Klinikklar Komplett",
   step2: "Klinikklar Drift",
   step3: "Klinikklar Premium",
 };
@@ -61,7 +61,7 @@ function documentGuidance(kind: DocumentKind): string[] {
 function planDocumentationProcess(plan: PlanLevel): string[] {
   if (plan === "step1") {
     return [
-      "Dokumentationsprocess (Start):",
+      "Dokumentationsprocess (Komplett):",
       "- Samla grundkrav och ansvarsfördelning i ett basdokument.",
       "- Uppdatera dokument månadsvis eller vid större förändring.",
       "- Håll version och datum synliga i varje dokument.",

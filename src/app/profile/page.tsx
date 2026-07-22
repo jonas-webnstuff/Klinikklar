@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import OrganizationMembersManager from "./OrganizationMembersManager";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -22,9 +23,13 @@ export default async function ProfilePage() {
 
   const { data: memberships } = await admin
     .from("organization_memberships")
-    .select("role, organizations(name, org_number)")
+    .select("role, organizations(id, name, org_number, email)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
+
+  const primaryOrg = memberships?.[0]?.organizations as
+    | { id?: string; name?: string; org_number?: string; email?: string }
+    | null;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10 lg:px-8">
@@ -35,7 +40,9 @@ export default async function ProfilePage() {
         <h1 className="mt-2 text-3xl font-semibold text-[color:var(--ink)]">
           {profile?.full_name || "Användare"}
         </h1>
-        <p className="mt-2 text-[color:var(--muted)]">{user.email}</p>
+        <p className="mt-2 text-[color:var(--muted)]">
+          Org.nr: {primaryOrg?.org_number || "-"}
+        </p>
       </header>
 
       <section className="mt-6 rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-[0_16px_40px_rgba(13,39,87,0.05)]">
@@ -56,11 +63,22 @@ export default async function ProfilePage() {
                   {(item.organizations as { name?: string } | null)?.name || "Okänd organisation"}
                 </p>
                 <p className="text-sm text-[color:var(--muted)]">
-                  Org.nr: {(item.organizations as { org_number?: string } | null)?.org_number || "-"}
+                  E-post: {(item.organizations as { email?: string } | null)?.email || user.email || "-"}
                 </p>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--brand)]">
                   Roll: {item.role}
                 </p>
+
+                {item.role === "owner" ? (
+                  <OrganizationMembersManager
+                    organizationId={
+                      (item.organizations as { id?: string } | null)?.id || ""
+                    }
+                    organizationName={
+                      (item.organizations as { name?: string } | null)?.name || "Organisation"
+                    }
+                  />
+                ) : null}
               </li>
             ))}
           </ul>

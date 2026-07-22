@@ -12,10 +12,11 @@ const bodySchema = z.object({
     "controls",
     "regulation_watch",
     "revision_readiness",
-     "responsible_people",
-     "ownership_suitability",
-     "facility_and_equipment",
-     "attachment_checklist",
+    "responsible_people",
+    "ownership_suitability",
+    "facility_and_equipment",
+    "attachment_checklist",
+    "application_evidence",
   ]),
   clinicName: z.string().default(""),
   municipality: z.string().default(""),
@@ -27,45 +28,54 @@ const bodySchema = z.object({
   currentRoutine: z.any().optional(),
   currentIncident: z.any().optional(),
   currentManagementSystem: z.any().optional(),
-    currentResponsiblePeople: z
-      .object({
-        operationsManagerName: z.string().default(""),
-        operationsManagerRole: z.string().default(""),
-        operationsManagerLicense: z.string().default(""),
-        medicalResponsibleName: z.string().default(""),
-        medicalResponsibleRole: z.string().default(""),
-        medicalResponsibleLicense: z.string().default(""),
-        qualityResponsibleName: z.string().default(""),
-        qualityResponsibleRole: z.string().default(""),
-        qualityResponsibleCompetence: z.string().default(""),
-      })
-      .optional(),
-    currentOwnershipSuitability: z
-      .object({
-        legalEntityName: z.string().default(""),
-        legalEntityOrgNumber: z.string().default(""),
-        representativeName: z.string().default(""),
-        ownershipStructureDescription: z.string().default(""),
-        suitabilityStatement: z.string().default(""),
-      })
-      .optional(),
-    currentFacilityAndEquipment: z
-      .object({
-        premisesDescription: z.string().default(""),
-        hygieneFlow: z.string().default(""),
-        equipmentScope: z.string().default(""),
-        specialRisks: z.string().default(""),
-      })
-      .optional(),
-    currentAttachmentChecklist: z
-      .object({
-        coverNote: z.string().default(""),
-        businessDescriptionRef: z.string().default(""),
-        managementSystemRef: z.string().default(""),
-        staffingRef: z.string().default(""),
-        evidenceIndexRef: z.string().default(""),
-      })
-      .optional(),
+  currentResponsiblePeople: z
+    .object({
+      operationsManagerName: z.string().default(""),
+      operationsManagerRole: z.string().default(""),
+      operationsManagerLicense: z.string().default(""),
+      medicalResponsibleName: z.string().default(""),
+      medicalResponsibleRole: z.string().default(""),
+      medicalResponsibleLicense: z.string().default(""),
+      qualityResponsibleName: z.string().default(""),
+      qualityResponsibleRole: z.string().default(""),
+      qualityResponsibleCompetence: z.string().default(""),
+    })
+    .optional(),
+  currentOwnershipSuitability: z
+    .object({
+      legalEntityName: z.string().default(""),
+      legalEntityOrgNumber: z.string().default(""),
+      representativeName: z.string().default(""),
+      ownershipStructureDescription: z.string().default(""),
+      suitabilityStatement: z.string().default(""),
+    })
+    .optional(),
+  currentFacilityAndEquipment: z
+    .object({
+      premisesDescription: z.string().default(""),
+      hygieneFlow: z.string().default(""),
+      equipmentScope: z.string().default(""),
+      specialRisks: z.string().default(""),
+    })
+    .optional(),
+  currentAttachmentChecklist: z
+    .object({
+      coverNote: z.string().default(""),
+      businessDescriptionRef: z.string().default(""),
+      managementSystemRef: z.string().default(""),
+      staffingRef: z.string().default(""),
+      evidenceIndexRef: z.string().default(""),
+    })
+    .optional(),
+  currentEvidence: z
+    .object({
+      requirementCode: z.string().default(""),
+      requirementTitle: z.string().default(""),
+      title: z.string().default(""),
+      note: z.string().default(""),
+      filePath: z.string().default(""),
+    })
+    .optional(),
   currentControl: z.any().optional(),
   currentRegulationWatch: z.any().optional(),
   currentRevisionReadiness: z.any().optional(),
@@ -77,7 +87,7 @@ export async function POST(request: Request) {
 
     if (payload.plan === "step2") {
       return NextResponse.json(
-        { error: "AI-formulärstöd ingår i Klinikklar Komplett och Klinikklar Premium." },
+        { error: "AI-stöd i formulär och ansökan ingår i Klinikklar Komplett och Klinikklar Premium." },
         { status: 403 }
       );
     }

@@ -10,6 +10,7 @@ const featureSchema = z.enum([
   "ownership_suitability",
   "facility_and_equipment",
   "attachment_checklist",
+  "application_evidence",
   "regulation_watch",
   "revision_readiness",
 ]);
@@ -95,6 +96,15 @@ const inputSchema = z.object({
       managementSystemRef: z.string().default(""),
       staffingRef: z.string().default(""),
       evidenceIndexRef: z.string().default(""),
+    })
+    .optional(),
+  currentEvidence: z
+    .object({
+      requirementCode: z.string().default(""),
+      requirementTitle: z.string().default(""),
+      title: z.string().default(""),
+      note: z.string().default(""),
+      filePath: z.string().default(""),
     })
     .optional(),
   currentRoutine: z
@@ -205,6 +215,13 @@ const attachmentChecklistOutputSchema = z.object({
   evidenceIndexRef: z.string(),
 });
 
+const applicationEvidenceOutputSchema = z.object({
+  feature: z.literal("application_evidence"),
+  title: z.string(),
+  note: z.string(),
+  filePathHint: z.string(),
+});
+
 const regulationWatchOutputSchema = z.object({
   feature: z.literal("regulation_watch"),
   impact: z.enum(["low", "medium", "high"]),
@@ -228,6 +245,7 @@ const outputSchema = z.discriminatedUnion("feature", [
   ownershipSuitabilityOutputSchema,
   facilityAndEquipmentOutputSchema,
   attachmentChecklistOutputSchema,
+  applicationEvidenceOutputSchema,
   regulationWatchOutputSchema,
   revisionReadinessOutputSchema,
 ]);
@@ -336,6 +354,12 @@ function featureGuidance(feature: GenerateAssistanceInput["feature"]) {
         "Föreslå en användbar bilagechecklista med tydliga referenser till underlag som normalt ingår i ansökan.",
         "Referenserna ska vara enkla att följa upp och uppdatera över tid.",
         "Skriv så att listan kan användas både vid intern granskning och inför export.",
+      ].join(" ");
+    case "application_evidence":
+      return [
+        "Föreslå ett konkret evidensutkast knutet till valt krav i ansökan.",
+        "Skriv en kort titel, en praktisk notering om vad underlaget visar och en möjlig referens till var dokumentet kan lagras.",
+        "Undvik att hitta på formella dokument som inte brukar finnas i mindre tandvårdskliniker.",
       ].join(" ");
     case "regulation_watch":
       return [
@@ -520,6 +544,27 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
             ? "Bilageförteckning med numrering, dokumentnamn, version, senast uppdaterad och kort syfte per underlag."
             : "Bilageförteckning med numrering, dokumentnamn, version och kort syfte per underlag."),
       };
+    case "application_evidence": {
+      const requirementLabel = [
+        input.currentEvidence?.requirementCode,
+        input.currentEvidence?.requirementTitle,
+      ]
+        .filter(Boolean)
+        .join(" - ");
+
+      return {
+        feature: "application_evidence",
+        title:
+          input.currentEvidence?.title ||
+          `Underlag ${requirementLabel || "för aktuellt krav"}`,
+        note:
+          input.currentEvidence?.note ||
+          "Dokumentet visar hur kravet uppfylls i praktiken, inklusive ansvarig roll, senaste uppdatering och hur uppföljning sker i verksamheten.",
+        filePathHint:
+          input.currentEvidence?.filePath ||
+          "/docs/ansokan/[kravkod]-underlag-v1.docx",
+      };
+    }
     case "regulation_watch": {
       const elevatedSignals =
         (input.currentRevisionReadiness?.highPriorityRisks || 0) +
@@ -566,6 +611,8 @@ function outputInstructions(feature: GenerateAssistanceInput["feature"]) {
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"facility_and_equipment","premisesDescription":"...","hygieneFlow":"...","equipmentScope":"...","specialRisks":"..."}`;
     case "attachment_checklist":
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"attachment_checklist","coverNote":"...","businessDescriptionRef":"...","managementSystemRef":"...","staffingRef":"...","evidenceIndexRef":"..."}`;
+    case "application_evidence":
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"application_evidence","title":"...","note":"...","filePathHint":"..."}`;
     case "regulation_watch":
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"regulation_watch","impact":"low|medium|high","recommendedAction":"..."}`;
     case "revision_readiness":
@@ -597,6 +644,7 @@ function buildPrompt(input: GenerateAssistanceInput) {
     `Nuvarande ägarbild och lämplighet: ${JSON.stringify(input.currentOwnershipSuitability || {})}`,
     `Nuvarande lokaler och utrustning: ${JSON.stringify(input.currentFacilityAndEquipment || {})}`,
     `Nuvarande bilagechecklista: ${JSON.stringify(input.currentAttachmentChecklist || {})}`,
+    `Nuvarande evidensutkast i ansökan: ${JSON.stringify(input.currentEvidence || {})}`,
     `Nuvarande regelbevakning: ${JSON.stringify(input.currentRegulationWatch || {})}`,
     `Nuvarande revisionsberedskap: ${JSON.stringify(input.currentRevisionReadiness || {})}`,
     `Nuvarande kontrollutkast: ${JSON.stringify(input.currentControl || {})}`,

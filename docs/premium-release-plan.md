@@ -64,12 +64,13 @@ Definition of done:
 ## Vad kan marknadsforas direkt (nar punkt 1 ar live)
 
 ### Ny premium-copy (kort)
+- "AI-stod i ansokan for snabbare och tydligare underlag"
 - "Regelbevakning med kallsparning och atgardsforslag"
 - "Revisionsberedskap med tydlig luckbild"
 - "Prioriterad support med tydlig svarstid"
 
 ### Ny premium-copy (lang)
-"Klinikklar Premium ger kliniken ett proaktivt compliance-stod: regelbevakning med kallsparning, AI-prioriterad revisionsberedskap och prioriterad support med tydliga svarstider. Malet ar att minska tillsynsrisk och spara administrativ tid varje manad."
+"Klinikklar Premium ger kliniken ett proaktivt compliance-stod: AI-stod i ansokan, regelbevakning med kallsparning, AI-prioriterad revisionsberedskap och prioriterad support med tydliga svarstider. Malet ar att minska tillsynsrisk och spara administrativ tid varje manad."
 
 ## KPI:er som bevisar vardet
 

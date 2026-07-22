@@ -4,6 +4,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type ApplicationStatus = "draft" | "in_review" | "ready_to_submit" | "submitted";
+type PlanLevel = "step1" | "step2" | "step3";
+
+type AiEvidenceSuggestion = {
+  feature: "application_evidence";
+  title: string;
+  note: string;
+  filePathHint: string;
+};
 
 type IvoChecklistItem = {
   key: string;
@@ -88,6 +96,7 @@ const stageLabels: Record<ApplicationStatus, string> = {
 
 export default function AnsokanPage() {
   const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("draft");
+  const [activePlan, setActivePlan] = useState<PlanLevel | null>(null);
   const [checklist, setChecklist] = useState<ReadinessChecklist | null>(null);
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
@@ -96,6 +105,8 @@ export default function AnsokanPage() {
   const [statusMessage, setStatusMessage] = useState("");
   const [evidenceMessage, setEvidenceMessage] = useState("");
   const [isSavingEvidence, setIsSavingEvidence] = useState(false);
+  const [isAiSuggestingEvidence, setIsAiSuggestingEvidence] = useState(false);
+  const [aiContext, setAiContext] = useState({ clinicName: "", municipality: "" });
   const [evidenceForm, setEvidenceForm] = useState({
     requirementId: "",
     title: "",
@@ -104,6 +115,7 @@ export default function AnsokanPage() {
   });
 
   const activeStageIndex = stages.findIndex((stage) => stage.key === applicationStatus);
+  const canUseAiSupport = activePlan === "step1" || activePlan === "step3";
 
   const readinessItems = useMemo(
     () => [
@@ -199,6 +211,36 @@ export default function AnsokanPage() {
     }));
   }
 
+  async function loadWorkspacePlanContext() {
+    const response = await fetch("/api/workspace/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as {
+      found?: boolean;
+      plan?: PlanLevel | null;
+      profile?: {
+        clinicName?: string;
+        municipality?: string;
+      };
+    };
+
+    if (data.plan === "step1" || data.plan === "step2" || data.plan === "step3") {
+      setActivePlan(data.plan);
+    }
+
+    setAiContext({
+      clinicName: data.profile?.clinicName || "",
+      municipality: data.profile?.municipality || "",
+    });
+  }
+
   async function updateApplicationStatus(status: ApplicationStatus) {
     setStatusMessage("");
 
@@ -254,9 +296,69 @@ export default function AnsokanPage() {
     await loadApplicationState();
   }
 
+  async function suggestEvidence() {
+    if (!canUseAiSupport || !activePlan) {
+      setEvidenceMessage("AI-stöd i ansökan ingår i Klinikklar Komplett och Klinikklar Premium.");
+      return;
+    }
+
+    if (!evidenceForm.requirementId) {
+      setEvidenceMessage("Välj krav innan du ber om AI-förslag.");
+      return;
+    }
+
+    const selectedRequirement = requirements.find((item) => item.id === evidenceForm.requirementId);
+
+    setIsAiSuggestingEvidence(true);
+    setEvidenceMessage("");
+
+    const response = await fetch("/api/ai/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        feature: "application_evidence",
+        clinicName: aiContext.clinicName,
+        municipality: aiContext.municipality,
+        currentEvidence: {
+          requirementCode: selectedRequirement?.code || "",
+          requirementTitle: selectedRequirement?.title || "",
+          title: evidenceForm.title,
+          note: evidenceForm.note,
+          filePath: evidenceForm.filePath,
+        },
+      }),
+    });
+
+    setIsAiSuggestingEvidence(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setEvidenceMessage(data.error || "Kunde inte skapa AI-förslag för evidens.");
+      return;
+    }
+
+    const data = (await response.json()) as AiEvidenceSuggestion;
+
+    if (data.feature !== "application_evidence") {
+      setEvidenceMessage("AI-svaret hade fel format. Försök igen.");
+      return;
+    }
+
+    setEvidenceForm((prev) => ({
+      ...prev,
+      title: data.title,
+      note: data.note,
+      filePath: data.filePathHint,
+    }));
+
+    setEvidenceMessage("AI-förslag infogat i evidensformuläret.");
+  }
+
   useEffect(() => {
     void loadApplicationState();
     void loadEvidence();
+    void loadWorkspacePlanContext();
   }, []);
 
   return (
@@ -496,12 +598,25 @@ export default function AnsokanPage() {
             />
             <button
               type="button"
+              onClick={suggestEvidence}
+              disabled={isAiSuggestingEvidence}
+              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              {isAiSuggestingEvidence ? "AI arbetar..." : "AI: Föreslå evidensutkast"}
+            </button>
+            <button
+              type="button"
               onClick={createEvidence}
               disabled={isSavingEvidence}
               className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
             >
               {isSavingEvidence ? "Sparar..." : "Spara evidens"}
             </button>
+            {!canUseAiSupport && activePlan === "step2" ? (
+              <p className="text-xs text-[color:var(--muted)]">
+                AI-stöd i ansökan ingår i Klinikklar Komplett och Klinikklar Premium.
+              </p>
+            ) : null}
             {evidenceMessage ? <p className="text-sm text-[color:var(--muted)]">{evidenceMessage}</p> : null}
           </div>
 

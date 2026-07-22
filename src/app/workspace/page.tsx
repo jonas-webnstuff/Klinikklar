@@ -298,7 +298,7 @@ const planLabels: Record<PlanLevel, string> = {
 };
 
 const planFeatureMap: Record<PlanLevel, string[]> = {
-  step1: ["IVO", "Ledningssystem", "Dokument", "AI", "Checklistor", "Riskanalyser"],
+  step1: ["IVO", "AI-stöd i Ansökan", "Ledningssystem", "Dokument", "AI", "Checklistor", "Riskanalyser"],
   step2: ["Uppdateringar", "Avvikelser", "Rutiner", "Riskanalyser", "Årshjul"],
   step3: ["AI Compliance Officer", "Regelbevakning", "AI-förslag", "Revision", "Internkontroll"],
 };

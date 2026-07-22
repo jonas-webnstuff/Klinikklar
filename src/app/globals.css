@@ -12,6 +12,8 @@
   --brand-2: #1f9b5c;
   --brand-soft: #ebf9f1;
   --accent: #9dc4f0;
+  --font-sora: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-space-grotesk: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 @theme inline {

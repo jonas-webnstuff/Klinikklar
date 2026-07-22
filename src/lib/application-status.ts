@@ -314,10 +314,7 @@ export async function computeReadinessChecklist(
 
   const missingIvoItems = ivoChecklistItems.filter((item) => !item.done).map((item) => item.label);
   const ivoChecklistComplete = missingIvoItems.length === 0;
-  const advisoryIvoGaps = [
-    "Agarbild och bilagechecklista finns nu i ansokningsflodet men ar fortfarande fritext utan egen datamodell eller formell verifiering.",
-    "Lokaler, utrustning och sarskilda riskomraden finns nu i ansokningsflodet men ar fortfarande fritext utan separat verifiering eller teknisk kontroll av utrustning.",
-  ];
+  const advisoryIvoGaps: string[] = [];
 
   const canMoveToReady =
     hasOrganization && hasClinic && questionnaireComplete && requirementsComplete && ivoChecklistComplete;

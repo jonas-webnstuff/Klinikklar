@@ -38,7 +38,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (!(["owner", "admin", "editor"] as const).includes(membership.role as "owner" | "admin" | "editor" | "viewer")) {
+    if (membership.role !== "owner" && membership.role !== "admin" && membership.role !== "editor") {
       return NextResponse.json(
         { ok: false, error: "Din roll tillåter inte att ändra organisationsuppgifter." },
         { status: 403 }

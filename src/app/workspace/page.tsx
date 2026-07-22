@@ -251,7 +251,7 @@ const planLabels: Record<PlanLevel, string> = {
 };
 
 const planFeatureMap: Record<PlanLevel, string[]> = {
-  step1: ["IVO", "Ledningssystem", "Dokument", "AI", "Checklistor"],
+  step1: ["IVO", "Ledningssystem", "Dokument", "AI", "Checklistor", "Riskanalyser"],
   step2: ["Uppdateringar", "Avvikelser", "Rutiner", "Riskanalyser", "Årshjul"],
   step3: ["AI Compliance Officer", "Regelbevakning", "AI-förslag", "Revision", "Internkontroll"],
 };
@@ -546,7 +546,7 @@ const ledningssystemModules = [
   {
     key: "risk_register",
     title: "Riskanalyser",
-    availableFrom: "step2" as PlanLevel,
+    availableFrom: "step1" as PlanLevel,
     cadence: "Kvartalsvis genomgång",
     description: "Följ risknivå, åtgärdsägare och status över tid.",
   },
@@ -865,8 +865,9 @@ function WorkspacePageContent() {
     planAccessRank[activePlan] >= planAccessRank[requiredPlan];
 
   const canUseIncidentModule = hasPlanAccess("step2");
-  const canUseRiskModule = hasPlanAccess("step2");
+  const canUseRiskModule = hasPlanAccess("step1");
   const canUseControlModule = hasPlanAccess("step2");
+  const canUseAiSupport = activePlan === "step1" || activePlan === "step3";
   const canUsePremiumAi = hasPlanAccess("step3");
   const routineEntries = useMemo<RoutineEntry[]>(() => {
     const raw = answers.routine_updates_entries?.answer;
@@ -1941,7 +1942,7 @@ function WorkspacePageContent() {
   }
 
   async function requestAiAssistance(feature: AiAssistFeature) {
-    if (!canUsePremiumAi) {
+    if (!canUseAiSupport) {
       return null;
     }
 
@@ -2060,7 +2061,7 @@ function WorkspacePageContent() {
   }
 
   async function suggestAllMissingRoutines() {
-    if (!canUsePremiumAi) {
+    if (!canUseAiSupport) {
       return;
     }
 
@@ -3381,7 +3382,7 @@ function WorkspacePageContent() {
                   Infoga i Styrande dokument
                 </button>
               </div>
-              {canUsePremiumAi ? (
+              {canUseAiSupport ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -4118,7 +4119,7 @@ function WorkspacePageContent() {
               </ul>
             </div>
 
-            {canUsePremiumAi ? (
+            {canUseAiSupport ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -4379,7 +4380,7 @@ function WorkspacePageContent() {
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny avvikelse</p>
-              {canUsePremiumAi ? (
+              {canUseAiSupport ? (
                 <button
                   type="button"
                   onClick={writeIncidentInvestigation}
@@ -4522,7 +4523,7 @@ function WorkspacePageContent() {
 
       {showSection("riskanalyser") ? (
       <section id="riskanalyser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Riskanalyser (Drift/Premium)</h2>
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Riskanalyser (Komplett/Drift/Premium)</h2>
         <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
           <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
           <p className="mt-1 text-sm text-[color:var(--muted)]">
@@ -4543,7 +4544,7 @@ function WorkspacePageContent() {
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny risk</p>
-              {canUsePremiumAi ? (
+              {canUseAiSupport ? (
                 <button
                   type="button"
                   onClick={suggestRiskAnalysis}
@@ -4706,7 +4707,7 @@ function WorkspacePageContent() {
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny kontrollpunkt</p>
-              {canUsePremiumAi ? (
+              {canUseAiSupport ? (
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"

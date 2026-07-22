@@ -44,7 +44,7 @@ export const complianceRequirements: ComplianceRequirement[] = [
     title: "Riskanalys",
     description: "Identifiering av risker samt åtgärdsplaner.",
     documentKind: "riskanalys",
-    availableFrom: "step2",
+    availableFrom: "step1",
   },
   {
     code: "R-04",

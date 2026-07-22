@@ -32,9 +32,19 @@ export async function POST(request: Request) {
   try {
     const payload = bodySchema.parse(await request.json());
 
-    if (payload.plan !== "step3") {
+    if (payload.plan === "step2") {
       return NextResponse.json(
-        { error: "AI-formulärstöd ingår endast i Klinikklar Premium." },
+        { error: "AI-formulärstöd ingår i Klinikklar Komplett och Klinikklar Premium." },
+        { status: 403 }
+      );
+    }
+
+    if (
+      (payload.feature === "regulation_watch" || payload.feature === "revision_readiness") &&
+      payload.plan !== "step3"
+    ) {
+      return NextResponse.json(
+        { error: "Den här AI-funktionen ingår endast i Klinikklar Premium." },
         { status: 403 }
       );
     }

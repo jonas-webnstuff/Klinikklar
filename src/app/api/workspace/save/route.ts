@@ -98,6 +98,7 @@ async function getOrCreateClinic(
         address: profile.address,
         postal_code: profile.postalCode,
         municipality: profile.municipality,
+        region: "Ej angivet",
       })
       .eq("id", existing.id);
 
@@ -112,6 +113,7 @@ async function getOrCreateClinic(
       address: profile.address,
       postal_code: profile.postalCode,
       municipality: profile.municipality,
+      region: "Ej angivet",
     })
     .select("id")
     .single();

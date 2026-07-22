@@ -469,11 +469,11 @@ const clinicProfileHelp: HelpEntry[] = [
   },
   {
     id: "municipality",
-    label: "Kommun",
+    label: "Ort",
     helpDescription:
-      "Ange vilken kommun verksamhetsstället tillhör. Det hjälper till att tydliggöra var verksamheten ska bedrivas och används ofta tillsammans med adressuppgifter i underlagen.",
+      "Ange vilken ort verksamhetsstället tillhör. Det hjälper till att tydliggöra var verksamheten ska bedrivas och används ofta tillsammans med adressuppgifter i underlagen.",
     helpChecklist: [
-      "Ange den kommun där kliniken faktiskt ska bedriva verksamheten.",
+      "Ange den ort där kliniken faktiskt ska bedriva verksamheten.",
       "Om flera verksamhetsställen finns bör varje plats kunna särskiljas senare.",
     ],
     helpExample: "Stockholm",
@@ -503,19 +503,6 @@ const clinicProfileHelp: HelpEntry[] = [
       "Kontrollera att postnummer och ort stämmer med adressen i övriga dokument.",
     ],
     helpExample: "111 57",
-    ivoSectionTitle: "IVO: tillstånd för privat tandvård",
-    ivoUrl: "https://www.ivo.se/vard-omsorgsgivare/tillstand/privat-tandvard/",
-  },
-  {
-    id: "region",
-    label: "Region",
-    helpDescription:
-      "Ange region/län där kliniken bedriver verksamhet. Detta kompletterar kommunuppgiften i ansökningsunderlaget.",
-    helpChecklist: [
-      "Ange aktuell region för verksamhetsstället.",
-      "Säkerställ att regionen är konsekvent i underlag och rutindokument.",
-    ],
-    helpExample: "Region Stockholm",
     ivoSectionTitle: "IVO: tillstånd för privat tandvård",
     ivoUrl: "https://www.ivo.se/vard-omsorgsgivare/tillstand/privat-tandvard/",
   },
@@ -2762,7 +2749,7 @@ function WorkspacePageContent() {
     }
 
     if (!profile.municipality.trim()) {
-      setWorkspaceMessage("Ange kommun innan du sparar.");
+      setWorkspaceMessage("Ange ort innan du sparar.");
       return;
     }
 
@@ -4911,7 +4898,7 @@ function WorkspacePageContent() {
             <input
               value={profile.municipality}
               onChange={(event) => setProfile((prev) => ({ ...prev, municipality: event.target.value }))}
-              placeholder="Kommun"
+              placeholder="Ort"
               className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
             />
             <input

@@ -17,7 +17,6 @@ type ProfileState = {
   orgNumber: string;
   address: string;
   municipality: string;
-  region: string;
   email: string;
   hasRadiology: boolean;
   hasSedation: boolean;
@@ -268,7 +267,6 @@ const initialProfile: ProfileState = {
   orgNumber: "",
   address: "",
   municipality: "",
-  region: "",
   email: "",
   hasRadiology: false,
   hasSedation: false,
@@ -1559,7 +1557,6 @@ function WorkspacePageContent() {
     profile.clinicName.trim() &&
     profile.address.trim() &&
     profile.municipality.trim() &&
-    profile.region.trim() &&
     profile.orgNumber.trim() &&
     profile.email.trim() &&
     answers.care_scope?.answer.trim() &&
@@ -2724,11 +2721,6 @@ function WorkspacePageContent() {
       return;
     }
 
-    if (!profile.region.trim()) {
-      setWorkspaceMessage("Ange region innan du sparar.");
-      return;
-    }
-
     if (!profile.email.trim()) {
       setWorkspaceMessage("Ange e-post innan du sparar.");
       return;
@@ -2774,6 +2766,43 @@ function WorkspacePageContent() {
     void loadIncidents();
     void loadRisks();
     void loadControls();
+  }
+
+  async function saveProfileOnly() {
+    if (!profile.clinicName.trim()) {
+      setWorkspaceMessage("Ange klinikens namn.");
+      return;
+    }
+
+    if (!profile.orgNumber.trim()) {
+      setWorkspaceMessage("Ange organisationsnummer.");
+      return;
+    }
+
+    setIsSaving(true);
+    setWorkspaceMessage("");
+
+    const response = await fetch("/api/workspace/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        profile,
+        answers,
+        requirements: [],
+      }),
+    });
+
+    setIsSaving(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setWorkspaceMessage(data.error || "Kunde inte spara uppgifter.");
+      return;
+    }
+
+    setWorkspaceMessage("Grunduppgifter sparade.");
+    void loadApplicationReadiness();
   }
 
   async function loadWorkspace() {
@@ -4791,25 +4820,20 @@ function WorkspacePageContent() {
 
       {showSection("dokument") ? (
       <section id="dokument" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">1. Frågeguide</h2>
-        <p className="mt-2 text-sm text-[color:var(--muted)]">
-          Fyll i uppgifterna steg för steg. Svaren används som grund för dokument och ansökan.
-        </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+              Verksamhet
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">Grunduppgifter</h2>
+            <p className="mt-1 text-sm text-[color:var(--muted)]">
+              Fyll i och spara klinikens uppgifter. Dessa används i hela arbetsytan.
+            </p>
+          </div>
+        </div>
 
         <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Grunduppgifter verksamhet</p>
-            <button
-              type="button"
-              onClick={() => setOpenHelpKey((current) => (current === "clinicName" ? null : "clinicName"))}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[color:var(--line)] bg-white text-sm font-bold text-[color:var(--brand)]"
-              aria-label="Info om grunduppgifter"
-            >
-              i
-            </button>
-          </div>
-
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
             <input
               value={profile.clinicName}
               onChange={(event) => setProfile((prev) => ({ ...prev, clinicName: event.target.value }))}
@@ -4832,12 +4856,6 @@ function WorkspacePageContent() {
               value={profile.municipality}
               onChange={(event) => setProfile((prev) => ({ ...prev, municipality: event.target.value }))}
               placeholder="Kommun"
-              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-            />
-            <input
-              value={profile.region}
-              onChange={(event) => setProfile((prev) => ({ ...prev, region: event.target.value }))}
-              placeholder="Region"
               className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
             />
             <input
@@ -4871,62 +4889,38 @@ function WorkspacePageContent() {
               Har sedering
             </label>
           </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void saveProfileOnly()}
+              disabled={isSaving}
+              className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {isSaving ? "Sparar..." : "Spara grunduppgifter"}
+            </button>
+            {workspaceMessage ? (
+              <p className="text-sm text-[color:var(--muted)]">{workspaceMessage}</p>
+            ) : null}
+          </div>
         </div>
 
-        <div className="mt-4 space-y-5">
-          {questionnaireItems.map((item) => (
-            <div key={item.key} className="relative rounded-2xl bg-[color:var(--panel)] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <p className="font-semibold text-[color:var(--ink)]">{item.label}</p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenHelpKey((current) => (current === item.key ? null : item.key))
-                  }
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[color:var(--line)] bg-white text-sm font-bold text-[color:var(--brand)]"
-                  aria-label={`Info om ${item.label}`}
-                >
-                  i
-                </button>
-              </div>
-
-              <textarea
-                value={answers[item.key]?.answer || ""}
-                onChange={(event) =>
-                  setAnswers((prev) => ({
-                    ...prev,
-                    [item.key]: {
-                      ...prev[item.key],
-                      answer: event.target.value,
-                    },
-                  }))
-                }
-                placeholder={item.placeholder}
-                rows={3}
-                className="mt-2 w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
-              />
-              {item.followUpLabel ? (
-                <>
-                  <p className="mt-3 text-sm font-medium text-[color:var(--ink)]">{item.followUpLabel}</p>
-                  <textarea
-                    value={answers[item.key]?.followUpAnswer || ""}
-                    onChange={(event) =>
-                      setAnswers((prev) => ({
-                        ...prev,
-                        [item.key]: {
-                          ...prev[item.key],
-                          followUpAnswer: event.target.value,
-                        },
-                      }))
-                    }
-                    placeholder={item.followUpPlaceholder}
-                    rows={2}
-                    className="mt-1 w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm"
-                  />
-                </>
-              ) : null}
-            </div>
-          ))}
+        <div className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+            IVO-ansökan
+          </p>
+          <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">
+            Ansökan är en separat process
+          </h3>
+          <p className="mt-2 text-sm text-[color:var(--muted)]">
+            Frågeguide, dokumentgenerering och evidens hanteras i ansökningsflödet. Gå dit när du är redo att förbereda underlag för IVO.
+          </p>
+          <a
+            href="/ansokan"
+            className="mt-4 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+          >
+            Öppna ansökan →
+          </a>
         </div>
       </section>
       ) : null}

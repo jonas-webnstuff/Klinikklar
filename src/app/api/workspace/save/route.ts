@@ -14,9 +14,8 @@ const bodySchema = z.object({
   profile: z.object({
     clinicName: z.string().min(1),
     orgNumber: z.string().min(1),
-    address: z.string().min(1),
-    municipality: z.string().min(1),
-    region: z.string().min(1),
+    address: z.string().optional().default(""),
+    municipality: z.string().optional().default(""),
     email: z.string().email(),
     hasRadiology: z.boolean().optional().default(false),
     hasSedation: z.boolean().optional().default(false),
@@ -99,7 +98,7 @@ async function getOrCreateClinic(
         name: profile.clinicName,
         address: profile.address,
         municipality: profile.municipality,
-        region: profile.region,
+          region: "Ej angivet",
         has_radiology: profile.hasRadiology,
         has_sedation: profile.hasSedation,
       })
@@ -115,7 +114,7 @@ async function getOrCreateClinic(
       name: profile.clinicName,
       address: profile.address,
       municipality: profile.municipality,
-      region: profile.region,
+      region: "Ej angivet",
       has_radiology: profile.hasRadiology,
       has_sedation: profile.hasSedation,
     })

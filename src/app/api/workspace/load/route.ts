@@ -134,7 +134,6 @@ export async function POST(request: Request) {
         orgNumber: organization.org_number,
         address: clinic.address || "",
         municipality: clinic.municipality,
-        region: clinic.region || "",
         email: organization.email,
         hasRadiology: Boolean(clinic.has_radiology),
         hasSedation: Boolean(clinic.has_sedation),

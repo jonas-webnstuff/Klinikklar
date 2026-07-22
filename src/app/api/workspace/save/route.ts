@@ -15,10 +15,9 @@ const bodySchema = z.object({
     clinicName: z.string().min(1),
     orgNumber: z.string().min(1),
     address: z.string().optional().default(""),
+    postalCode: z.string().optional().default(""),
     municipality: z.string().optional().default(""),
     email: z.string().email(),
-    hasRadiology: z.boolean().optional().default(false),
-    hasSedation: z.boolean().optional().default(false),
   }),
   answers: z.record(z.string(), answerSchema),
   requirements: z.array(
@@ -97,10 +96,8 @@ async function getOrCreateClinic(
       .update({
         name: profile.clinicName,
         address: profile.address,
+        postal_code: profile.postalCode,
         municipality: profile.municipality,
-          region: "Ej angivet",
-        has_radiology: profile.hasRadiology,
-        has_sedation: profile.hasSedation,
       })
       .eq("id", existing.id);
 
@@ -113,10 +110,8 @@ async function getOrCreateClinic(
       organization_id: organizationId,
       name: profile.clinicName,
       address: profile.address,
+      postal_code: profile.postalCode,
       municipality: profile.municipality,
-      region: "Ej angivet",
-      has_radiology: profile.hasRadiology,
-      has_sedation: profile.hasSedation,
     })
     .select("id")
     .single();

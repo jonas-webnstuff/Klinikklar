@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   ControlTaskFrequency,
   ControlTaskStatus,
@@ -16,10 +17,9 @@ type ProfileState = {
   clinicName: string;
   orgNumber: string;
   address: string;
+  postalCode: string;
   municipality: string;
   email: string;
-  hasRadiology: boolean;
-  hasSedation: boolean;
 };
 
 type AnswersState = Record<string, { answer: string; followUpAnswer: string }>;
@@ -266,10 +266,9 @@ const initialProfile: ProfileState = {
   clinicName: "",
   orgNumber: "",
   address: "",
+  postalCode: "",
   municipality: "",
   email: "",
-  hasRadiology: false,
-  hasSedation: false,
 };
 
 const initialAnswers: AnswersState = Object.fromEntries(
@@ -491,6 +490,19 @@ const clinicProfileHelp: HelpEntry[] = [
       "Säkerställ att adressen matchar övriga ansökningsunderlag.",
     ],
     helpExample: "Sveavägen 10, 111 57 Stockholm",
+    ivoSectionTitle: "IVO: tillstånd för privat tandvård",
+    ivoUrl: "https://www.ivo.se/vard-omsorgsgivare/tillstand/privat-tandvard/",
+  },
+  {
+    id: "postalCode",
+    label: "Postnummer",
+    helpDescription:
+      "Ange postnumret för verksamhetsstället. Det hjälper till att göra adressuppgifterna tydliga och konsekventa i underlagen.",
+    helpChecklist: [
+      "Ange postnumret för samma plats som besöksadressen gäller.",
+      "Kontrollera att postnummer och ort stämmer med adressen i övriga dokument.",
+    ],
+    helpExample: "111 57",
     ivoSectionTitle: "IVO: tillstånd för privat tandvård",
     ivoUrl: "https://www.ivo.se/vard-omsorgsgivare/tillstand/privat-tandvard/",
   },
@@ -790,6 +802,33 @@ function WorkspacePageContent() {
       isCancelled = true;
     };
   }, [hasHydratedWorkspace]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function hydrateEmailFromSession() {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (isCancelled || !user?.email) {
+          return;
+        }
+
+        setProfile((prev) => (prev.email ? prev : { ...prev, email: user.email || "" }));
+      } catch {
+        // Ignore auth hydration failures here; the workspace can still render without it.
+      }
+    }
+
+    void hydrateEmailFromSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const completionMap = useMemo(() => {
     const result = new Map<string, boolean>();
@@ -1556,6 +1595,7 @@ function WorkspacePageContent() {
   const canGenerate =
     profile.clinicName.trim() &&
     profile.address.trim() &&
+    profile.postalCode.trim() &&
     profile.municipality.trim() &&
     profile.orgNumber.trim() &&
     profile.email.trim() &&
@@ -2716,6 +2756,11 @@ function WorkspacePageContent() {
       return;
     }
 
+    if (!profile.postalCode.trim()) {
+      setWorkspaceMessage("Ange postnummer innan du sparar.");
+      return;
+    }
+
     if (!profile.municipality.trim()) {
       setWorkspaceMessage("Ange kommun innan du sparar.");
       return;
@@ -2776,6 +2821,11 @@ function WorkspacePageContent() {
 
     if (!profile.orgNumber.trim()) {
       setWorkspaceMessage("Ange organisationsnummer.");
+      return;
+    }
+
+    if (!profile.postalCode.trim()) {
+      setWorkspaceMessage("Ange postnummer.");
       return;
     }
 
@@ -4853,6 +4903,12 @@ function WorkspacePageContent() {
               className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
             />
             <input
+              value={profile.postalCode}
+              onChange={(event) => setProfile((prev) => ({ ...prev, postalCode: event.target.value }))}
+              placeholder="Postnummer"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <input
               value={profile.municipality}
               onChange={(event) => setProfile((prev) => ({ ...prev, municipality: event.target.value }))}
               placeholder="Kommun"
@@ -4865,29 +4921,6 @@ function WorkspacePageContent() {
               placeholder="E-post"
               className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
             />
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-4 text-sm text-[color:var(--ink)]">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={profile.hasRadiology}
-                onChange={(event) =>
-                  setProfile((prev) => ({ ...prev, hasRadiology: event.target.checked }))
-                }
-              />
-              Har röntgen
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={profile.hasSedation}
-                onChange={(event) =>
-                  setProfile((prev) => ({ ...prev, hasSedation: event.target.checked }))
-                }
-              />
-              Har sedering
-            </label>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">

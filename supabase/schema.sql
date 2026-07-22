@@ -36,6 +36,7 @@ create table if not exists clinics (
   organization_id uuid not null references organizations(id) on delete cascade,
   name text not null,
   address text not null,
+  postal_code text not null,
   municipality text not null,
   region text not null,
   has_radiology boolean not null default false,

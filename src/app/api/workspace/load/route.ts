@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
     const { data: clinic } = await supabase
       .from("clinics")
-      .select("id, name, address, municipality, region, has_radiology, has_sedation")
+      .select("id, name, address, postal_code, municipality")
       .eq("organization_id", organization.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -133,10 +133,9 @@ export async function POST(request: Request) {
         clinicName: clinic.name,
         orgNumber: organization.org_number,
         address: clinic.address || "",
+        postalCode: clinic.postal_code || "",
         municipality: clinic.municipality,
         email: organization.email,
-        hasRadiology: Boolean(clinic.has_radiology),
-        hasSedation: Boolean(clinic.has_sedation),
       },
       plan: organization.plan,
       answers,

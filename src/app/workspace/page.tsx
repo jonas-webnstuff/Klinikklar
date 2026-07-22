@@ -751,17 +751,24 @@ function WorkspacePageContent() {
 
       const data = (await response.json()) as {
         found: boolean;
+        userEmail?: string;
         profile?: ProfileState;
         answers?: AnswersState;
         plan?: PlanLevel | null;
       };
 
       if (!data.found) {
+        if (data.userEmail) {
+          setProfile((prev) => ({ ...prev, email: prev.email || data.userEmail || "" }));
+        }
         return;
       }
 
       if (data.profile) {
-        setProfile(data.profile);
+        setProfile({
+          ...data.profile,
+          email: data.profile.email || data.userEmail || "",
+        });
       }
 
       if (data.plan === "step1" || data.plan === "step2" || data.plan === "step3") {

@@ -4172,7 +4172,7 @@ function WorkspacePageContent() {
               Innan du kan spara eller använda arbetsytan behöver du fylla i klinikens grunduppgifter — namn, organisationsnummer, adress och kontaktuppgifter.
             </p>
             <a
-              href="/workspace/dokument"
+              href="/workspace?view=dokument"
               className="mt-4 inline-flex rounded-xl bg-[color:var(--brand)] px-5 py-2.5 text-sm font-semibold text-white"
             >
               Fyll i företagsuppgifter →

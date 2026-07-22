@@ -539,7 +539,7 @@ const ledningssystemModules = [
   {
     key: "incident_management",
     title: "Avvikelsehantering",
-    availableFrom: "step2" as PlanLevel,
+    availableFrom: "step1" as PlanLevel,
     cadence: "Löpande",
     description: "Registrera händelser, åtgärder och återkoppling till teamet.",
   },
@@ -553,7 +553,7 @@ const ledningssystemModules = [
   {
     key: "year_wheel",
     title: "Årshjul",
-    availableFrom: "step2" as PlanLevel,
+    availableFrom: "step1" as PlanLevel,
     cadence: "Planering per period",
     description: "Schemalägg kontroller, genomgångar och uppföljning över året.",
   },
@@ -864,9 +864,9 @@ function WorkspacePageContent() {
   const hasPlanAccess = (requiredPlan: PlanLevel) =>
     planAccessRank[activePlan] >= planAccessRank[requiredPlan];
 
-  const canUseIncidentModule = hasPlanAccess("step2");
+  const canUseIncidentModule = hasPlanAccess("step1");
   const canUseRiskModule = hasPlanAccess("step1");
-  const canUseControlModule = hasPlanAccess("step2");
+  const canUseControlModule = hasPlanAccess("step1");
   const canUseAiSupport = activePlan === "step1" || activePlan === "step3";
   const canUsePremiumAi = hasPlanAccess("step3");
   const routineEntries = useMemo<RoutineEntry[]>(() => {
@@ -4359,7 +4359,7 @@ function WorkspacePageContent() {
 
       {showSection("avvikelser") ? (
       <section id="avvikelser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Avvikelser (Drift/Premium)</h2>
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Avvikelser (Komplett/Drift/Premium)</h2>
         <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
           <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
           <p className="mt-1 text-sm text-[color:var(--muted)]">
@@ -4686,7 +4686,7 @@ function WorkspacePageContent() {
 
       {showSection("arshjul") ? (
       <section id="arshjul" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
-        <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Årshjul och kontroller (Drift/Premium)</h2>
+        <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Årshjul och kontroller (Komplett/Drift/Premium)</h2>
         <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
           <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
           <p className="mt-1 text-sm text-[color:var(--muted)]">

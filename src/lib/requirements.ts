@@ -51,14 +51,14 @@ export const complianceRequirements: ComplianceRequirement[] = [
     title: "Avvikelsehantering",
     description: "Rutiner för rapportering, uppföljning och lärande.",
     documentKind: "avvikelsehantering",
-    availableFrom: "step2",
+    availableFrom: "step1",
   },
   {
     code: "R-05",
     title: "Internkontroll",
     description: "Plan för löpande internkontroll och förbättring.",
     documentKind: "egenkontroll",
-    availableFrom: "step3",
+    availableFrom: "step1",
   },
 ];
 

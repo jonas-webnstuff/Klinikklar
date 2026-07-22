@@ -14,6 +14,11 @@ type OrganizationRow = {
   created_at: string;
   clinicCount: number;
   membershipCount: number;
+  clinic_id: string | null;
+  clinic_name: string;
+  address: string;
+  postal_code: string;
+  municipality: string;
 };
 
 async function loadOrganizations(): Promise<OrganizationRow[]> {
@@ -35,7 +40,10 @@ async function loadOrganizations(): Promise<OrganizationRow[]> {
   }
 
   const [clinicResult, membershipResult] = await Promise.all([
-    supabase.from("clinics").select("id, organization_id").in("organization_id", organizationIds),
+    supabase
+      .from("clinics")
+      .select("id, organization_id, name, address, postal_code, municipality, created_at")
+      .in("organization_id", organizationIds),
     supabase
       .from("organization_memberships")
       .select("id, organization_id")
@@ -46,10 +54,26 @@ async function loadOrganizations(): Promise<OrganizationRow[]> {
   if (membershipResult.error) throw membershipResult.error;
 
   const clinicCounts = new Map<string, number>();
+  const latestClinicByOrganization = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      address: string;
+      postal_code: string;
+      municipality: string;
+      created_at: string;
+    }
+  >();
   const membershipCounts = new Map<string, number>();
 
   for (const item of clinicResult.data || []) {
     clinicCounts.set(item.organization_id, (clinicCounts.get(item.organization_id) || 0) + 1);
+
+    const currentLatest = latestClinicByOrganization.get(item.organization_id);
+    if (!currentLatest || new Date(item.created_at).getTime() > new Date(currentLatest.created_at).getTime()) {
+      latestClinicByOrganization.set(item.organization_id, item);
+    }
   }
 
   for (const item of membershipResult.data || []) {
@@ -60,6 +84,11 @@ async function loadOrganizations(): Promise<OrganizationRow[]> {
     ...item,
     clinicCount: clinicCounts.get(item.id) || 0,
     membershipCount: membershipCounts.get(item.id) || 0,
+    clinic_id: latestClinicByOrganization.get(item.id)?.id || null,
+    clinic_name: latestClinicByOrganization.get(item.id)?.name || item.name,
+    address: latestClinicByOrganization.get(item.id)?.address || "",
+    postal_code: latestClinicByOrganization.get(item.id)?.postal_code || "",
+    municipality: latestClinicByOrganization.get(item.id)?.municipality || "",
   }));
 }
 

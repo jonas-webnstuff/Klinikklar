@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import OrganizationProfileForm from "@/components/OrganizationProfileForm";
+import type { OrganizationProfileInput } from "@/lib/organization-profile";
 
 type OrganizationRow = {
   id: string;
@@ -12,6 +14,11 @@ type OrganizationRow = {
   created_at: string;
   clinicCount: number;
   membershipCount: number;
+  clinic_id: string | null;
+  clinic_name: string;
+  address: string;
+  postal_code: string;
+  municipality: string;
 };
 
 type Props = {
@@ -19,8 +26,11 @@ type Props = {
 };
 
 type DraftState = {
-  name: string;
+  clinicName: string;
   orgNumber: string;
+  address: string;
+  postalCode: string;
+  municipality: string;
   email: string;
   phone: string;
   plan: "step1" | "step2" | "step3" | "";
@@ -38,8 +48,11 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
   const [message, setMessage] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [creatingForm, setCreatingForm] = useState<DraftState>({
-    name: "",
+    clinicName: "",
     orgNumber: "",
+    address: "",
+    postalCode: "",
+    municipality: "",
     email: "",
     phone: "",
     plan: "",
@@ -49,8 +62,11 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
       initialOrganizations.map((item) => [
         item.id,
         {
-          name: item.name,
+          clinicName: item.clinic_name || item.name,
           orgNumber: item.org_number,
+          address: item.address || "",
+          postalCode: item.postal_code || "",
+          municipality: item.municipality || "",
           email: item.email,
           phone: item.phone || "",
           plan: item.plan || "",
@@ -90,8 +106,11 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
     setDrafts((current) => ({
       ...current,
       [updated.id]: {
-        name: updated.name,
+        clinicName: updated.clinic_name || updated.name,
         orgNumber: updated.org_number,
+        address: updated.address || "",
+        postalCode: updated.postal_code || "",
+        municipality: updated.municipality || "",
         email: updated.email,
         phone: updated.phone || "",
         plan: updated.plan || "",
@@ -100,8 +119,15 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
   }
 
   async function createOrganization() {
-    if (!creatingForm.name.trim() || !creatingForm.orgNumber.trim() || !creatingForm.email.trim()) {
-      setMessage("Fyll i namn, organisationsnummer och e-post.");
+    if (
+      !creatingForm.clinicName.trim() ||
+      !creatingForm.orgNumber.trim() ||
+      !creatingForm.address.trim() ||
+      !creatingForm.postalCode.trim() ||
+      !creatingForm.municipality.trim() ||
+      !creatingForm.email.trim()
+    ) {
+      setMessage("Fyll i kliniknamn, organisationsnummer, adress, postnummer, ort och e-post.");
       return;
     }
 
@@ -112,7 +138,15 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...creatingForm,
+        profile: {
+          clinicName: creatingForm.clinicName,
+          orgNumber: creatingForm.orgNumber,
+          address: creatingForm.address,
+          postalCode: creatingForm.postalCode,
+          municipality: creatingForm.municipality,
+          email: creatingForm.email,
+        },
+        phone: creatingForm.phone,
         plan: creatingForm.plan || null,
       }),
     });
@@ -127,15 +161,31 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
 
     const data = (await response.json()) as { organization: OrganizationRow };
     upsertOrganization(data.organization);
-    setCreatingForm({ name: "", orgNumber: "", email: "", phone: "", plan: "" });
+    setCreatingForm({
+      clinicName: "",
+      orgNumber: "",
+      address: "",
+      postalCode: "",
+      municipality: "",
+      email: "",
+      phone: "",
+      plan: "",
+    });
     setMessage("Kund skapad.");
   }
 
   async function saveOrganization(id: string) {
     const draft = drafts[id];
 
-    if (!draft?.name.trim() || !draft.orgNumber.trim() || !draft.email.trim()) {
-      setMessage("Fyll i namn, organisationsnummer och e-post innan du sparar.");
+    if (
+      !draft?.clinicName.trim() ||
+      !draft.orgNumber.trim() ||
+      !draft.address.trim() ||
+      !draft.postalCode.trim() ||
+      !draft.municipality.trim() ||
+      !draft.email.trim()
+    ) {
+      setMessage("Fyll i samma grunduppgifter som i uppstartsformuläret innan du sparar.");
       return;
     }
 
@@ -147,9 +197,14 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id,
-        name: draft.name,
-        orgNumber: draft.orgNumber,
-        email: draft.email,
+        profile: {
+          clinicName: draft.clinicName,
+          orgNumber: draft.orgNumber,
+          address: draft.address,
+          postalCode: draft.postalCode,
+          municipality: draft.municipality,
+          email: draft.email,
+        },
         phone: draft.phone,
         plan: draft.plan || null,
       }),
@@ -194,26 +249,21 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
         <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
           <h3 className="text-lg font-semibold text-[color:var(--ink)]">Ny kund</h3>
           <div className="mt-4 space-y-3">
-            <input
-              value={creatingForm.name}
-              onChange={(event) => setCreatingForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="Kundnamn"
-              className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
-            />
-            <input
-              value={creatingForm.orgNumber}
-              onChange={(event) =>
-                setCreatingForm((current) => ({ ...current, orgNumber: event.target.value }))
+            <OrganizationProfileForm
+              value={{
+                clinicName: creatingForm.clinicName,
+                orgNumber: creatingForm.orgNumber,
+                address: creatingForm.address,
+                postalCode: creatingForm.postalCode,
+                municipality: creatingForm.municipality,
+                email: creatingForm.email,
+              }}
+              onChange={(field, value) =>
+                setCreatingForm((current) => ({
+                  ...current,
+                  [field]: value,
+                }))
               }
-              placeholder="Organisationsnummer"
-              className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
-            />
-            <input
-              type="email"
-              value={creatingForm.email}
-              onChange={(event) => setCreatingForm((current) => ({ ...current, email: event.target.value }))}
-              placeholder="E-post"
-              className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
             />
             <input
               value={creatingForm.phone}
@@ -256,10 +306,14 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
           ) : (
             filteredOrganizations.map((organization) => {
               const draft = drafts[organization.id] || {
-                name: organization.name,
+                clinicName: organization.clinic_name || organization.name,
                 orgNumber: organization.org_number,
+                address: organization.address || "",
+                postalCode: organization.postal_code || "",
+                municipality: organization.municipality || "",
                 email: organization.email,
                 phone: organization.phone || "",
+                plan: organization.plan || "",
               };
 
               return (
@@ -289,38 +343,24 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <input
-                      value={draft.name}
-                      onChange={(event) =>
+                  <div className="mt-4 space-y-3">
+                    <OrganizationProfileForm
+                      value={{
+                        clinicName: draft.clinicName,
+                        orgNumber: draft.orgNumber,
+                        address: draft.address,
+                        postalCode: draft.postalCode,
+                        municipality: draft.municipality,
+                        email: draft.email,
+                      }}
+                      onChange={(field, value) =>
                         setDrafts((current) => ({
                           ...current,
-                          [organization.id]: { ...draft, name: event.target.value },
+                          [organization.id]: { ...draft, [field]: value },
                         }))
                       }
-                      className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
                     />
-                    <input
-                      value={draft.orgNumber}
-                      onChange={(event) =>
-                        setDrafts((current) => ({
-                          ...current,
-                          [organization.id]: { ...draft, orgNumber: event.target.value },
-                        }))
-                      }
-                      className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
-                    />
-                    <input
-                      type="email"
-                      value={draft.email}
-                      onChange={(event) =>
-                        setDrafts((current) => ({
-                          ...current,
-                          [organization.id]: { ...draft, email: event.target.value },
-                        }))
-                      }
-                      className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
-                    />
+                    <div className="grid gap-3 md:grid-cols-2">
                     <input
                       value={draft.phone}
                       onChange={(event) =>
@@ -331,6 +371,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
                       }
                       className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
                     />
+                    </div>
                     <select
                       value={draft.plan}
                       onChange={(event) =>

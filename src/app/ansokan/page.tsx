@@ -5,12 +5,23 @@ import { useEffect, useMemo, useState } from "react";
 
 type ApplicationStatus = "draft" | "in_review" | "ready_to_submit" | "submitted";
 
+type IvoChecklistItem = {
+  key: string;
+  label: string;
+  detail: string;
+  done: boolean;
+};
+
 type ReadinessChecklist = {
   hasOrganization: boolean;
   hasClinic: boolean;
   questionnaireComplete: boolean;
   requirementsComplete: boolean;
   evidenceLinked: boolean;
+  ivoChecklistComplete: boolean;
+  ivoChecklistItems: IvoChecklistItem[];
+  missingIvoItems: string[];
+  advisoryIvoGaps: string[];
   canMoveToReady: boolean;
   canSubmit: boolean;
   evidenceCount: number;
@@ -375,6 +386,69 @@ export default function AnsokanPage() {
           <p className="mt-3 text-xs text-[color:var(--muted)]">
             Krav klara: {checklist?.completeRequirementCount || 0}/{checklist?.requirementCount || 0}. Evidens: {checklist?.evidenceCount || 0}.
           </p>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[color:var(--ink)]">IVO-specifik ansokningsbild</p>
+              <p className="mt-1 text-xs text-[color:var(--muted)]">
+                Kontrollpunkter som ligger narmare sjalva ansokan an den vanliga dokumentchecklistan.
+              </p>
+            </div>
+            <span
+              className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                checklist?.ivoChecklistComplete
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-amber-100 text-amber-800"
+              }`}
+            >
+              {checklist?.ivoChecklistComplete ? "Grundpaket komplett" : "Komplettering kravs"}
+            </span>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {(checklist?.ivoChecklistItems || []).map((item) => (
+              <article
+                key={item.key}
+                className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">{item.label}</p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      item.done ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {item.done ? "Klar" : "Saknas"}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-[color:var(--muted)]">{item.detail}</p>
+              </article>
+            ))}
+          </div>
+
+          {checklist?.missingIvoItems?.length ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-900">Kvar innan ansokningsunderlaget ar komplett i appen</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">
+                {checklist.missingIvoItems.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {checklist?.advisoryIvoGaps?.length ? (
+            <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Kvar att modellera i produkten</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[color:var(--muted)]">
+                {checklist.advisoryIvoGaps.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       </section>
 

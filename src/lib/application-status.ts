@@ -1,4 +1,13 @@
-import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
+import {
+  attachmentChecklistRequirementItems,
+  complianceRequirements,
+  facilityRequirementItems,
+  ivoReadinessItemDefinitions,
+  managementSystemRequirementItems,
+  ownershipRequirementItems,
+  questionnaireItems,
+  responsiblePersonRequirementItems,
+} from "@/lib/requirements";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export type ApplicationStatus = "draft" | "in_review" | "ready_to_submit" | "submitted";
@@ -18,6 +27,15 @@ export type ReadinessChecklist = {
   questionnaireComplete: boolean;
   requirementsComplete: boolean;
   evidenceLinked: boolean;
+  ivoChecklistComplete: boolean;
+  ivoChecklistItems: Array<{
+    key: string;
+    label: string;
+    detail: string;
+    done: boolean;
+  }>;
+  missingIvoItems: string[];
+  advisoryIvoGaps: string[];
   canMoveToReady: boolean;
   canSubmit: boolean;
   evidenceCount: number;
@@ -121,6 +139,7 @@ export async function computeReadinessChecklist(
 
   let hasOrganization = false;
   let hasClinic = false;
+  let clinicProfileComplete = false;
 
   if (organizationId) {
     const { data: organization, error: organizationError } = await supabase
@@ -141,7 +160,7 @@ export async function computeReadinessChecklist(
   if (clinicId) {
     const { data: clinic, error: clinicError } = await supabase
       .from("clinics")
-      .select("name, address, municipality, region")
+      .select("name, address, postal_code, municipality, region")
       .eq("id", clinicId)
       .maybeSingle();
 
@@ -153,11 +172,18 @@ export async function computeReadinessChecklist(
         clinic?.municipality?.trim() &&
         clinic?.region?.trim()
     );
+
+    clinicProfileComplete = Boolean(
+      clinic?.name?.trim() &&
+        clinic?.address?.trim() &&
+        clinic?.postal_code?.trim() &&
+        clinic?.municipality?.trim()
+    );
   }
 
   const { data: responses, error: responsesError } = await supabase
     .from("questionnaire_responses")
-    .select("question_key, answer")
+    .select("question_key, answer, follow_up_answer")
     .eq("application_id", applicationId);
 
   if (responsesError) throw responsesError;
@@ -166,6 +192,8 @@ export async function computeReadinessChecklist(
   for (const row of responses || []) {
     answerMap.set(row.question_key, row.answer || "");
   }
+
+  const responseValue = (key: string) => answerMap.get(key)?.trim() || "";
 
   const requiredQuestionKeys = questionnaireItems.map((item) => item.key);
   const questionnaireComplete = requiredQuestionKeys.every((key) =>
@@ -212,7 +240,87 @@ export async function computeReadinessChecklist(
     evidenceLinked = requirementIds.every((requirementId) => coveredRequirementIds.has(requirementId));
   }
 
-  const canMoveToReady = hasOrganization && hasClinic && questionnaireComplete && requirementsComplete;
+  const managementSystemComplete = managementSystemRequirementItems.every((item) =>
+    Boolean(responseValue(item.key))
+  );
+  const responsiblePeopleComplete = responsiblePersonRequirementItems.every((item) =>
+    Boolean(responseValue(item.key))
+  );
+  const ownershipSuitabilityComplete = ownershipRequirementItems.every((item) =>
+    Boolean(responseValue(item.key))
+  );
+  const facilityAndEquipmentComplete = facilityRequirementItems.every((item) =>
+    Boolean(responseValue(item.key))
+  );
+  const attachmentChecklistComplete = attachmentChecklistRequirementItems.every((item) =>
+    Boolean(responseValue(item.key))
+  );
+
+  const ivoChecklistItems = ivoReadinessItemDefinitions.map((item) => {
+    switch (item.key) {
+      case "organization_identity":
+        return { key: item.key, label: item.label, detail: item.description, done: hasOrganization };
+      case "clinic_location":
+        return { key: item.key, label: item.label, detail: item.description, done: clinicProfileComplete };
+      case "care_scope":
+        return { key: item.key, label: item.label, detail: item.description, done: Boolean(responseValue("care_scope")) };
+      case "staffing":
+        return { key: item.key, label: item.label, detail: item.description, done: Boolean(responseValue("staffing")) };
+      case "quality_process":
+        return {
+          key: item.key,
+          label: item.label,
+          detail: item.description,
+          done: Boolean(responseValue("quality_process")),
+        };
+      case "incident_routine":
+        return {
+          key: item.key,
+          label: item.label,
+          detail: item.description,
+          done: Boolean(responseValue("incident_routine")),
+        };
+      case "management_system":
+        return { key: item.key, label: item.label, detail: item.description, done: managementSystemComplete };
+      case "responsible_people":
+        return { key: item.key, label: item.label, detail: item.description, done: responsiblePeopleComplete };
+      case "ownership_suitability":
+        return {
+          key: item.key,
+          label: item.label,
+          detail: item.description,
+          done: ownershipSuitabilityComplete,
+        };
+      case "facility_and_equipment":
+        return {
+          key: item.key,
+          label: item.label,
+          detail: item.description,
+          done: facilityAndEquipmentComplete,
+        };
+      case "attachment_checklist":
+        return {
+          key: item.key,
+          label: item.label,
+          detail: item.description,
+          done: attachmentChecklistComplete,
+        };
+      case "evidence_package":
+        return { key: item.key, label: item.label, detail: item.description, done: evidenceLinked };
+      default:
+        return { key: item.key, label: item.label, detail: item.description, done: false };
+    }
+  });
+
+  const missingIvoItems = ivoChecklistItems.filter((item) => !item.done).map((item) => item.label);
+  const ivoChecklistComplete = missingIvoItems.length === 0;
+  const advisoryIvoGaps = [
+    "Agarbild och bilagechecklista finns nu i ansokningsflodet men ar fortfarande fritext utan egen datamodell eller formell verifiering.",
+    "Lokaler, utrustning och sarskilda riskomraden finns nu i ansokningsflodet men ar fortfarande fritext utan separat verifiering eller teknisk kontroll av utrustning.",
+  ];
+
+  const canMoveToReady =
+    hasOrganization && hasClinic && questionnaireComplete && requirementsComplete && ivoChecklistComplete;
   const canSubmit = canMoveToReady && evidenceLinked;
 
   return {
@@ -221,6 +329,10 @@ export async function computeReadinessChecklist(
     questionnaireComplete,
     requirementsComplete,
     evidenceLinked,
+    ivoChecklistComplete,
+    ivoChecklistItems,
+    missingIvoItems,
+    advisoryIvoGaps,
     canMoveToReady,
     canSubmit,
     evidenceCount,

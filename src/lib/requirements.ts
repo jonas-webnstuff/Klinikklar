@@ -24,6 +24,41 @@ export interface ComplianceRequirement {
   availableFrom: PlanLevel;
 }
 
+export interface ManagementSystemRequirementItem {
+  key: string;
+  label: string;
+}
+
+export interface IvoReadinessItemDefinition {
+  key: string;
+  label: string;
+  description: string;
+}
+
+export interface ResponsiblePersonRequirementItem {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+export interface OwnershipRequirementItem {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+export interface AttachmentChecklistRequirementItem {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+export interface FacilityRequirementItem {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
 export const complianceRequirements: ComplianceRequirement[] = [
   {
     code: "R-01",
@@ -137,5 +172,213 @@ export const questionnaireItems: QuestionnaireItem[] = [
     ivoSectionTitle: "IVO: anmäl risker och oegentligheter inom privat tandvård",
     ivoUrl: "https://www.ivo.se/vard-omsorgsgivare/anmal-handelse-lamna-underrattelse/anmal-risker-och-oegentligheter-inom-privat-tandvard/",
     mapsToRequirements: ["R-04", "R-05"],
+  },
+];
+
+export const managementSystemRequirementItems: ManagementSystemRequirementItem[] = [
+  { key: "management_system_purpose", label: "Syfte" },
+  { key: "management_system_scope", label: "Omfattning" },
+  { key: "management_system_owner", label: "Ansvarig" },
+  { key: "management_system_approved_by", label: "Godkänd av" },
+  { key: "management_system_processes", label: "Processer och uppföljning" },
+  {
+    key: "management_system_followup_log",
+    label: "Bevis på månatlig/kvartalsvis uppföljning i drift",
+  },
+  { key: "management_system_documents", label: "Styrande dokument" },
+  {
+    key: "management_system_decision_log",
+    label: "Formellt beslut, fastställande och versionsstyrning",
+  },
+  { key: "management_system_next_review", label: "Nästa planerade uppföljning" },
+];
+
+export const responsiblePersonRequirementItems: ResponsiblePersonRequirementItem[] = [
+  {
+    key: "responsible_operations_manager_name",
+    label: "Verksamhetsansvarig namn",
+    placeholder: "Ex. Anna Andersson",
+  },
+  {
+    key: "responsible_operations_manager_role",
+    label: "Verksamhetsansvarig roll",
+    placeholder: "Ex. Verksamhetschef eller klinikchef",
+  },
+  {
+    key: "responsible_operations_manager_license",
+    label: "Verksamhetsansvarig legitimation eller kompetens",
+    placeholder: "Ex. Leg. tandläkare, 10 års erfarenhet",
+  },
+  {
+    key: "responsible_medical_name",
+    label: "Medicinskt ansvarig namn",
+    placeholder: "Ex. Johan Johansson",
+  },
+  {
+    key: "responsible_medical_role",
+    label: "Medicinskt ansvarig roll",
+    placeholder: "Ex. Medicinskt ansvarig tandläkare",
+  },
+  {
+    key: "responsible_medical_license",
+    label: "Medicinskt ansvarig legitimation",
+    placeholder: "Ex. Leg. tandläkare, legitimation nr 123456",
+  },
+  {
+    key: "responsible_quality_name",
+    label: "Kvalitetsansvarig namn",
+    placeholder: "Ex. Lisa Svensson",
+  },
+  {
+    key: "responsible_quality_role",
+    label: "Kvalitetsansvarig roll",
+    placeholder: "Ex. Kvalitetsansvarig eller processägare",
+  },
+  {
+    key: "responsible_quality_competence",
+    label: "Kvalitetsansvarig kompetens",
+    placeholder: "Ex. Erfarenhet av ledningssystem, internkontroll och avvikelsehantering",
+  },
+];
+
+export const ownershipRequirementItems: OwnershipRequirementItem[] = [
+  {
+    key: "ownership_legal_entity_name",
+    label: "Juridisk huvudman",
+    placeholder: "Ex. Klinikklar Dental AB",
+  },
+  {
+    key: "ownership_legal_entity_org_number",
+    label: "Huvudmannens organisationsnummer",
+    placeholder: "Ex. 559123-4567",
+  },
+  {
+    key: "ownership_representative_name",
+    label: "Företrädare eller kontaktperson",
+    placeholder: "Ex. Anna Andersson, VD",
+  },
+  {
+    key: "ownership_structure_description",
+    label: "Ägarbild och styrning",
+    placeholder: "Beskriv ägare, ägarandelar och hur styrning/ansvar ser ut.",
+  },
+  {
+    key: "ownership_suitability_statement",
+    label: "Lämplighetsbedömning",
+    placeholder: "Beskriv kort varför ägare och ledning bedöms lämpliga att bedriva verksamheten.",
+  },
+];
+
+export const attachmentChecklistRequirementItems: AttachmentChecklistRequirementItem[] = [
+  {
+    key: "attachment_cover_note",
+    label: "Sammanfattning eller följebrev",
+    placeholder: "Ange vad som ska skickas in som introduktion eller sammanfattning.",
+  },
+  {
+    key: "attachment_business_description_ref",
+    label: "Verksamhetsbeskrivning",
+    placeholder: "Ange dokumentnamn, version eller referens till verksamhetsbeskrivningen.",
+  },
+  {
+    key: "attachment_management_system_ref",
+    label: "Ledningssystem",
+    placeholder: "Ange dokumentnamn, version eller referens till ledningssystemet.",
+  },
+  {
+    key: "attachment_staffing_ref",
+    label: "Bemanning och ansvarsfördelning",
+    placeholder: "Ange var bemanning, roller och ansvar dokumenteras.",
+  },
+  {
+    key: "attachment_evidence_index_ref",
+    label: "Bilage- eller evidensförteckning",
+    placeholder: "Ange hur bilagor och evidens är numrerade eller sammanställda.",
+  },
+];
+
+export const facilityRequirementItems: FacilityRequirementItem[] = [
+  {
+    key: "facility_premises_description",
+    label: "Lokaler och behandlingsmiljö",
+    placeholder: "Beskriv lokalerna, behandlingsrum och hur verksamheten är organiserad på plats.",
+  },
+  {
+    key: "facility_hygiene_flow",
+    label: "Hygien, steril och patientflöden",
+    placeholder: "Beskriv hur hygienkritiska flöden, sterilhantering och patientflöden fungerar i lokalen.",
+  },
+  {
+    key: "facility_equipment_scope",
+    label: "Utrustning och särskilda funktioner",
+    placeholder: "Beskriv viktig utrustning samt om verksamheten använder röntgen, sedering eller annan särskild funktion.",
+  },
+  {
+    key: "facility_special_risks",
+    label: "Särskilda riskområden och skyddsåtgärder",
+    placeholder: "Beskriv riskområden i lokalen eller verksamheten och hur de hanteras.",
+  },
+];
+
+export const ivoReadinessItemDefinitions: IvoReadinessItemDefinition[] = [
+  {
+    key: "organization_identity",
+    label: "Organisationens grunduppgifter är kompletta",
+    description: "Namn, organisationsnummer och kontaktadress finns sparade.",
+  },
+  {
+    key: "clinic_location",
+    label: "Klinikens adressuppgifter är kompletta",
+    description: "Kliniknamn, besöksadress, postnummer och kommun finns dokumenterade.",
+  },
+  {
+    key: "care_scope",
+    label: "Vårdutbudet är beskrivet",
+    description: "Planerade behandlingar och vårdomfattning är dokumenterade.",
+  },
+  {
+    key: "staffing",
+    label: "Bemanning och kompetens är beskrivna",
+    description: "Planerad bemanning, roller och kompetensnivåer är dokumenterade.",
+  },
+  {
+    key: "quality_process",
+    label: "Kvalitetsuppföljning och patientsäkerhet är beskrivna",
+    description: "Hur kvalitet följs upp och vem som ansvarar framgår.",
+  },
+  {
+    key: "incident_routine",
+    label: "Avvikelsehantering är beskriven",
+    description: "Rapportering, åtgärd och återkoppling av avvikelser är dokumenterade.",
+  },
+  {
+    key: "management_system",
+    label: "Ledningssystemet är fastställt i ansökningsunderlaget",
+    description: "Syfte, omfattning, ansvar, styrande dokument och uppföljning finns ifyllda.",
+  },
+  {
+    key: "responsible_people",
+    label: "Ansvariga personer, roller och legitimationer är dokumenterade",
+    description: "Verksamhetsansvarig, medicinskt ansvarig och kvalitetsansvarig finns beskrivna.",
+  },
+  {
+    key: "ownership_suitability",
+    label: "Ägarbild och lämplighetsuppgifter är dokumenterade",
+    description: "Juridisk huvudman, företrädare, ägarbild och lämplighetsbeskrivning finns samlade.",
+  },
+  {
+    key: "facility_and_equipment",
+    label: "Lokaler, utrustning och särskilda riskområden är dokumenterade",
+    description: "Lokaler, hygienflöden, utrustning och särskilda riskområden finns beskrivna i ansökningsunderlaget.",
+  },
+  {
+    key: "attachment_checklist",
+    label: "Bilagechecklista för ansökan är komplett",
+    description: "Det finns en tydlig referens till de underlag som ska skickas med ansökan.",
+  },
+  {
+    key: "evidence_package",
+    label: "Det finns kopplad evidens för varje krav",
+    description: "Varje kravpost har minst ett kopplat underlag.",
   },
 ];

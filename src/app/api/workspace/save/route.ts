@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { complianceRequirements, questionnaireItems } from "@/lib/requirements";
+import {
+  complianceRequirements,
+  managementSystemRequirementItems,
+  questionnaireItems,
+} from "@/lib/requirements";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -241,17 +245,7 @@ export async function POST(request: Request) {
       if (responsesError) throw responsesError;
     }
 
-    const managementSystemRequiredKeys = [
-      "management_system_purpose",
-      "management_system_scope",
-      "management_system_owner",
-      "management_system_approved_by",
-      "management_system_processes",
-      "management_system_documents",
-      "management_system_followup_log",
-      "management_system_decision_log",
-      "management_system_next_review",
-    ];
+    const managementSystemRequiredKeys = managementSystemRequirementItems.map((item) => item.key);
 
     const requirementRows = complianceRequirements.map((requirement) => {
       let isComplete = false;

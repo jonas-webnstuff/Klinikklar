@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type MembershipRole = "owner" | "admin" | "editor" | "viewer";
 
@@ -27,7 +27,7 @@ export default function OrganizationMembersManager({ organizationId, organizatio
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<MembershipRole>("editor");
 
-  async function loadMembers() {
+  const loadMembers = useCallback(async () => {
     if (!organizationId) {
       return;
     }
@@ -55,7 +55,7 @@ export default function OrganizationMembersManager({ organizationId, organizatio
     }
 
     setMembers(data.members || []);
-  }
+  }, [organizationId]);
 
   async function addMember() {
     if (!email.trim()) {
@@ -130,7 +130,7 @@ export default function OrganizationMembersManager({ organizationId, organizatio
 
   useEffect(() => {
     void loadMembers();
-  }, [organizationId]);
+  }, [loadMembers]);
 
   return (
     <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-white p-4">

@@ -4,6 +4,7 @@ import {
   computeReadinessChecklist,
   logApplicationEvent,
   resolveUserApplicationContext,
+  synchronizeApplicationStatus,
   type ApplicationStatus,
 } from "@/lib/application-status";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -77,21 +78,35 @@ export async function POST(request: Request) {
         .order("created_at", { ascending: false })
         .limit(15);
 
+      const effectiveStatus = await synchronizeApplicationStatus(supabase, {
+        applicationId: context.applicationId,
+        userId: user.id,
+        currentStatus: context.status,
+        checklist,
+      });
+
       return NextResponse.json({
         ok: true,
         found: true,
-        status: context.status,
+        status: effectiveStatus,
         checklist,
         audit: auditRows || [],
       });
     }
 
     if (!canTransition(context.status, status, checklist)) {
+      const effectiveStatus = await synchronizeApplicationStatus(supabase, {
+        applicationId: context.applicationId,
+        userId: user.id,
+        currentStatus: context.status,
+        checklist,
+      });
+
       return NextResponse.json(
         {
           ok: false,
           error: "Status kan inte uppdateras ännu. Säkerställ att checklistan är uppfylld.",
-          status: context.status,
+          status: effectiveStatus,
           checklist,
         },
         { status: 400 }

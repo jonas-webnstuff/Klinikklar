@@ -43,6 +43,59 @@ export type ReadinessChecklist = {
   requirementCount: number;
 };
 
+export function getEffectiveApplicationStatus(
+  status: ApplicationStatus,
+  checklist: ReadinessChecklist
+): ApplicationStatus {
+  if (status === "submitted" && !checklist.canSubmit) {
+    return checklist.canMoveToReady ? "ready_to_submit" : "draft";
+  }
+
+  if ((status === "ready_to_submit" || status === "in_review") && !checklist.canMoveToReady) {
+    return "draft";
+  }
+
+  return status;
+}
+
+export async function synchronizeApplicationStatus(
+  supabase: SupabaseAdmin,
+  input: {
+    applicationId: string;
+    userId: string;
+    currentStatus: ApplicationStatus;
+    checklist: ReadinessChecklist;
+  }
+): Promise<ApplicationStatus> {
+  const effectiveStatus = getEffectiveApplicationStatus(input.currentStatus, input.checklist);
+
+  if (effectiveStatus === input.currentStatus) {
+    return input.currentStatus;
+  }
+
+  const { error: updateError } = await supabase
+    .from("applications")
+    .update({ status: effectiveStatus, updated_at: new Date().toISOString() })
+    .eq("id", input.applicationId);
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  await logApplicationEvent(supabase, {
+    applicationId: input.applicationId,
+    userId: input.userId,
+    eventType: "application_status_normalized",
+    message: `Status justerad automatiskt: ${input.currentStatus} -> ${effectiveStatus}`,
+    metadata: {
+      from: input.currentStatus,
+      to: effectiveStatus,
+    },
+  });
+
+  return effectiveStatus;
+}
+
 export async function logApplicationEvent(
   supabase: SupabaseAdmin,
   input: {
@@ -225,6 +278,7 @@ export async function computeReadinessChecklist(
 
   let evidenceCount = 0;
   let evidenceLinked = false;
+  const hasFullRequirementSet = requirementIds.length === requirementCount;
 
   if (requirementIds.length > 0) {
     const { data: evidenceRows, error: evidenceError } = await supabase
@@ -237,7 +291,9 @@ export async function computeReadinessChecklist(
     evidenceCount = rows.length;
 
     const coveredRequirementIds = new Set(rows.map((row) => row.requirement_id));
-    evidenceLinked = requirementIds.every((requirementId) => coveredRequirementIds.has(requirementId));
+    evidenceLinked =
+      hasFullRequirementSet &&
+      requirementIds.every((requirementId) => coveredRequirementIds.has(requirementId));
   }
 
   const managementSystemComplete = managementSystemRequirementItems.every((item) =>

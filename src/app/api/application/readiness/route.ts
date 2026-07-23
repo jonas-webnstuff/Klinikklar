@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { computeReadinessChecklist, resolveUserApplicationContext } from "@/lib/application-status";
+import {
+  computeReadinessChecklist,
+  resolveUserApplicationContext,
+  synchronizeApplicationStatus,
+} from "@/lib/application-status";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -31,10 +35,17 @@ export async function POST() {
 
     if (auditError) throw auditError;
 
+    const effectiveStatus = await synchronizeApplicationStatus(supabase, {
+      applicationId: context.applicationId,
+      userId: user.id,
+      currentStatus: context.status,
+      checklist,
+    });
+
     return NextResponse.json({
       ok: true,
       found: true,
-      status: context.status,
+      status: effectiveStatus,
       checklist,
       audit: auditRows || [],
     });

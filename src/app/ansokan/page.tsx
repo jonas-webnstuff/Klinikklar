@@ -166,6 +166,11 @@ const stageLabels: Record<ApplicationStatus, string> = {
   submitted: "Klar att skicka",
 };
 
+const primaryButtonClass =
+  "rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400";
+const secondaryButtonClass =
+  "rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400";
+
 function renderStatusAction(
   applicationStatus: ApplicationStatus,
   checklist: ReadinessChecklist | null,
@@ -177,7 +182,7 @@ function renderStatusAction(
         type="button"
         onClick={() => void updateApplicationStatus("in_review")}
         disabled={!checklist?.canMoveToReady}
-        className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+        className={primaryButtonClass}
       >
         Markera klar för granskning
       </button>
@@ -190,7 +195,7 @@ function renderStatusAction(
         type="button"
         onClick={() => void updateApplicationStatus("ready_to_submit")}
         disabled={!checklist?.canMoveToReady}
-        className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+        className={primaryButtonClass}
       >
         Godkänn ansökan
       </button>
@@ -203,7 +208,7 @@ function renderStatusAction(
         type="button"
         onClick={() => void updateApplicationStatus("submitted")}
         disabled={!checklist?.canSubmit}
-        className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+        className={primaryButtonClass}
       >
         Markera som klar att skicka
       </button>
@@ -215,7 +220,7 @@ function renderStatusAction(
       <button
         type="button"
         onClick={() => void updateApplicationStatus("draft")}
-        className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+        className={secondaryButtonClass}
       >
         Återställ till utkast
       </button>
@@ -237,12 +242,14 @@ export default function AnsokanPage() {
   const [isSavingGuide, setIsSavingGuide] = useState(false);
   const [savingBlockKey, setSavingBlockKey] = useState<string | null>(null);
   const [savedBlocks, setSavedBlocks] = useState<Record<string, boolean>>({});
+  const [dirtyBlocks, setDirtyBlocks] = useState<Record<string, boolean>>({});
   const [statusMessage, setStatusMessage] = useState("");
   const [documentDraftMessage, setDocumentDraftMessage] = useState("");
   const [evidenceMessage, setEvidenceMessage] = useState("");
   const [isSavingEvidence, setIsSavingEvidence] = useState(false);
   const [isGeneratingDocumentDraft, setIsGeneratingDocumentDraft] = useState(false);
   const [isApprovingDocumentDraft, setIsApprovingDocumentDraft] = useState(false);
+  const [deletingDocumentDraftId, setDeletingDocumentDraftId] = useState<string | null>(null);
   const [isAiSuggestingEvidence, setIsAiSuggestingEvidence] = useState(false);
   const [isAiSuggestingManagement, setIsAiSuggestingManagement] = useState(false);
   const [isAiSuggestingResponsiblePeople, setIsAiSuggestingResponsiblePeople] = useState(false);
@@ -277,6 +284,122 @@ export default function AnsokanPage() {
   const approvedDocumentDrafts = documentDrafts.filter((draft) => draft.isApproved);
   const approvedDocumentDraftCount = approvedDocumentDrafts.length;
 
+  const blockCompletion = useMemo(() => {
+    const hasValue = (value: string) => Boolean(value.trim());
+    const hasAnswer = (key: string) => hasValue(answers[key]?.answer || "");
+
+    const profileQuestionnaireComplete =
+      hasValue(profile.clinicName) &&
+      hasValue(profile.orgNumber) &&
+      hasValue(profile.address) &&
+      hasValue(profile.postalCode) &&
+      hasValue(profile.municipality) &&
+      hasValue(profile.email) &&
+      questionnaireItems.every((item) => hasAnswer(item.key));
+
+    const managementSystemComplete = managementSystemRequirementItems.every((item) => hasAnswer(item.key));
+    const responsibleComplete = responsiblePersonRequirementItems.every((item) => hasAnswer(item.key));
+    const ownershipComplete = ownershipRequirementItems.every((item) => hasAnswer(item.key));
+    const facilityComplete = facilityRequirementItems.every((item) => hasAnswer(item.key));
+    const attachmentsComplete = attachmentChecklistRequirementItems.every((item) => hasAnswer(item.key));
+
+    return {
+      "profile-questionnaire": profileQuestionnaireComplete,
+      "management-system": managementSystemComplete,
+      responsible: responsibleComplete,
+      ownership: ownershipComplete,
+      facility: facilityComplete,
+      attachments: attachmentsComplete,
+      "application-all":
+        profileQuestionnaireComplete &&
+        managementSystemComplete &&
+        responsibleComplete &&
+        ownershipComplete &&
+        facilityComplete &&
+        attachmentsComplete,
+    };
+  }, [answers, profile]);
+
+  function isBlockComplete(blockKey: string) {
+    if (dirtyBlocks[blockKey]) {
+      return false;
+    }
+
+    return savedBlocks[blockKey] || blockCompletion[blockKey as keyof typeof blockCompletion] || false;
+  }
+
+  const uiChecklist = useMemo(() => {
+    if (!checklist) {
+      return null;
+    }
+
+    const profileComplete = !dirtyBlocks["profile-questionnaire"] && (savedBlocks["profile-questionnaire"] || blockCompletion["profile-questionnaire"]);
+    const managementSystemComplete = !dirtyBlocks["management-system"] && (savedBlocks["management-system"] || blockCompletion["management-system"]);
+    const responsibleComplete = !dirtyBlocks.responsible && (savedBlocks.responsible || blockCompletion.responsible);
+    const ownershipComplete = !dirtyBlocks.ownership && (savedBlocks.ownership || blockCompletion.ownership);
+    const facilityComplete = !dirtyBlocks.facility && (savedBlocks.facility || blockCompletion.facility);
+    const attachmentsComplete = !dirtyBlocks.attachments && (savedBlocks.attachments || blockCompletion.attachments);
+
+    const ivoChecklistItems = checklist.ivoChecklistItems.map((item) => {
+      switch (item.key) {
+        case "organization_identity":
+        case "clinic_location":
+        case "care_scope":
+        case "staffing":
+        case "quality_process":
+        case "incident_routine":
+          return { ...item, done: profileComplete };
+        case "management_system":
+          return { ...item, done: managementSystemComplete };
+        case "responsible_people":
+          return { ...item, done: responsibleComplete };
+        case "ownership_suitability":
+          return { ...item, done: ownershipComplete };
+        case "facility_and_equipment":
+          return { ...item, done: facilityComplete };
+        case "attachment_checklist":
+          return { ...item, done: attachmentsComplete };
+        default:
+          return item;
+      }
+    });
+
+    const missingIvoItems = ivoChecklistItems.filter((item) => !item.done).map((item) => item.label);
+    const ivoChecklistComplete = missingIvoItems.length === 0;
+    const questionnaireComplete = profileComplete;
+    const canMoveToReady =
+      checklist.hasOrganization &&
+      checklist.hasClinic &&
+      questionnaireComplete &&
+      checklist.requirementsComplete &&
+      ivoChecklistComplete;
+    const canSubmit = canMoveToReady && checklist.evidenceLinked;
+
+    return {
+      ...checklist,
+      questionnaireComplete,
+      ivoChecklistItems,
+      missingIvoItems,
+      ivoChecklistComplete,
+      canMoveToReady,
+      canSubmit,
+    };
+  }, [checklist, dirtyBlocks, savedBlocks, blockCompletion]);
+
+  const visibleApplicationStatus = useMemo(() => {
+    if (applicationStatus === "submitted" && !uiChecklist?.canSubmit) {
+      return uiChecklist?.canMoveToReady ? "ready_to_submit" : "draft";
+    }
+
+    if ((applicationStatus === "ready_to_submit" || applicationStatus === "in_review") && !uiChecklist?.canMoveToReady) {
+      return "draft";
+    }
+
+    return applicationStatus;
+  }, [applicationStatus, uiChecklist]);
+
+  const visibleActiveStageIndex = stages.findIndex((stage) => stage.key === visibleApplicationStatus);
+
   function resolveBlockKeyForAnswer(questionKey: string) {
     if (questionnaireItems.some((item) => item.key === questionKey)) {
       return "profile-questionnaire";
@@ -309,6 +432,12 @@ export default function AnsokanPage() {
     if (!blockKey) {
       return;
     }
+
+    setDirtyBlocks((prev) => ({
+      ...prev,
+      [blockKey]: true,
+      "application-all": true,
+    }));
 
     setSavedBlocks((prev) => ({
       ...prev,
@@ -386,25 +515,25 @@ export default function AnsokanPage() {
       {
         key: "profile",
         label: "Grunduppgifter för verksamheten är kompletta",
-        done: Boolean(checklist?.hasOrganization && checklist?.hasClinic),
+        done: Boolean(uiChecklist?.hasOrganization && uiChecklist?.hasClinic),
       },
       {
         key: "questionnaire",
         label: "Frågeguiden är ifylld",
-        done: checklist?.questionnaireComplete || false,
+        done: uiChecklist?.questionnaireComplete || false,
       },
       {
         key: "requirements",
         label: "Kravlistan är komplett",
-        done: checklist?.requirementsComplete || false,
+        done: uiChecklist?.requirementsComplete || false,
       },
       {
         key: "evidence",
         label: "Evidens finns för varje krav",
-        done: checklist?.evidenceLinked || false,
+        done: uiChecklist?.evidenceLinked || false,
       },
     ],
-    [checklist]
+    [uiChecklist]
   );
 
   async function loadApplicationState() {
@@ -610,6 +739,10 @@ export default function AnsokanPage() {
     }
 
     setAiContext({ clinicName: profile.clinicName, municipality: profile.municipality });
+    setDirtyBlocks((prev) => ({
+      ...prev,
+      [blockKey]: false,
+    }));
     setSavedBlocks((prev) => ({
       ...prev,
       [blockKey]: true,
@@ -743,6 +876,28 @@ export default function AnsokanPage() {
     }
 
     setDocumentDraftMessage("Dokumentutkastet är godkänt av verksamhetsansvarig.");
+    await loadDocumentDrafts();
+  }
+
+  async function deleteDocumentDraft(documentId: string) {
+    setDeletingDocumentDraftId(documentId);
+    setDocumentDraftMessage("");
+
+    const response = await fetch("/api/documents/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId }),
+    });
+
+    setDeletingDocumentDraftId(null);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setDocumentDraftMessage(data.error || "Kunde inte ta bort dokumentutkastet.");
+      return;
+    }
+
+    setDocumentDraftMessage("Dokumentutkastet togs bort.");
     await loadDocumentDrafts();
   }
 
@@ -1145,7 +1300,7 @@ export default function AnsokanPage() {
           Här samlar du frågeguiden, underlagen, evidensen och statusen inför inskick till IVO.
         </p>
         <div className="mt-4 inline-flex rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-          Nuvarande status: {stageLabels[applicationStatus]}
+          Nuvarande status: {stageLabels[visibleApplicationStatus]}
         </div>
         {statusMessage ? <p className="mt-3 text-sm text-[color:var(--muted)]">{statusMessage}</p> : null}
       </header>
@@ -1163,8 +1318,8 @@ export default function AnsokanPage() {
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {stages.map((stage, index) => {
-            const isActive = index === activeStageIndex;
-            const isCompleted = index < activeStageIndex;
+            const isActive = index === visibleActiveStageIndex;
+            const isCompleted = index < visibleActiveStageIndex;
 
             return (
               <article
@@ -1230,7 +1385,7 @@ export default function AnsokanPage() {
             ))}
           </ul>
           <p className="mt-3 text-xs text-[color:var(--muted)]">
-            Krav klara: {checklist?.completeRequirementCount || 0}/{checklist?.requirementCount || 0}. Evidens: {checklist?.evidenceCount || 0}.
+            Krav klara: {uiChecklist?.completeRequirementCount || 0}/{uiChecklist?.requirementCount || 0}. Evidens: {uiChecklist?.evidenceCount || 0}.
           </p>
         </div>
 
@@ -1244,17 +1399,17 @@ export default function AnsokanPage() {
             </div>
             <span
               className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                checklist?.ivoChecklistComplete
+                uiChecklist?.ivoChecklistComplete
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-amber-100 text-amber-800"
               }`}
             >
-              {checklist?.ivoChecklistComplete ? "Grundpaket komplett" : "Komplettering krävs"}
+              {uiChecklist?.ivoChecklistComplete ? "Grundpaket komplett" : "Komplettering krävs"}
             </span>
           </div>
 
           <div className="mt-4 space-y-3">
-            {(checklist?.ivoChecklistItems || []).map((item) => (
+            {(uiChecklist?.ivoChecklistItems || []).map((item) => (
               <article
                 key={item.key}
                 className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3"
@@ -1274,22 +1429,22 @@ export default function AnsokanPage() {
             ))}
           </div>
 
-          {checklist?.missingIvoItems?.length ? (
+          {uiChecklist?.missingIvoItems?.length ? (
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm font-semibold text-amber-900">Kvar innan ansökningsunderlaget är komplett i appen</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">
-                {checklist.missingIvoItems.map((item) => (
+                {uiChecklist.missingIvoItems.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
             </div>
           ) : null}
 
-          {checklist?.advisoryIvoGaps?.length ? (
+          {uiChecklist?.advisoryIvoGaps?.length ? (
             <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Kvar att modellera i produkten</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[color:var(--muted)]">
-                {checklist.advisoryIvoGaps.map((item) => (
+                {uiChecklist.advisoryIvoGaps.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
@@ -1362,15 +1517,14 @@ export default function AnsokanPage() {
             type="button"
             onClick={() => void saveGuide("Grunduppgifter och frågeguide sparade.", "profile-questionnaire")}
             disabled={isSavingGuide}
-            className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            className={isBlockComplete("profile-questionnaire") ? secondaryButtonClass : primaryButtonClass}
           >
             {isSavingGuide && savingBlockKey === "profile-questionnaire"
               ? "Sparar..."
-              : "Spara grunduppgifter och frågeguide"}
+              : isBlockComplete("profile-questionnaire")
+                ? "Sparad"
+                : "Spara grunduppgifter och frågeguide"}
           </button>
-          {savedBlocks["profile-questionnaire"] ? (
-            <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p>
-          ) : null}
         </div>
       </section>
 
@@ -1396,7 +1550,7 @@ export default function AnsokanPage() {
                 type="button"
                 onClick={() => void suggestManagementSystem()}
                 disabled={isAiSuggestingManagement}
-                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                className={secondaryButtonClass}
               >
                 {isAiSuggestingManagement ? "AI arbetar..." : "AI: Föreslå utkast"}
               </button>
@@ -1474,13 +1628,14 @@ export default function AnsokanPage() {
             type="button"
             onClick={() => void saveGuide("Ledningssystemet för ansökan sparat.", "management-system")}
             disabled={isSavingGuide}
-            className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            className={isBlockComplete("management-system") ? secondaryButtonClass : primaryButtonClass}
           >
-            {isSavingGuide && savingBlockKey === "management-system" ? "Sparar..." : "Spara ledningssystem"}
+            {isSavingGuide && savingBlockKey === "management-system"
+              ? "Sparar..."
+              : isBlockComplete("management-system")
+                ? "Sparad"
+                : "Spara ledningssystem"}
           </button>
-          {savedBlocks["management-system"] ? (
-            <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p>
-          ) : null}
         </div>
       </section>
 
@@ -1505,7 +1660,7 @@ export default function AnsokanPage() {
                 type="button"
                 onClick={() => void suggestResponsiblePeople()}
                 disabled={isAiSuggestingResponsiblePeople}
-                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                className={secondaryButtonClass}
               >
                 {isAiSuggestingResponsiblePeople ? "AI arbetar..." : "AI: Föreslå utkast"}
               </button>
@@ -1560,11 +1715,14 @@ export default function AnsokanPage() {
               type="button"
               onClick={() => void saveGuide("Ansvar och legitimation sparat.", "responsible")}
               disabled={isSavingGuide}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              className={isBlockComplete("responsible") ? secondaryButtonClass : primaryButtonClass}
             >
-              {isSavingGuide && savingBlockKey === "responsible" ? "Sparar..." : "Spara ansvar och legitimation"}
+              {isSavingGuide && savingBlockKey === "responsible"
+                ? "Sparar..."
+                : isBlockComplete("responsible")
+                  ? "Sparad"
+                  : "Spara ansvar och legitimation"}
             </button>
-            {savedBlocks.responsible ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
           </div>
         </div>
 
@@ -1612,11 +1770,14 @@ export default function AnsokanPage() {
               type="button"
               onClick={() => void saveGuide("Ägarbild och lämplighet sparad.", "ownership")}
               disabled={isSavingGuide}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              className={isBlockComplete("ownership") ? secondaryButtonClass : primaryButtonClass}
             >
-              {isSavingGuide && savingBlockKey === "ownership" ? "Sparar..." : "Spara ägarbild och lämplighet"}
+              {isSavingGuide && savingBlockKey === "ownership"
+                ? "Sparar..."
+                : isBlockComplete("ownership")
+                  ? "Sparad"
+                  : "Spara ägarbild och lämplighet"}
             </button>
-            {savedBlocks.ownership ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
           </div>
         </div>
 
@@ -1632,7 +1793,7 @@ export default function AnsokanPage() {
                 type="button"
                 onClick={() => void suggestFacilityAndEquipment()}
                 disabled={isAiSuggestingFacility}
-                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                className={secondaryButtonClass}
               >
                 {isAiSuggestingFacility ? "AI arbetar..." : "AI: Föreslå utkast"}
               </button>
@@ -1655,11 +1816,14 @@ export default function AnsokanPage() {
               type="button"
               onClick={() => void saveGuide("Lokaler och utrustning sparat.", "facility")}
               disabled={isSavingGuide}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              className={isBlockComplete("facility") ? secondaryButtonClass : primaryButtonClass}
             >
-              {isSavingGuide && savingBlockKey === "facility" ? "Sparar..." : "Spara lokaler och utrustning"}
+              {isSavingGuide && savingBlockKey === "facility"
+                ? "Sparar..."
+                : isBlockComplete("facility")
+                  ? "Sparad"
+                  : "Spara lokaler och utrustning"}
             </button>
-            {savedBlocks.facility ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
           </div>
         </div>
 
@@ -1675,7 +1839,7 @@ export default function AnsokanPage() {
                 type="button"
                 onClick={() => void suggestAttachmentChecklist()}
                 disabled={isAiSuggestingAttachments}
-                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                className={secondaryButtonClass}
               >
                 {isAiSuggestingAttachments ? "AI arbetar..." : "AI: Föreslå utkast"}
               </button>
@@ -1698,11 +1862,14 @@ export default function AnsokanPage() {
               type="button"
               onClick={() => void saveGuide("Bilagechecklistan sparad.", "attachments")}
               disabled={isSavingGuide}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              className={isBlockComplete("attachments") ? secondaryButtonClass : primaryButtonClass}
             >
-              {isSavingGuide && savingBlockKey === "attachments" ? "Sparar..." : "Spara bilagechecklista"}
+              {isSavingGuide && savingBlockKey === "attachments"
+                ? "Sparar..."
+                : isBlockComplete("attachments")
+                  ? "Sparad"
+                  : "Spara bilagechecklista"}
             </button>
-            {savedBlocks.attachments ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
           </div>
         </div>
 
@@ -1711,11 +1878,14 @@ export default function AnsokanPage() {
             type="button"
             onClick={() => void saveGuide("Ansökningsuppgifterna sparade.", "application-all")}
             disabled={isSavingGuide}
-            className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            className={isBlockComplete("application-all") ? secondaryButtonClass : primaryButtonClass}
           >
-            {isSavingGuide && savingBlockKey === "application-all" ? "Sparar..." : "Spara ansökningsuppgifter"}
+            {isSavingGuide && savingBlockKey === "application-all"
+              ? "Sparar..."
+              : isBlockComplete("application-all")
+                ? "Hela ansökan sparad"
+                : "Spara ansökningsuppgifter"}
           </button>
-          {savedBlocks["application-all"] ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
         </div>
       </section>
 
@@ -1736,11 +1906,19 @@ export default function AnsokanPage() {
               onChange={(event) => {
                 const nextRequirementId = event.target.value;
                 const nextRequirement = requirements.find((item) => item.id === nextRequirementId);
+                const nextKind = nextRequirement ? documentKindFromRequirementCode(nextRequirement.code) : "";
+                const nextTitle = nextRequirement
+                  ? `Dokumentutkast ${nextRequirement.code} - ${nextRequirement.title}`
+                  : "";
 
+                setDocumentDraftMessage("");
                 setDocumentDraftForm((prev) => ({
                   ...prev,
                   requirementId: nextRequirementId,
-                  kind: nextRequirement ? documentKindFromRequirementCode(nextRequirement.code) : "",
+                  kind: nextKind,
+                  title: nextTitle,
+                  body: "",
+                  note: "",
                 }));
               }}
               className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
@@ -1780,7 +1958,7 @@ export default function AnsokanPage() {
                 type="button"
                 onClick={createDocumentDraft}
                 disabled={isGeneratingDocumentDraft}
-                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+                className={primaryButtonClass}
               >
                 {isGeneratingDocumentDraft ? "AI arbetar..." : "AI: Skapa dokumentutkast"}
               </button>
@@ -1797,14 +1975,14 @@ export default function AnsokanPage() {
               <button
                 type="button"
                 onClick={() => void downloadApprovedDocumentPackage("pdf")}
-                className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
+                className={secondaryButtonClass}
               >
                 Ladda ner paket som PDF
               </button>
               <button
                 type="button"
                 onClick={() => void downloadApprovedDocumentPackage("docx")}
-                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                className={secondaryButtonClass}
               >
                 Ladda ner paket som DOCX
               </button>
@@ -1846,7 +2024,7 @@ export default function AnsokanPage() {
                         type="button"
                         onClick={() => void approveDocumentDraft(draft.id)}
                         disabled={draft.isApproved || isApprovingDocumentDraft}
-                        className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                        className={primaryButtonClass}
                       >
                         {draft.isApproved
                           ? "Godkänt"
@@ -1854,19 +2032,27 @@ export default function AnsokanPage() {
                             ? "Godkänner..."
                             : "Godkänn som verksamhetsansvarig"}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteDocumentDraft(draft.id)}
+                        disabled={deletingDocumentDraftId === draft.id}
+                        className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        {deletingDocumentDraftId === draft.id ? "Tar bort..." : "Ta bort utkast"}
+                      </button>
                       {draft.isApproved ? (
                         <>
                           <button
                             type="button"
                             onClick={() => void downloadDocumentDraft(draft, "pdf")}
-                            className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                            className={secondaryButtonClass}
                           >
                             Ladda ner PDF
                           </button>
                           <button
                             type="button"
                             onClick={() => void downloadDocumentDraft(draft, "docx")}
-                            className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                            className={secondaryButtonClass}
                           >
                             Ladda ner DOCX
                           </button>
@@ -1920,7 +2106,7 @@ export default function AnsokanPage() {
               type="button"
               onClick={suggestEvidence}
               disabled={isAiSuggestingEvidence}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              className={secondaryButtonClass}
             >
               {isAiSuggestingEvidence ? "AI arbetar..." : "AI: Föreslå evidensutkast"}
             </button>
@@ -1928,7 +2114,7 @@ export default function AnsokanPage() {
               type="button"
               onClick={createEvidence}
               disabled={isSavingEvidence}
-              className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              className={primaryButtonClass}
             >
               {isSavingEvidence ? "Sparar..." : "Spara evidens"}
             </button>
@@ -2012,7 +2198,7 @@ export default function AnsokanPage() {
             När underlagen är ifyllda och evidensen är på plats kan du flytta ansökan vidare i processen.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {renderStatusAction(applicationStatus, checklist, updateApplicationStatus)}
+              {renderStatusAction(visibleApplicationStatus, checklist, updateApplicationStatus)}
           </div>
         </article>
       </section>
@@ -2044,7 +2230,7 @@ export default function AnsokanPage() {
       <div className="flex flex-wrap gap-3">
         <Link
           href="/"
-          className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+          className={secondaryButtonClass}
         >
           Till startsidan
         </Link>

@@ -328,6 +328,32 @@ export default function AnsokanPage() {
     return savedBlocks[blockKey] || blockCompletion[blockKey as keyof typeof blockCompletion] || false;
   }
 
+  function formatEvidenceReference(item: EvidenceItem) {
+    const rawValue = (item.filePath || "").trim();
+
+    if (!rawValue) {
+      return "";
+    }
+
+    if (rawValue.includes("[kravkod]-underlag-v1.docx")) {
+      return `Intern referens: underlag-${item.requirementCode.toLowerCase()}-v1.docx`;
+    }
+
+    if (rawValue.toLowerCase().startsWith("intern referens:")) {
+      return rawValue;
+    }
+
+    if (rawValue.startsWith("http://") || rawValue.startsWith("https://")) {
+      return `Länk: ${rawValue}`;
+    }
+
+    if (rawValue.startsWith("/docs/")) {
+      return `Dokumentreferens: ${rawValue}`;
+    }
+
+    return `Intern referens: ${rawValue}`;
+  }
+
   const uiChecklist = useMemo(() => {
     if (!checklist) {
       return null;
@@ -902,13 +928,28 @@ export default function AnsokanPage() {
   }
 
   async function downloadDocumentDraft(draft: DocumentDraftItem, format: ExportFormat) {
+    const statusLine = draft.reviewedBy
+      ? `Godkänt av ${draft.reviewedBy}${draft.reviewedAt ? ` den ${new Date(draft.reviewedAt).toLocaleString("sv-SE")}` : ""}`
+      : draft.isApproved
+        ? "Godkänt"
+        : "Ej godkänt";
+
+    const documentContent = [
+      `# ${draft.title}`,
+      `## Dokumenttyp: ${documentKindLabel(draft.kind as never)}`,
+      `## Status: ${statusLine}`,
+      "",
+      "## Innehåll",
+      draft.body,
+    ].join("\n");
+
     const response = await fetch("/api/documents/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         format,
         title: draft.title,
-        content: draft.body,
+        content: documentContent,
       }),
     });
 
@@ -945,8 +986,8 @@ export default function AnsokanPage() {
           : "Godkänt";
 
         return [
-          `${documentKindLabel(draft.kind as never)}: ${draft.title}`,
-          statusLine,
+          `### ${documentKindLabel(draft.kind as never)}: ${draft.title}`,
+          `Status: ${statusLine}`,
           "",
           draft.body,
           "",
@@ -968,6 +1009,97 @@ export default function AnsokanPage() {
 
     if (!response.ok) {
       setDocumentDraftMessage("Kunde inte exportera dokumentpaketet.");
+      return;
+    }
+
+    const blob = await response.blob();
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `${packageTitle
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9\-]/g, "")}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
+  }
+
+  async function downloadCompleteApplicationPackage(format: ExportFormat) {
+    if (approvedDocumentDraftCount === 0 && evidence.length === 0) {
+      setEvidenceMessage("Det finns inget underlag att exportera ännu.");
+      return;
+    }
+
+    setEvidenceMessage("");
+
+    const packageTitle = "Ansökan - komplett underlag";
+    const generatedAt = new Date().toLocaleString("sv-SE");
+
+    const approvedDraftSection =
+      approvedDocumentDrafts.length > 0
+        ? approvedDocumentDrafts
+            .map((draft) => {
+              const statusLine = draft.reviewedBy
+                ? `Godkänt av ${draft.reviewedBy}${draft.reviewedAt ? ` den ${new Date(draft.reviewedAt).toLocaleString("sv-SE")}` : ""}`
+                : "Godkänt";
+
+              return [
+                `### ${documentKindLabel(draft.kind as never)}: ${draft.title}`,
+                statusLine,
+                "",
+                draft.body,
+                "",
+                "---",
+                "",
+              ].join("\n");
+            })
+            .join("\n")
+          : "Inga godkända dokumentutkast i paketet.";
+
+    const evidenceSection =
+      evidence.length > 0
+        ? evidence
+            .map((item) => {
+              const referenceText = formatEvidenceReference(item);
+
+              return [
+                `### ${item.requirementCode} - ${item.requirementTitle}`,
+                `Titel: ${item.title}`,
+                item.note ? `Beskrivning: ${item.note}` : "Beskrivning: -",
+                referenceText ? referenceText : "Intern referens: -",
+                "",
+                "---",
+                "",
+              ].join("\n");
+            })
+            .join("\n")
+        : "Ingen kopplad evidens i paketet.";
+
+    const packageContent = [
+      "# Komplett ansökningsunderlag",
+      `Genererad: ${generatedAt}`,
+      "",
+      "## A. Godkända dokumentutkast",
+      approvedDraftSection,
+      "",
+      "## B. Kopplade underlag och evidens",
+      evidenceSection,
+    ].join("\n");
+
+    const response = await fetch("/api/documents/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        format,
+        title: packageTitle,
+        content: packageContent,
+      }),
+    });
+
+    if (!response.ok) {
+      setEvidenceMessage("Kunde inte exportera komplett underlag.");
       return;
     }
 
@@ -1897,7 +2029,7 @@ export default function AnsokanPage() {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
           <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumentutkast</p>
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Skapa dokumentutkast</p>
             <p className="text-sm text-[color:var(--muted)]">
               AI skapar ett utkast som verksamhetsansvarig kan granska och godkänna innan det används i ansökan.
             </p>
@@ -1967,7 +2099,7 @@ export default function AnsokanPage() {
           </div>
 
           <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-white p-4">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Skapade dokumentutkast</p>
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Granska och exportera</p>
             <p className="text-sm text-[color:var(--muted)]">
               {approvedDocumentDraftCount} godkända dokument är redo att exporteras i paketet.
             </p>
@@ -2007,7 +2139,7 @@ export default function AnsokanPage() {
                           draft.isApproved ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                         }`}
                       >
-                        {draft.isApproved ? "Sparad och klar" : "Väntar på godkännande"}
+                        {draft.isApproved ? "Godkänd och klar" : "Väntar på godkännande"}
                       </span>
                     </div>
                     <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-[color:var(--line)] bg-white p-3 text-xs leading-5 text-[color:var(--ink)]">
@@ -2068,7 +2200,10 @@ export default function AnsokanPage() {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
           <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Lägg till evidens</p>
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Koppla evidens per krav</p>
+            <p className="text-sm text-[color:var(--muted)]">
+              Lägg in bilagor, länkar eller korta beskrivningar som visar hur kravet uppfylls i praktiken.
+            </p>
             <select
               value={evidenceForm.requirementId}
               onChange={(event) =>
@@ -2110,12 +2245,7 @@ export default function AnsokanPage() {
             >
               {isAiSuggestingEvidence ? "AI arbetar..." : "AI: Föreslå evidensutkast"}
             </button>
-            <button
-              type="button"
-              onClick={createEvidence}
-              disabled={isSavingEvidence}
-              className={primaryButtonClass}
-            >
+            <button type="button" onClick={createEvidence} disabled={isSavingEvidence} className={primaryButtonClass}>
               {isSavingEvidence ? "Sparar..." : "Spara evidens"}
             </button>
             {!canUseAiSupport && activePlan === "step2" ? (
@@ -2127,7 +2257,25 @@ export default function AnsokanPage() {
           </div>
 
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Tillagt underlag</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Kopplade underlag</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void downloadCompleteApplicationPackage("pdf")}
+                  className={secondaryButtonClass}
+                >
+                  Snabbexport PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void downloadCompleteApplicationPackage("docx")}
+                  className={secondaryButtonClass}
+                >
+                  Snabbexport DOCX
+                </button>
+              </div>
+            </div>
             {isLoading ? (
               <p className="text-sm text-[color:var(--muted)]">Läser in...</p>
             ) : evidence.length === 0 ? (
@@ -2135,19 +2283,23 @@ export default function AnsokanPage() {
                 Ingen evidens registrerad än.
               </p>
             ) : (
-              evidence.map((item) => (
-                <article key={item.id} className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                    {item.requirementCode}
-                  </p>
-                  <p className="text-sm font-semibold text-[color:var(--ink)]">{item.title}</p>
-                  <p className="mt-1 text-sm text-[color:var(--muted)]">{item.requirementTitle}</p>
-                  {item.note ? <p className="mt-2 text-sm text-[color:var(--muted)]">{item.note}</p> : null}
-                  {item.filePath ? (
-                    <p className="mt-2 text-xs text-[color:var(--muted)]">Ref: {item.filePath}</p>
-                  ) : null}
-                </article>
-              ))
+              evidence.map((item) => {
+                const referenceText = formatEvidenceReference(item);
+
+                return (
+                  <article key={item.id} className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Underlag</p>
+                    <p className="text-sm font-semibold text-[color:var(--ink)]">{item.title}</p>
+                    <p className="mt-1 text-sm text-[color:var(--muted)]">
+                      {item.requirementCode} - {item.requirementTitle}
+                    </p>
+                    {item.note ? <p className="mt-2 text-sm text-[color:var(--muted)]">{item.note}</p> : null}
+                    {referenceText ? (
+                      <p className="mt-2 text-xs text-[color:var(--muted)]">{referenceText}</p>
+                    ) : null}
+                  </article>
+                );
+              })
             )}
           </div>
         </div>
@@ -2182,11 +2334,33 @@ export default function AnsokanPage() {
           </p>
           <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">Granska och exportera</h2>
           <p className="mt-2 text-[color:var(--muted)]">
-            När underlaget är komplett kan det granskas och förberedas för export eller manuell inskick.
+            När underlaget är komplett kan det granskas och förberedas för export eller manuell inskickning.
           </p>
           <p className="mt-4 text-sm text-[color:var(--muted)]">
             Använd readiness-checklistan, evidensen och statussteget här på sidan för att slutföra ansökan.
           </p>
+          <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-white p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Exportera komplett ansökningspaket</p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">
+              Innehåller godkända dokumentutkast samt kopplade underlag och evidens.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void downloadCompleteApplicationPackage("pdf")}
+                className={secondaryButtonClass}
+              >
+                Ladda ner komplett paket PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadCompleteApplicationPackage("docx")}
+                className={secondaryButtonClass}
+              >
+                Ladda ner komplett paket DOCX
+              </button>
+            </div>
+          </div>
         </article>
 
         <article className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">

@@ -640,7 +640,7 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
           "Dokumentet visar hur kravet uppfylls i praktiken, inklusive ansvarig roll, senaste uppdatering och hur uppföljning sker i verksamheten.",
         filePathHint:
           input.currentEvidence?.filePath ||
-          "/docs/ansokan/[kravkod]-underlag-v1.docx",
+          "Intern referens: underlag-v1.docx",
       };
     }
     case "regulation_watch": {

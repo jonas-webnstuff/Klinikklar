@@ -6,6 +6,7 @@ const featureSchema = z.enum([
   "incident_investigation",
   "management_system",
   "controls",
+  "document_draft",
   "responsible_people",
   "ownership_suitability",
   "facility_and_equipment",
@@ -57,6 +58,16 @@ const inputSchema = z.object({
       owner: z.string().default(""),
       processes: z.string().default(""),
       documents: z.string().default(""),
+    })
+    .optional(),
+  currentDocumentDraft: z
+    .object({
+      kind: z.string().default(""),
+      requirementCode: z.string().default(""),
+      requirementTitle: z.string().default(""),
+      title: z.string().default(""),
+      body: z.string().default(""),
+      note: z.string().default(""),
     })
     .optional(),
   currentResponsiblePeople: z
@@ -167,6 +178,14 @@ const managementSystemOutputSchema = z.object({
   documents: z.string(),
 });
 
+const documentDraftOutputSchema = z.object({
+  feature: z.literal("document_draft"),
+  title: z.string(),
+  body: z.string(),
+  note: z.string(),
+  filePathHint: z.string(),
+});
+
 const controlsOutputSchema = z.object({
   feature: z.literal("controls"),
   title: z.string(),
@@ -240,6 +259,7 @@ const outputSchema = z.discriminatedUnion("feature", [
   routineOutputSchema,
   incidentOutputSchema,
   managementSystemOutputSchema,
+  documentDraftOutputSchema,
   controlsOutputSchema,
   responsiblePeopleOutputSchema,
   ownershipSuitabilityOutputSchema,
@@ -274,6 +294,8 @@ function planToneGuidance(plan: GenerateAssistanceInput["plan"], feature: Genera
     switch (feature) {
       case "application_evidence":
         return "Ansökan: skriv direkt för ansökningsunderlag med tydlig koppling till valt krav och vad bilagan ska visa.";
+      case "document_draft":
+        return "Ansökan: skapa ett dokumentutkast som verksamhetsansvarig kan granska och godkänna utan att först behöva tolka AI-språk.";
       default:
         return "Ansökan: prioritera sakliga formuleringar som fungerar direkt i ansökningspaketet utan onödig intern driftterminologi.";
     }
@@ -337,6 +359,12 @@ function featureGuidance(feature: GenerateAssistanceInput["feature"]) {
         "Beskriv ledningssystemet som ett levande arbetssätt, inte bara ett dokument.",
         "Ta med huvudprocesser som patientmottagning, hygien, journalföring, avvikelsehantering, riskanalys och egenkontroll.",
         "Nämn styrande dokument som faktiskt brukar finnas i mindre vårdverksamheter.",
+      ].join(" ");
+    case "document_draft":
+      return [
+        "Skriv ett dokumentutkast med rubrik, kort inledning, tydliga huvudpunkter och en avslutande granskningsnot.",
+        "Knyt dokumentet till valt krav eller dokumenttyp och skriv så att verksamhetsansvarig kan godkänna eller justera texten.",
+        "Undvik att hitta på fakta; använd bara sådant som kan fungera som realistiskt ansökningsunderlag.",
       ].join(" ");
     case "controls":
       return [
@@ -443,6 +471,43 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
           input.currentManagementSystem?.documents ||
           "Styrande dokument inkluderar ledningssystem, hygienrutiner, avvikelseprocess, riskregister, introduktionsmaterial, delegeringsrutiner och kontrolljournal.",
       };
+    case "document_draft": {
+      const requirementLabel = [input.currentDocumentDraft?.requirementCode, input.currentDocumentDraft?.requirementTitle]
+        .filter(Boolean)
+        .join(" - ");
+
+      return {
+        feature: "document_draft",
+        title:
+          input.currentDocumentDraft?.title ||
+          `Dokumentutkast ${requirementLabel || input.currentDocumentDraft?.kind || "för ansökan"}`,
+        body:
+          input.currentDocumentDraft?.body ||
+          [
+            `Dokumenttyp: ${input.currentDocumentDraft?.kind || "ansökningsunderlag"}`,
+            `Kopplat krav: ${requirementLabel || "Ej angivet"}`,
+            "",
+            "1. Syfte",
+            "Dokumentet beskriver hur verksamheten uppfyller kravet och hur ansvaret är organiserat.",
+            "",
+            "2. Huvudinnehåll",
+            "- Kort nulägesbeskrivning",
+            "- Ansvarig roll",
+            "- Hur uppföljning och granskning sker",
+            "- Eventuell dokumentreferens eller bilaga",
+            "",
+            "3. Granskning",
+            "Detta utkast ska granskas och godkännas av verksamhetsansvarig innan det används i ansökan.",
+          ].join("\n"),
+        note:
+          input.currentDocumentDraft?.note ||
+          "Utkast skapat för granskning av verksamhetsansvarig innan dokumentet räknas som klart.",
+        filePathHint:
+          input.currentDocumentDraft?.kind && input.currentDocumentDraft?.requirementCode
+            ? `/docs/ansokan/${input.currentDocumentDraft.kind.toLowerCase()}-${input.currentDocumentDraft.requirementCode.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.docx`
+            : "/docs/ansokan/dokumentutkast.docx",
+      };
+    }
     case "controls":
       return {
         feature: "controls",
@@ -614,6 +679,8 @@ function outputInstructions(feature: GenerateAssistanceInput["feature"]) {
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"incident_investigation","description":"...","immediateAction":"..."}`;
     case "management_system":
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"management_system","owner":"...","processes":"...","documents":"..."}`;
+    case "document_draft":
+      return `Returnera enbart JSON med exakt dessa fält: {"feature":"document_draft","title":"...","body":"...","note":"...","filePathHint":"..."}`;
     case "controls":
       return `Returnera enbart JSON med exakt dessa fält: {"feature":"controls","title":"...","description":"...","frequency":"weekly|monthly|quarterly|yearly|ad_hoc","ownerRole":"...","nextDueDate":"YYYY-MM-DD"}`;
     case "responsible_people":
@@ -653,6 +720,7 @@ function buildPrompt(input: GenerateAssistanceInput) {
     `Nuvarande rutinutkast: ${JSON.stringify(input.currentRoutine || {})}`,
     `Nuvarande avvikelseutkast: ${JSON.stringify(input.currentIncident || {})}`,
     `Nuvarande ledningssystemutkast: ${JSON.stringify(input.currentManagementSystem || {})}`,
+    `Nuvarande dokumentutkast: ${JSON.stringify(input.currentDocumentDraft || {})}`,
     `Nuvarande ansvariga personer: ${JSON.stringify(input.currentResponsiblePeople || {})}`,
     `Nuvarande ägarbild och lämplighet: ${JSON.stringify(input.currentOwnershipSuitability || {})}`,
     `Nuvarande lokaler och utrustning: ${JSON.stringify(input.currentFacilityAndEquipment || {})}`,

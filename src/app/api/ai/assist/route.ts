@@ -10,6 +10,7 @@ const bodySchema = z.object({
     "incident_investigation",
     "management_system",
     "controls",
+    "document_draft",
     "regulation_watch",
     "revision_readiness",
     "responsible_people",
@@ -28,6 +29,16 @@ const bodySchema = z.object({
   currentRoutine: z.any().optional(),
   currentIncident: z.any().optional(),
   currentManagementSystem: z.any().optional(),
+  currentDocumentDraft: z
+    .object({
+      kind: z.string().default(""),
+      requirementCode: z.string().default(""),
+      requirementTitle: z.string().default(""),
+      title: z.string().default(""),
+      body: z.string().default(""),
+      note: z.string().default(""),
+    })
+    .optional(),
   currentResponsiblePeople: z
     .object({
       operationsManagerName: z.string().default(""),

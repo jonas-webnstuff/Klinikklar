@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import OrganizationProfileForm from "@/components/OrganizationProfileForm";
+import { documentKindFromRequirementCode, documentKindLabel } from "@/lib/document-drafts";
 import {
   attachmentChecklistRequirementItems,
   complianceRequirements,
@@ -41,15 +42,6 @@ type AiResponsiblePeopleSuggestion = {
   qualityResponsibleName: string;
   qualityResponsibleRole: string;
   qualityResponsibleCompetence: string;
-};
-
-type AiOwnershipSuitabilitySuggestion = {
-  feature: "ownership_suitability";
-  legalEntityName: string;
-  legalEntityOrgNumber: string;
-  representativeName: string;
-  ownershipStructureDescription: string;
-  suitabilityStatement: string;
 };
 
 type AiFacilitySuggestion = {
@@ -119,6 +111,19 @@ type EvidenceItem = {
   note?: string;
   filePath?: string;
 };
+
+type DocumentDraftItem = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  isApproved: boolean;
+  createdAt: string;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+};
+
+type ExportFormat = "pdf" | "docx";
 
 type AuditItem = {
   id: string;
@@ -226,16 +231,21 @@ export default function AnsokanPage() {
   const [checklist, setChecklist] = useState<ReadinessChecklist | null>(null);
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [documentDrafts, setDocumentDrafts] = useState<DocumentDraftItem[]>([]);
   const [requirements, setRequirements] = useState<RequirementOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingGuide, setIsSavingGuide] = useState(false);
+  const [savingBlockKey, setSavingBlockKey] = useState<string | null>(null);
+  const [savedBlocks, setSavedBlocks] = useState<Record<string, boolean>>({});
   const [statusMessage, setStatusMessage] = useState("");
+  const [documentDraftMessage, setDocumentDraftMessage] = useState("");
   const [evidenceMessage, setEvidenceMessage] = useState("");
   const [isSavingEvidence, setIsSavingEvidence] = useState(false);
+  const [isGeneratingDocumentDraft, setIsGeneratingDocumentDraft] = useState(false);
+  const [isApprovingDocumentDraft, setIsApprovingDocumentDraft] = useState(false);
   const [isAiSuggestingEvidence, setIsAiSuggestingEvidence] = useState(false);
   const [isAiSuggestingManagement, setIsAiSuggestingManagement] = useState(false);
   const [isAiSuggestingResponsiblePeople, setIsAiSuggestingResponsiblePeople] = useState(false);
-  const [isAiSuggestingOwnership, setIsAiSuggestingOwnership] = useState(false);
   const [isAiSuggestingFacility, setIsAiSuggestingFacility] = useState(false);
   const [isAiSuggestingAttachments, setIsAiSuggestingAttachments] = useState(false);
   const [profile, setProfile] = useState<ProfileState>({
@@ -254,9 +264,58 @@ export default function AnsokanPage() {
     note: "",
     filePath: "",
   });
+  const [documentDraftForm, setDocumentDraftForm] = useState({
+    requirementId: "",
+    title: "",
+    body: "",
+    note: "",
+    kind: "",
+  });
 
   const activeStageIndex = stages.findIndex((stage) => stage.key === applicationStatus);
   const canUseAiSupport = activePlan === "ansokan" || activePlan === "step1" || activePlan === "step3";
+  const approvedDocumentDrafts = documentDrafts.filter((draft) => draft.isApproved);
+  const approvedDocumentDraftCount = approvedDocumentDrafts.length;
+
+  function resolveBlockKeyForAnswer(questionKey: string) {
+    if (questionnaireItems.some((item) => item.key === questionKey)) {
+      return "profile-questionnaire";
+    }
+
+    if (managementSystemRequirementItems.some((item) => item.key === questionKey)) {
+      return "management-system";
+    }
+
+    if (responsiblePersonRequirementItems.some((item) => item.key === questionKey)) {
+      return "responsible";
+    }
+
+    if (ownershipRequirementItems.some((item) => item.key === questionKey)) {
+      return "ownership";
+    }
+
+    if (facilityRequirementItems.some((item) => item.key === questionKey)) {
+      return "facility";
+    }
+
+    if (attachmentChecklistRequirementItems.some((item) => item.key === questionKey)) {
+      return "attachments";
+    }
+
+    return null;
+  }
+
+  function markBlockAsDirty(blockKey: string | null) {
+    if (!blockKey) {
+      return;
+    }
+
+    setSavedBlocks((prev) => ({
+      ...prev,
+      [blockKey]: false,
+      "application-all": false,
+    }));
+  }
 
   function getAnswerValue(key: string) {
     return answers[key]?.answer || "";
@@ -267,6 +326,7 @@ export default function AnsokanPage() {
   }
 
   function setAnswerValue(key: string, value: string) {
+    markBlockAsDirty(resolveBlockKeyForAnswer(key));
     setAnswers((prev) => ({
       ...prev,
       [key]: {
@@ -277,6 +337,7 @@ export default function AnsokanPage() {
   }
 
   function setFollowUpValue(key: string, value: string) {
+    markBlockAsDirty(resolveBlockKeyForAnswer(key));
     setAnswers((prev) => ({
       ...prev,
       [key]: {
@@ -285,6 +346,40 @@ export default function AnsokanPage() {
       },
     }));
   }
+
+  useEffect(() => {
+    const representativeValue = profile.email.trim();
+
+    setAnswers((prev) => {
+      const legalEntityNameCurrent = prev.ownership_legal_entity_name?.answer || "";
+      const legalEntityOrgNumberCurrent = prev.ownership_legal_entity_org_number?.answer || "";
+      const representativeCurrent = prev.ownership_representative_name?.answer || "";
+
+      if (
+        legalEntityNameCurrent === profile.clinicName &&
+        legalEntityOrgNumberCurrent === profile.orgNumber &&
+        representativeCurrent === representativeValue
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        ownership_legal_entity_name: {
+          answer: profile.clinicName,
+          followUpAnswer: prev.ownership_legal_entity_name?.followUpAnswer || "",
+        },
+        ownership_legal_entity_org_number: {
+          answer: profile.orgNumber,
+          followUpAnswer: prev.ownership_legal_entity_org_number?.followUpAnswer || "",
+        },
+        ownership_representative_name: {
+          answer: representativeValue,
+          followUpAnswer: prev.ownership_representative_name?.followUpAnswer || "",
+        },
+      };
+    });
+  }, [profile.clinicName, profile.orgNumber, profile.email]);
 
   const readinessItems = useMemo(
     () => [
@@ -380,6 +475,38 @@ export default function AnsokanPage() {
     }));
   }
 
+  async function loadDocumentDrafts() {
+    const response = await fetch("/api/documents/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as {
+      documents?: DocumentDraftItem[];
+    };
+
+    setDocumentDrafts(data.documents || []);
+  }
+
+  useEffect(() => {
+    const selectedRequirement = requirements.find((item) => item.id === documentDraftForm.requirementId);
+
+    if (!selectedRequirement) {
+      return;
+    }
+
+    const nextKind = documentKindFromRequirementCode(selectedRequirement.code);
+
+    setDocumentDraftForm((prev) =>
+      prev.kind === nextKind ? prev : { ...prev, kind: nextKind }
+    );
+  }, [documentDraftForm.requirementId, requirements]);
+
   async function loadWorkspacePlanContext() {
     const response = await fetch("/api/workspace/load", {
       method: "POST",
@@ -423,7 +550,7 @@ export default function AnsokanPage() {
     });
   }
 
-  async function saveGuide(successMessage: string) {
+  async function saveGuide(successMessage: string, blockKey = "guide") {
     if (!profile.clinicName.trim()) {
       setStatusMessage("Ange klinikens namn innan du sparar.");
       return;
@@ -455,6 +582,7 @@ export default function AnsokanPage() {
     }
 
     setIsSavingGuide(true);
+    setSavingBlockKey(blockKey);
     setStatusMessage("");
 
     const response = await fetch("/api/workspace/save", {
@@ -473,6 +601,7 @@ export default function AnsokanPage() {
     });
 
     setIsSavingGuide(false);
+    setSavingBlockKey(null);
 
     if (!response.ok) {
       const data = (await response.json()) as { error?: string };
@@ -481,6 +610,10 @@ export default function AnsokanPage() {
     }
 
     setAiContext({ clinicName: profile.clinicName, municipality: profile.municipality });
+    setSavedBlocks((prev) => ({
+      ...prev,
+      [blockKey]: true,
+    }));
     setStatusMessage(successMessage);
     await loadApplicationState();
     await loadEvidence();
@@ -539,6 +672,162 @@ export default function AnsokanPage() {
     setEvidenceForm((prev) => ({ ...prev, title: "", note: "", filePath: "" }));
     await loadEvidence();
     await loadApplicationState();
+  }
+
+  async function createDocumentDraft() {
+    if (!documentDraftForm.requirementId) {
+      setDocumentDraftMessage("Välj krav innan du skapar ett dokumentutkast.");
+      return;
+    }
+
+    const selectedRequirement = requirements.find((item) => item.id === documentDraftForm.requirementId);
+
+    if (!selectedRequirement) {
+      setDocumentDraftMessage("Välj ett giltigt krav.");
+      return;
+    }
+
+    setIsGeneratingDocumentDraft(true);
+    setDocumentDraftMessage("");
+
+    const response = await fetch("/api/documents/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requirementId: documentDraftForm.requirementId,
+        title: documentDraftForm.title,
+        body: documentDraftForm.body,
+        note: documentDraftForm.note,
+      }),
+    });
+
+    setIsGeneratingDocumentDraft(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setDocumentDraftMessage(data.error || "Kunde inte skapa dokumentutkast.");
+      return;
+    }
+
+    const data = (await response.json()) as {
+      document: DocumentDraftItem;
+    };
+
+    setDocumentDraftForm((prev) => ({
+      ...prev,
+      title: data.document.title,
+      body: data.document.body,
+      note: "Utkastet är skapat och väntar på godkännande.",
+      kind: documentKindFromRequirementCode(selectedRequirement.code),
+    }));
+    setDocumentDraftMessage("Dokumentutkast skapat. Granska och godkänn när det är klart.");
+    await loadDocumentDrafts();
+  }
+
+  async function approveDocumentDraft(documentId: string) {
+    setIsApprovingDocumentDraft(true);
+    setDocumentDraftMessage("");
+
+    const response = await fetch("/api/documents/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentId }),
+    });
+
+    setIsApprovingDocumentDraft(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setDocumentDraftMessage(data.error || "Kunde inte godkänna dokumentutkastet.");
+      return;
+    }
+
+    setDocumentDraftMessage("Dokumentutkastet är godkänt av verksamhetsansvarig.");
+    await loadDocumentDrafts();
+  }
+
+  async function downloadDocumentDraft(draft: DocumentDraftItem, format: ExportFormat) {
+    const response = await fetch("/api/documents/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        format,
+        title: draft.title,
+        content: draft.body,
+      }),
+    });
+
+    if (!response.ok) {
+      setDocumentDraftMessage("Kunde inte exportera dokumentutkastet.");
+      return;
+    }
+
+    const blob = await response.blob();
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `${draft.title
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9\-]/g, "")}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
+  }
+
+  async function downloadApprovedDocumentPackage(format: ExportFormat) {
+    if (approvedDocumentDraftCount === 0) {
+      setDocumentDraftMessage("Det finns inga godkända dokument att exportera.");
+      return;
+    }
+
+    const packageTitle = "Ansökan - dokumentpaket";
+    const packageContent = approvedDocumentDrafts
+      .map((draft) => {
+        const statusLine = draft.reviewedBy
+          ? `Godkänt av ${draft.reviewedBy}${draft.reviewedAt ? ` den ${new Date(draft.reviewedAt).toLocaleString("sv-SE")}` : ""}`
+          : "Godkänt";
+
+        return [
+          `${documentKindLabel(draft.kind as never)}: ${draft.title}`,
+          statusLine,
+          "",
+          draft.body,
+          "",
+          "---",
+          "",
+        ].join("\n");
+      })
+      .join("\n");
+
+    const response = await fetch("/api/documents/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        format,
+        title: packageTitle,
+        content: packageContent,
+      }),
+    });
+
+    if (!response.ok) {
+      setDocumentDraftMessage("Kunde inte exportera dokumentpaketet.");
+      return;
+    }
+
+    const blob = await response.blob();
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `${packageTitle
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9\-]/g, "")}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
   }
 
   async function suggestEvidence() {
@@ -740,56 +1029,6 @@ export default function AnsokanPage() {
     setStatusMessage("AI-förslag infogat för ansvariga personer.");
   }
 
-  async function suggestOwnershipSuitability() {
-    if (!canUseAiSupport || !activePlan) {
-      setStatusMessage("AI-stöd i ansökan ingår i Klinikklar Ansökan, Klinikklar Komplett och Klinikklar Premium.");
-      return;
-    }
-
-    setIsAiSuggestingOwnership(true);
-    setStatusMessage("");
-
-    const response = await fetch("/api/ai/assist", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        plan: activePlan,
-        feature: "ownership_suitability",
-        clinicName: profile.clinicName,
-        municipality: profile.municipality,
-        currentOwnershipSuitability: {
-          legalEntityName: getAnswerValue("ownership_legal_entity_name"),
-          legalEntityOrgNumber: getAnswerValue("ownership_legal_entity_org_number"),
-          representativeName: getAnswerValue("ownership_representative_name"),
-          ownershipStructureDescription: getAnswerValue("ownership_structure_description"),
-          suitabilityStatement: getAnswerValue("ownership_suitability_statement"),
-        },
-      }),
-    });
-
-    setIsAiSuggestingOwnership(false);
-
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string };
-      setStatusMessage(data.error || "Kunde inte skapa AI-förslag för ägarbild och lämplighet.");
-      return;
-    }
-
-    const data = (await response.json()) as AiOwnershipSuitabilitySuggestion;
-
-    if (data.feature !== "ownership_suitability") {
-      setStatusMessage("AI-svaret för ägarbild och lämplighet hade fel format. Försök igen.");
-      return;
-    }
-
-    setAnswerValue("ownership_legal_entity_name", data.legalEntityName);
-    setAnswerValue("ownership_legal_entity_org_number", data.legalEntityOrgNumber);
-    setAnswerValue("ownership_representative_name", data.representativeName);
-    setAnswerValue("ownership_structure_description", data.ownershipStructureDescription);
-    setAnswerValue("ownership_suitability_statement", data.suitabilityStatement);
-    setStatusMessage("AI-förslag infogat för ägarbild och lämplighet.");
-  }
-
   async function suggestFacilityAndEquipment() {
     if (!canUseAiSupport || !activePlan) {
       setStatusMessage("AI-stöd i ansökan ingår i Klinikklar Ansökan, Klinikklar Komplett och Klinikklar Premium.");
@@ -891,6 +1130,7 @@ export default function AnsokanPage() {
   useEffect(() => {
     void loadApplicationState();
     void loadEvidence();
+    void loadDocumentDrafts();
     void loadWorkspacePlanContext();
   }, []);
 
@@ -1076,7 +1316,13 @@ export default function AnsokanPage() {
           <div className="mt-3">
             <OrganizationProfileForm
               value={profile}
-              onChange={(field, value) => setProfile((prev) => ({ ...prev, [field]: value }))}
+              onChange={(field, value) => {
+                markBlockAsDirty("profile-questionnaire");
+                if (field === "clinicName" || field === "orgNumber" || field === "email") {
+                  markBlockAsDirty("ownership");
+                }
+                setProfile((prev) => ({ ...prev, [field]: value }));
+              }}
               disabled={isSavingGuide}
             />
           </div>
@@ -1114,12 +1360,17 @@ export default function AnsokanPage() {
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => void saveGuide("Grunduppgifter och frågeguide sparade.")}
+            onClick={() => void saveGuide("Grunduppgifter och frågeguide sparade.", "profile-questionnaire")}
             disabled={isSavingGuide}
             className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isSavingGuide ? "Sparar..." : "Spara grunduppgifter och frågeguide"}
+            {isSavingGuide && savingBlockKey === "profile-questionnaire"
+              ? "Sparar..."
+              : "Spara grunduppgifter och frågeguide"}
           </button>
+          {savedBlocks["profile-questionnaire"] ? (
+            <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p>
+          ) : null}
         </div>
       </section>
 
@@ -1221,12 +1472,15 @@ export default function AnsokanPage() {
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => void saveGuide("Ledningssystemet för ansökan sparat.")}
+            onClick={() => void saveGuide("Ledningssystemet för ansökan sparat.", "management-system")}
             disabled={isSavingGuide}
             className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isSavingGuide ? "Sparar..." : "Spara ledningssystem"}
+            {isSavingGuide && savingBlockKey === "management-system" ? "Sparar..." : "Spara ledningssystem"}
           </button>
+          {savedBlocks["management-system"] ? (
+            <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p>
+          ) : null}
         </div>
       </section>
 
@@ -1301,6 +1555,17 @@ export default function AnsokanPage() {
               </div>
             </div>
           </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void saveGuide("Ansvar och legitimation sparat.", "responsible")}
+              disabled={isSavingGuide}
+              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              {isSavingGuide && savingBlockKey === "responsible" ? "Sparar..." : "Spara ansvar och legitimation"}
+            </button>
+            {savedBlocks.responsible ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
+          </div>
         </div>
 
         <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
@@ -1308,22 +1573,16 @@ export default function AnsokanPage() {
           <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">Huvudman och företrädare</h3>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-[color:var(--muted)]">
-              Sammanfatta juridisk huvudman, företrädare och varför ledning och ägare bedöms lämpliga.
+              Juridisk huvudman, organisationsnummer och kontaktperson hämtas automatiskt från Grunduppgifter.
             </p>
-            {canUseAiSupport ? (
-              <button
-                type="button"
-                onClick={() => void suggestOwnershipSuitability()}
-                disabled={isAiSuggestingOwnership}
-                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-              >
-                {isAiSuggestingOwnership ? "AI arbetar..." : "AI: Föreslå utkast"}
-              </button>
-            ) : null}
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {ownershipRequirementItems.map((item) => {
               const isLongField = item.key === "ownership_structure_description" || item.key === "ownership_suitability_statement";
+              const isProfileSyncedField =
+                item.key === "ownership_legal_entity_name" ||
+                item.key === "ownership_legal_entity_org_number" ||
+                item.key === "ownership_representative_name";
 
               return isLongField ? (
                 <textarea
@@ -1340,10 +1599,24 @@ export default function AnsokanPage() {
                   value={getAnswerValue(item.key)}
                   onChange={(event) => setAnswerValue(item.key, event.target.value)}
                   placeholder={item.placeholder}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  readOnly={isProfileSyncedField}
+                  className={`w-full rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm ${
+                    isProfileSyncedField ? "bg-slate-100 text-[color:var(--muted)]" : "bg-white"
+                  }`}
                 />
               );
             })}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void saveGuide("Ägarbild och lämplighet sparad.", "ownership")}
+              disabled={isSavingGuide}
+              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              {isSavingGuide && savingBlockKey === "ownership" ? "Sparar..." : "Spara ägarbild och lämplighet"}
+            </button>
+            {savedBlocks.ownership ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
           </div>
         </div>
 
@@ -1377,6 +1650,17 @@ export default function AnsokanPage() {
               />
             ))}
           </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void saveGuide("Lokaler och utrustning sparat.", "facility")}
+              disabled={isSavingGuide}
+              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              {isSavingGuide && savingBlockKey === "facility" ? "Sparar..." : "Spara lokaler och utrustning"}
+            </button>
+            {savedBlocks.facility ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
+          </div>
         </div>
 
         <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
@@ -1409,17 +1693,29 @@ export default function AnsokanPage() {
               />
             ))}
           </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void saveGuide("Bilagechecklistan sparad.", "attachments")}
+              disabled={isSavingGuide}
+              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              {isSavingGuide && savingBlockKey === "attachments" ? "Sparar..." : "Spara bilagechecklista"}
+            </button>
+            {savedBlocks.attachments ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => void saveGuide("Ansökningsuppgifterna sparade.")}
+            onClick={() => void saveGuide("Ansökningsuppgifterna sparade.", "application-all")}
             disabled={isSavingGuide}
             className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isSavingGuide ? "Sparar..." : "Spara ansökningsuppgifter"}
+            {isSavingGuide && savingBlockKey === "application-all" ? "Sparar..." : "Spara ansökningsuppgifter"}
           </button>
+          {savedBlocks["application-all"] ? <p className="text-sm font-medium text-emerald-700">Sparad och klar.</p> : null}
         </div>
       </section>
 
@@ -1428,6 +1724,161 @@ export default function AnsokanPage() {
         <p className="mt-2 text-sm text-[color:var(--muted)]">
           Koppla dokument eller länkar till respektive krav för att stärka ansökningsunderlaget.
         </p>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+          <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumentutkast</p>
+            <p className="text-sm text-[color:var(--muted)]">
+              AI skapar ett utkast som verksamhetsansvarig kan granska och godkänna innan det används i ansökan.
+            </p>
+            <select
+              value={documentDraftForm.requirementId}
+              onChange={(event) => {
+                const nextRequirementId = event.target.value;
+                const nextRequirement = requirements.find((item) => item.id === nextRequirementId);
+
+                setDocumentDraftForm((prev) => ({
+                  ...prev,
+                  requirementId: nextRequirementId,
+                  kind: nextRequirement ? documentKindFromRequirementCode(nextRequirement.code) : "",
+                }));
+              }}
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Välj krav för dokumentutkast</option>
+              {requirements.map((requirement) => (
+                <option key={requirement.id} value={requirement.id}>
+                  {requirement.code} - {requirement.title}
+                </option>
+              ))}
+            </select>
+            <div className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm text-[color:var(--muted)]">
+              Dokumenttyp: {documentDraftForm.kind ? documentKindLabel(documentDraftForm.kind as never) : "Välj ett krav först"}
+            </div>
+            <input
+              value={documentDraftForm.title}
+              onChange={(event) => setDocumentDraftForm((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Titel på dokumentutkast"
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <textarea
+              value={documentDraftForm.body}
+              onChange={(event) => setDocumentDraftForm((prev) => ({ ...prev, body: event.target.value }))}
+              placeholder="Dokumentets innehåll"
+              rows={8}
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <textarea
+              value={documentDraftForm.note}
+              onChange={(event) => setDocumentDraftForm((prev) => ({ ...prev, note: event.target.value }))}
+              placeholder="Notis till verksamhetsansvarig"
+              rows={3}
+              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+            />
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={createDocumentDraft}
+                disabled={isGeneratingDocumentDraft}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                {isGeneratingDocumentDraft ? "AI arbetar..." : "AI: Skapa dokumentutkast"}
+              </button>
+            </div>
+            {documentDraftMessage ? <p className="text-sm text-[color:var(--muted)]">{documentDraftMessage}</p> : null}
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-white p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Skapade dokumentutkast</p>
+            <p className="text-sm text-[color:var(--muted)]">
+              {approvedDocumentDraftCount} godkända dokument är redo att exporteras i paketet.
+            </p>
+            <div className="flex flex-wrap gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3">
+              <button
+                type="button"
+                onClick={() => void downloadApprovedDocumentPackage("pdf")}
+                className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
+              >
+                Ladda ner paket som PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadApprovedDocumentPackage("docx")}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                Ladda ner paket som DOCX
+              </button>
+            </div>
+            {documentDrafts.length === 0 ? (
+              <p className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted)]">
+                Inga dokumentutkast skapade ännu.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {documentDrafts.map((draft) => (
+                  <article key={draft.id} className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                          {documentKindLabel(draft.kind as never)}
+                        </p>
+                        <h3 className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{draft.title}</h3>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          draft.isApproved ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {draft.isApproved ? "Sparad och klar" : "Väntar på godkännande"}
+                      </span>
+                    </div>
+                    <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-[color:var(--line)] bg-white p-3 text-xs leading-5 text-[color:var(--ink)]">
+                      {draft.body}
+                    </pre>
+                    {draft.reviewedBy ? (
+                      <p className="mt-2 text-xs text-[color:var(--muted)]">
+                        Godkänd av {draft.reviewedBy}
+                        {draft.reviewedAt ? ` den ${new Date(draft.reviewedAt).toLocaleString("sv-SE")}` : ""}
+                      </p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void approveDocumentDraft(draft.id)}
+                        disabled={draft.isApproved || isApprovingDocumentDraft}
+                        className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                      >
+                        {draft.isApproved
+                          ? "Godkänt"
+                          : isApprovingDocumentDraft
+                            ? "Godkänner..."
+                            : "Godkänn som verksamhetsansvarig"}
+                      </button>
+                      {draft.isApproved ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void downloadDocumentDraft(draft, "pdf")}
+                            className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                          >
+                            Ladda ner PDF
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void downloadDocumentDraft(draft, "docx")}
+                            className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+                          >
+                            Ladda ner DOCX
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
           <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">

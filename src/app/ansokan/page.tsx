@@ -1427,7 +1427,7 @@ export default function AnsokanPage() {
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
           Ansökan
         </p>
-        <h1 className="mt-2 text-3xl font-semibold text-[color:var(--ink)]">Frågeguide och underlag</h1>
+        <h1 className="mt-2 text-3xl font-semibold text-[color:var(--ink)]">Förbered din IVO-ansökan</h1>
         <p className="mt-3 max-w-3xl text-[color:var(--muted)]">
           Här samlar du frågeguiden, underlagen, evidensen och statusen inför inskick till IVO.
         </p>
@@ -1479,6 +1479,14 @@ export default function AnsokanPage() {
                   <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
                     Klart
                   </p>
+                ) : null}
+                {stage.key === "submitted" ? (
+                  <a
+                    href="#ivo-export"
+                    className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                  >
+                    Gå till export
+                  </a>
                 ) : null}
               </article>
             );
@@ -2259,22 +2267,9 @@ export default function AnsokanPage() {
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Kopplade underlag</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void downloadCompleteApplicationPackage("pdf")}
-                  className={secondaryButtonClass}
-                >
-                  Snabbexport PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void downloadCompleteApplicationPackage("docx")}
-                  className={secondaryButtonClass}
-                >
-                  Snabbexport DOCX
-                </button>
-              </div>
+              <a href="#ivo-export" className="text-xs font-semibold text-[color:var(--brand)]">
+                Exportera i Steg 4
+              </a>
             </div>
             {isLoading ? (
               <p className="text-sm text-[color:var(--muted)]">Läser in...</p>
@@ -2339,28 +2334,12 @@ export default function AnsokanPage() {
           <p className="mt-4 text-sm text-[color:var(--muted)]">
             Använd readiness-checklistan, evidensen och statussteget här på sidan för att slutföra ansökan.
           </p>
-          <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-white p-4">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Exportera komplett ansökningspaket</p>
-            <p className="mt-1 text-xs text-[color:var(--muted)]">
-              Innehåller godkända dokumentutkast samt kopplade underlag och evidens.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void downloadCompleteApplicationPackage("pdf")}
-                className={secondaryButtonClass}
-              >
-                Ladda ner komplett paket PDF
-              </button>
-              <button
-                type="button"
-                onClick={() => void downloadCompleteApplicationPackage("docx")}
-                className={secondaryButtonClass}
-              >
-                Ladda ner komplett paket DOCX
-              </button>
-            </div>
-          </div>
+          <a
+            href="#ivo-export"
+            className="mt-4 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+          >
+            Fortsätt till Steg 4: Export
+          </a>
         </article>
 
         <article className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
@@ -2399,6 +2378,73 @@ export default function AnsokanPage() {
             </p>
           </div>
         </div>
+      </section>
+
+      <section id="ivo-export" className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">Steg 4</p>
+        <h2 className="mt-2 text-2xl font-semibold text-[color:var(--ink)]">Klar att skicka - export till IVO</h2>
+        <p className="mt-2 text-sm text-[color:var(--muted)]">
+          Här samlar du all export på ett ställe innan manuell inskickning till IVO.
+        </p>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Komplett ansökningspaket</p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">
+              Innehåller godkända dokumentutkast samt kopplade underlag och evidens.
+            </p>
+            <p className="mt-2 text-xs text-[color:var(--muted)]">
+              Godkända dokument: {approvedDocumentDraftCount}. Kopplade underlag: {evidence.length}.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void downloadCompleteApplicationPackage("pdf")}
+                disabled={approvedDocumentDraftCount === 0 && evidence.length === 0}
+                className={primaryButtonClass}
+              >
+                Ladda ner komplett paket PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadCompleteApplicationPackage("docx")}
+                disabled={approvedDocumentDraftCount === 0 && evidence.length === 0}
+                className={secondaryButtonClass}
+              >
+                Ladda ner komplett paket DOCX
+              </button>
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Endast godkända dokumentutkast</p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">
+              Exporterar bara utkast som är granskade och godkända.
+            </p>
+            <p className="mt-2 text-xs text-[color:var(--muted)]">Godkända dokument: {approvedDocumentDraftCount}.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void downloadApprovedDocumentPackage("pdf")}
+                disabled={approvedDocumentDraftCount === 0}
+                className={secondaryButtonClass}
+              >
+                Ladda ner dokumentpaket PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadApprovedDocumentPackage("docx")}
+                disabled={approvedDocumentDraftCount === 0}
+                className={secondaryButtonClass}
+              >
+                Ladda ner dokumentpaket DOCX
+              </button>
+            </div>
+          </article>
+        </div>
+
+        {evidenceMessage ? <p className="mt-3 text-sm text-[color:var(--muted)]">{evidenceMessage}</p> : null}
+        {documentDraftMessage ? <p className="mt-1 text-sm text-[color:var(--muted)]">{documentDraftMessage}</p> : null}
       </section>
 
       <div className="flex flex-wrap gap-3">

@@ -41,10 +41,12 @@ export async function Header() {
     }
   }
 
+  const homeHref = user ? (activePlan === "ansokan" ? "/ansokan" : "/workspace") : "/";
+
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--line)] bg-white/92 backdrop-blur">
       <div className="mx-auto flex w-full max-w-[1180px] items-center justify-between px-6 py-5 lg:px-8">
-        <Link href="/" className="flex items-center gap-3 text-[color:var(--ink)]">
+        <Link href={homeHref} className="flex items-center gap-3 text-[color:var(--ink)]">
           <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--brand)]/30 bg-[color:var(--brand-soft)] text-[color:var(--brand)]">
             <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M20 7 10 17l-6-6" strokeLinecap="round" strokeLinejoin="round" />

@@ -1190,6 +1190,61 @@ function WorkspacePageContent() {
     const uniqueKeys = new Set(routineEntries.map((entry) => entry.requirementKey));
     return uniqueKeys.size;
   }, [routineEntries]);
+  const overviewCompliancePercent = useMemo(() => {
+    const profileKeys: Array<keyof ProfileState> = [
+      "clinicName",
+      "orgNumber",
+      "address",
+      "postalCode",
+      "municipality",
+      "email",
+    ];
+
+    const profileRatio =
+      profileKeys.filter((key) => Boolean(profile[key]?.trim())).length / profileKeys.length;
+
+    const filledRatio = (items: Array<{ key: string }>) => {
+      if (items.length === 0) {
+        return 1;
+      }
+
+      const filled = items.filter(({ key }) => Boolean(answers[key]?.answer?.trim())).length;
+      return filled / items.length;
+    };
+
+    const questionnaireRatio = filledRatio(questionnaireItems);
+    const managementRatio = filledRatio(managementSystemRequirementItems);
+    const responsibleRatio = filledRatio(responsiblePersonRequirementItems);
+    const ownershipRatio = filledRatio(ownershipRequirementItems);
+    const facilityRatio = filledRatio(facilityRequirementItems);
+    const attachmentRatio = filledRatio(attachmentChecklistRequirementItems);
+    const routineRatio =
+      routineRequirementPoints.length > 0
+        ? completedRoutineCount / routineRequirementPoints.length
+        : 1;
+    const requirementRatio = totalRequirements > 0 ? completeRequirements / totalRequirements : 1;
+
+    const sectionRatios = [
+      profileRatio,
+      questionnaireRatio,
+      managementRatio,
+      responsibleRatio,
+      ownershipRatio,
+      facilityRatio,
+      attachmentRatio,
+      routineRatio,
+      requirementRatio,
+    ];
+
+    const averageRatio = sectionRatios.reduce((sum, ratio) => sum + ratio, 0) / sectionRatios.length;
+    return Math.round(averageRatio * 100);
+  }, [
+    profile,
+    answers,
+    completedRoutineCount,
+    totalRequirements,
+    completeRequirements,
+  ]);
   const hasLedningssystemCoverage = ledningssystemMissingFields.length === 0;
   const isOverview = activeView === "overview";
   const isApplicationView = activeView === "dokument";
@@ -4646,7 +4701,8 @@ function WorkspacePageContent() {
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3">
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Efterlevnad</p>
-            <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{progressPercent}%</p>
+            <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{overviewCompliancePercent}%</p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">Samlad ifyllnadsgrad</p>
           </div>
         </div>
 

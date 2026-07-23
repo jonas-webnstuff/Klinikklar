@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { isSuperAdminUser } from "@/lib/admin-access";
 import { HeaderNav } from "@/components/HeaderNav";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function Header() {
@@ -9,6 +10,36 @@ export async function Header() {
     data: { user },
   } = await supabase.auth.getUser();
   const canAdminCustomers = isSuperAdminUser(user?.email);
+  let activePlan: "ansokan" | "step1" | "step2" | "step3" | null = null;
+
+  if (user?.id) {
+    const admin = createSupabaseAdminClient();
+    const { data: membership } = await admin
+      .from("organization_memberships")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (membership?.organization_id) {
+      const { data: organization } = await admin
+        .from("organizations")
+        .select("plan")
+        .eq("id", membership.organization_id)
+        .limit(1)
+        .maybeSingle();
+
+      if (
+        organization?.plan === "ansokan" ||
+        organization?.plan === "step1" ||
+        organization?.plan === "step2" ||
+        organization?.plan === "step3"
+      ) {
+        activePlan = organization.plan;
+      }
+    }
+  }
 
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--line)] bg-white/92 backdrop-blur">
@@ -21,7 +52,11 @@ export async function Header() {
           </span>
           <span className="font-display text-[2rem] font-semibold tracking-[-0.04em]">Klinikklar</span>
         </Link>
-        <HeaderNav isAuthenticated={Boolean(user)} canAdminCustomers={canAdminCustomers} />
+        <HeaderNav
+          isAuthenticated={Boolean(user)}
+          canAdminCustomers={canAdminCustomers}
+          activePlan={activePlan}
+        />
         <div className="flex items-center gap-3">
           {user ? (
             <>

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { generateAssistance } from "@/lib/ai/generate-assistance";
 
 const bodySchema = z.object({
-  plan: z.enum(["step1", "step2", "step3"]),
+  plan: z.enum(["ansokan", "step1", "step2", "step3"]),
   feature: z.enum([
     "risk_analysis",
     "routine",

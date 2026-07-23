@@ -14,7 +14,7 @@ const answerSchema = z.object({
 });
 
 const bodySchema = z.object({
-  plan: z.enum(["step1", "step2", "step3"]).optional().nullable(),
+  plan: z.enum(["ansokan", "step1", "step2", "step3"]).optional().nullable(),
   profile: z.object({
     clinicName: z.string().min(1),
     orgNumber: z.string().min(1),

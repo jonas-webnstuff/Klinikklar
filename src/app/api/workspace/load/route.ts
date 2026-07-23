@@ -105,7 +105,21 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (!application) {
-      return NextResponse.json({ ok: true, found: false });
+      return NextResponse.json({
+        ok: true,
+        found: true,
+        userEmail: user.email || "",
+        profile: {
+          clinicName: clinic.name,
+          orgNumber: organization.org_number,
+          address: clinic.address || "",
+          postalCode: clinic.postal_code || "",
+          municipality: clinic.municipality,
+          email: organization.email,
+        },
+        plan: organization.plan,
+        answers: {},
+      });
     }
 
     const { data: responses, error: responsesError } = await supabase

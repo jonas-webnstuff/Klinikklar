@@ -16,7 +16,7 @@ const featureSchema = z.enum([
 ]);
 
 const inputSchema = z.object({
-  plan: z.enum(["step1", "step2", "step3"]),
+  plan: z.enum(["ansokan", "step1", "step2", "step3"]),
   feature: featureSchema,
   clinicName: z.string().default(""),
   municipality: z.string().default(""),
@@ -254,6 +254,10 @@ export type GenerateAssistanceInput = z.infer<typeof inputSchema>;
 export type GenerateAssistanceOutput = z.infer<typeof outputSchema>;
 
 function planContext(plan: GenerateAssistanceInput["plan"]) {
+  if (plan === "ansokan") {
+    return "Ansokningsnivå: håll förslagen korta, tydliga och direkt användbara i underlaget för IVO-ansökan.";
+  }
+
   if (plan === "step1") {
     return "Komplettnivå: håll förslagen korta, tydliga och operativt användbara för en nystartad klinik.";
   }
@@ -266,6 +270,15 @@ function planContext(plan: GenerateAssistanceInput["plan"]) {
 }
 
 function planToneGuidance(plan: GenerateAssistanceInput["plan"], feature: GenerateAssistanceInput["feature"]) {
+  if (plan === "ansokan") {
+    switch (feature) {
+      case "application_evidence":
+        return "Ansökan: skriv direkt för ansökningsunderlag med tydlig koppling till valt krav och vad bilagan ska visa.";
+      default:
+        return "Ansökan: prioritera sakliga formuleringar som fungerar direkt i ansökningspaketet utan onödig intern driftterminologi.";
+    }
+  }
+
   if (plan === "step3") {
     switch (feature) {
       case "responsible_people":

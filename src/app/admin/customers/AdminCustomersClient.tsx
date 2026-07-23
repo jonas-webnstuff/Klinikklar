@@ -10,7 +10,7 @@ type OrganizationRow = {
   org_number: string;
   email: string;
   phone: string | null;
-  plan: "step1" | "step2" | "step3" | null;
+  plan: "ansokan" | "step1" | "step2" | "step3" | null;
   created_at: string;
   clinicCount: number;
   membershipCount: number;
@@ -33,10 +33,11 @@ type DraftState = {
   municipality: string;
   email: string;
   phone: string;
-  plan: "step1" | "step2" | "step3" | "";
+  plan: "ansokan" | "step1" | "step2" | "step3" | "";
 };
 
-const planLabelMap: Record<"step1" | "step2" | "step3", string> = {
+const planLabelMap: Record<"ansokan" | "step1" | "step2" | "step3", string> = {
+  ansokan: "Klinikklar Ansökan",
   step1: "Klinikklar Komplett",
   step2: "Klinikklar Drift",
   step3: "Klinikklar Premium",
@@ -47,6 +48,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const [creatingForm, setCreatingForm] = useState<DraftState>({
     clinicName: "",
     orgNumber: "",
@@ -116,6 +118,15 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
         plan: updated.plan || "",
       },
     }));
+  }
+
+  function removeOrganization(id: string) {
+    setOrganizations((current) => current.filter((item) => item.id !== id));
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   }
 
   async function createOrganization() {
@@ -223,6 +234,36 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
     setMessage("Kund uppdaterad.");
   }
 
+  async function deleteOrganization(id: string, label: string) {
+    const confirmed = window.confirm(
+      `Ta bort kunden ${label}? Detta raderar även kopplad klinik, ansökan, medlemskap och underlag.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingIds((current) => ({ ...current, [id]: true }));
+    setMessage("");
+
+    const response = await fetch("/api/admin/customers", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    setDeletingIds((current) => ({ ...current, [id]: false }));
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setMessage(data.error || "Kunde inte ta bort kund.");
+      return;
+    }
+
+    removeOrganization(id);
+    setMessage("Kund borttagen.");
+  }
+
   return (
     <section className="rounded-[2rem] border border-[color:var(--line)] bg-white p-6 shadow-[0_16px_40px_rgba(13,39,87,0.05)]">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -282,6 +323,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
               className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
             >
               <option value="">Välj plan</option>
+              <option value="ansokan">{planLabelMap.ansokan}</option>
               <option value="step1">{planLabelMap.step1}</option>
               <option value="step2">{planLabelMap.step2}</option>
               <option value="step3">{planLabelMap.step3}</option>
@@ -383,6 +425,7 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
                       className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--ink)]"
                     >
                       <option value="">Välj plan</option>
+                      <option value="ansokan">{planLabelMap.ansokan}</option>
                       <option value="step1">{planLabelMap.step1}</option>
                       <option value="step2">{planLabelMap.step2}</option>
                       <option value="step3">{planLabelMap.step3}</option>
@@ -393,14 +436,24 @@ export function AdminCustomersClient({ initialOrganizations }: Props) {
                     <p className="text-sm text-[color:var(--muted)]">
                       Skapad {new Date(organization.created_at).toLocaleDateString("sv-SE")}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => saveOrganization(organization.id)}
-                      disabled={Boolean(savingIds[organization.id])}
-                      className="rounded-xl bg-[color:var(--brand)] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-                    >
-                      {savingIds[organization.id] ? "Sparar..." : "Spara kund"}
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => deleteOrganization(organization.id, organization.name)}
+                        disabled={Boolean(deletingIds[organization.id])}
+                        className="rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:text-red-300"
+                      >
+                        {deletingIds[organization.id] ? "Tar bort..." : "Ta bort kund"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveOrganization(organization.id)}
+                        disabled={Boolean(savingIds[organization.id])}
+                        className="rounded-xl bg-[color:var(--brand)] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                      >
+                        {savingIds[organization.id] ? "Sparar..." : "Spara kund"}
+                      </button>
+                    </div>
                   </div>
                 </article>
               );

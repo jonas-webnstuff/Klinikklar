@@ -2,9 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import OrganizationProfileForm from "@/components/OrganizationProfileForm";
+import {
+  attachmentChecklistRequirementItems,
+  complianceRequirements,
+  facilityRequirementItems,
+  managementSystemRequirementItems,
+  ownershipRequirementItems,
+  questionnaireItems,
+  responsiblePersonRequirementItems,
+} from "@/lib/requirements";
 
 type ApplicationStatus = "draft" | "in_review" | "ready_to_submit" | "submitted";
-type PlanLevel = "step1" | "step2" | "step3";
+type PlanLevel = "ansokan" | "step1" | "step2" | "step3";
 
 type AiEvidenceSuggestion = {
   feature: "application_evidence";
@@ -12,6 +22,63 @@ type AiEvidenceSuggestion = {
   note: string;
   filePathHint: string;
 };
+
+type AiManagementSystemSuggestion = {
+  feature: "management_system";
+  owner: string;
+  processes: string;
+  documents: string;
+};
+
+type AiResponsiblePeopleSuggestion = {
+  feature: "responsible_people";
+  operationsManagerName: string;
+  operationsManagerRole: string;
+  operationsManagerLicense: string;
+  medicalResponsibleName: string;
+  medicalResponsibleRole: string;
+  medicalResponsibleLicense: string;
+  qualityResponsibleName: string;
+  qualityResponsibleRole: string;
+  qualityResponsibleCompetence: string;
+};
+
+type AiOwnershipSuitabilitySuggestion = {
+  feature: "ownership_suitability";
+  legalEntityName: string;
+  legalEntityOrgNumber: string;
+  representativeName: string;
+  ownershipStructureDescription: string;
+  suitabilityStatement: string;
+};
+
+type AiFacilitySuggestion = {
+  feature: "facility_and_equipment";
+  premisesDescription: string;
+  hygieneFlow: string;
+  equipmentScope: string;
+  specialRisks: string;
+};
+
+type AiAttachmentChecklistSuggestion = {
+  feature: "attachment_checklist";
+  coverNote: string;
+  businessDescriptionRef: string;
+  managementSystemRef: string;
+  staffingRef: string;
+  evidenceIndexRef: string;
+};
+
+type ProfileState = {
+  clinicName: string;
+  orgNumber: string;
+  address: string;
+  postalCode: string;
+  municipality: string;
+  email: string;
+};
+
+type AnswersState = Record<string, { answer: string; followUpAnswer: string }>;
 
 type IvoChecklistItem = {
   key: string;
@@ -94,18 +161,92 @@ const stageLabels: Record<ApplicationStatus, string> = {
   submitted: "Klar att skicka",
 };
 
+function renderStatusAction(
+  applicationStatus: ApplicationStatus,
+  checklist: ReadinessChecklist | null,
+  updateApplicationStatus: (status: ApplicationStatus) => Promise<void>
+) {
+  if (applicationStatus === "draft") {
+    return (
+      <button
+        type="button"
+        onClick={() => void updateApplicationStatus("in_review")}
+        disabled={!checklist?.canMoveToReady}
+        className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+      >
+        Markera klar för granskning
+      </button>
+    );
+  }
+
+  if (applicationStatus === "in_review") {
+    return (
+      <button
+        type="button"
+        onClick={() => void updateApplicationStatus("ready_to_submit")}
+        disabled={!checklist?.canMoveToReady}
+        className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+      >
+        Godkänn ansökan
+      </button>
+    );
+  }
+
+  if (applicationStatus === "ready_to_submit") {
+    return (
+      <button
+        type="button"
+        onClick={() => void updateApplicationStatus("submitted")}
+        disabled={!checklist?.canSubmit}
+        className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+      >
+        Markera som klar att skicka
+      </button>
+    );
+  }
+
+  if (applicationStatus === "submitted") {
+    return (
+      <button
+        type="button"
+        onClick={() => void updateApplicationStatus("draft")}
+        className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+      >
+        Återställ till utkast
+      </button>
+    );
+  }
+
+  return null;
+}
+
 export default function AnsokanPage() {
   const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("draft");
-  const [activePlan, setActivePlan] = useState<PlanLevel | null>(null);
+  const [activePlan, setActivePlan] = useState<PlanLevel>("ansokan");
   const [checklist, setChecklist] = useState<ReadinessChecklist | null>(null);
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [requirements, setRequirements] = useState<RequirementOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingGuide, setIsSavingGuide] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [evidenceMessage, setEvidenceMessage] = useState("");
   const [isSavingEvidence, setIsSavingEvidence] = useState(false);
   const [isAiSuggestingEvidence, setIsAiSuggestingEvidence] = useState(false);
+  const [isAiSuggestingManagement, setIsAiSuggestingManagement] = useState(false);
+  const [isAiSuggestingResponsiblePeople, setIsAiSuggestingResponsiblePeople] = useState(false);
+  const [isAiSuggestingOwnership, setIsAiSuggestingOwnership] = useState(false);
+  const [isAiSuggestingFacility, setIsAiSuggestingFacility] = useState(false);
+  const [isAiSuggestingAttachments, setIsAiSuggestingAttachments] = useState(false);
+  const [profile, setProfile] = useState<ProfileState>({
+    clinicName: "",
+    orgNumber: "",
+    address: "",
+    postalCode: "",
+    municipality: "",
+    email: "",
+  });
+  const [answers, setAnswers] = useState<AnswersState>({});
   const [aiContext, setAiContext] = useState({ clinicName: "", municipality: "" });
   const [evidenceForm, setEvidenceForm] = useState({
     requirementId: "",
@@ -115,7 +256,35 @@ export default function AnsokanPage() {
   });
 
   const activeStageIndex = stages.findIndex((stage) => stage.key === applicationStatus);
-  const canUseAiSupport = activePlan === "step1" || activePlan === "step3";
+  const canUseAiSupport = activePlan === "ansokan" || activePlan === "step1" || activePlan === "step3";
+
+  function getAnswerValue(key: string) {
+    return answers[key]?.answer || "";
+  }
+
+  function getFollowUpValue(key: string) {
+    return answers[key]?.followUpAnswer || "";
+  }
+
+  function setAnswerValue(key: string, value: string) {
+    setAnswers((prev) => ({
+      ...prev,
+      [key]: {
+        answer: value,
+        followUpAnswer: prev[key]?.followUpAnswer || "",
+      },
+    }));
+  }
+
+  function setFollowUpValue(key: string, value: string) {
+    setAnswers((prev) => ({
+      ...prev,
+      [key]: {
+        answer: prev[key]?.answer || "",
+        followUpAnswer: value,
+      },
+    }));
+  }
 
   const readinessItems = useMemo(
     () => [
@@ -169,7 +338,7 @@ export default function AnsokanPage() {
     };
 
     if (!data.found) {
-      setStatusMessage("Ingen aktiv ansökan hittades. Spara workspace först.");
+      setStatusMessage("Ingen aktiv ansökan finns ännu. Fyll i uppgifterna nedan och spara för att starta ansökan.");
       return;
     }
 
@@ -225,20 +394,96 @@ export default function AnsokanPage() {
     const data = (await response.json()) as {
       found?: boolean;
       plan?: PlanLevel | null;
-      profile?: {
-        clinicName?: string;
-        municipality?: string;
-      };
+      profile?: Partial<ProfileState>;
+      answers?: AnswersState;
     };
 
-    if (data.plan === "step1" || data.plan === "step2" || data.plan === "step3") {
+    if (data.plan === "ansokan" || data.plan === "step1" || data.plan === "step2" || data.plan === "step3") {
       setActivePlan(data.plan);
+    }
+
+    if (data.profile) {
+      setProfile({
+        clinicName: data.profile.clinicName || "",
+        orgNumber: data.profile.orgNumber || "",
+        address: data.profile.address || "",
+        postalCode: data.profile.postalCode || "",
+        municipality: data.profile.municipality || "",
+        email: data.profile.email || "",
+      });
+    }
+
+    if (data.answers) {
+      setAnswers(data.answers as AnswersState);
     }
 
     setAiContext({
       clinicName: data.profile?.clinicName || "",
       municipality: data.profile?.municipality || "",
     });
+  }
+
+  async function saveGuide(successMessage: string) {
+    if (!profile.clinicName.trim()) {
+      setStatusMessage("Ange klinikens namn innan du sparar.");
+      return;
+    }
+
+    if (!profile.orgNumber.trim()) {
+      setStatusMessage("Ange organisationsnummer innan du sparar.");
+      return;
+    }
+
+    if (!profile.address.trim()) {
+      setStatusMessage("Ange besöksadress innan du sparar.");
+      return;
+    }
+
+    if (!profile.postalCode.trim()) {
+      setStatusMessage("Ange postnummer innan du sparar.");
+      return;
+    }
+
+    if (!profile.municipality.trim()) {
+      setStatusMessage("Ange ort innan du sparar.");
+      return;
+    }
+
+    if (!profile.email.trim()) {
+      setStatusMessage("Ange e-post innan du sparar.");
+      return;
+    }
+
+    setIsSavingGuide(true);
+    setStatusMessage("");
+
+    const response = await fetch("/api/workspace/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        profile,
+        answers,
+        requirements: complianceRequirements.map((item) => ({
+          code: item.code,
+          title: item.title,
+          status: "missing",
+        })),
+      }),
+    });
+
+    setIsSavingGuide(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setStatusMessage(data.error || "Kunde inte spara ansökningsuppgifterna.");
+      return;
+    }
+
+    setAiContext({ clinicName: profile.clinicName, municipality: profile.municipality });
+    setStatusMessage(successMessage);
+    await loadApplicationState();
+    await loadEvidence();
   }
 
   async function updateApplicationStatus(status: ApplicationStatus) {
@@ -355,6 +600,294 @@ export default function AnsokanPage() {
     setEvidenceMessage("AI-förslag infogat i evidensformuläret.");
   }
 
+  async function suggestManagementSystem() {
+    if (!canUseAiSupport || !activePlan) {
+      setStatusMessage("AI-stöd i ansökan ingår i Klinikklar Ansökan, Klinikklar Komplett och Klinikklar Premium.");
+      return;
+    }
+
+    setIsAiSuggestingManagement(true);
+    setStatusMessage("");
+
+    const response = await fetch("/api/ai/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        feature: "management_system",
+        clinicName: profile.clinicName,
+        municipality: profile.municipality,
+        careScope: getAnswerValue("care_scope"),
+        qualityProcess: getAnswerValue("quality_process"),
+        staffing: getAnswerValue("staffing"),
+        incidentRoutine: getAnswerValue("incident_routine"),
+        currentManagementSystem: {
+          owner: getAnswerValue("management_system_owner"),
+          processes: getAnswerValue("management_system_processes"),
+          documents: getAnswerValue("management_system_documents"),
+        },
+      }),
+    });
+
+    setIsAiSuggestingManagement(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setStatusMessage(data.error || "Kunde inte skapa AI-förslag för ledningssystemet.");
+      return;
+    }
+
+    const data = (await response.json()) as AiManagementSystemSuggestion;
+
+    if (data.feature !== "management_system") {
+      setStatusMessage("AI-svaret för ledningssystemet hade fel format. Försök igen.");
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const nextReviewDate = (() => {
+      const date = new Date();
+      date.setMonth(date.getMonth() + 3);
+      return date.toISOString().slice(0, 10);
+    })();
+
+    setAnswerValue(
+      "management_system_purpose",
+      getAnswerValue("management_system_purpose") ||
+        "Ledningssystemet ska säkerställa kvalitet, patientsäkerhet och tydlig ansvarsfördelning i verksamheten."
+    );
+    setAnswerValue(
+      "management_system_scope",
+      getAnswerValue("management_system_scope") ||
+        `Omfattar ${getAnswerValue("care_scope").toLowerCase() || "planerad tandvårdsverksamhet"}, avvikelsehantering, riskuppföljning och intern uppföljning.`
+    );
+    setAnswerValue("management_system_owner", data.owner);
+    setAnswerValue(
+      "management_system_approved_by",
+      getAnswerValue("management_system_approved_by") || data.owner || "Verksamhetsansvarig"
+    );
+    setAnswerValue("management_system_processes", data.processes);
+    setAnswerValue(
+      "management_system_followup_log",
+      getAnswerValue("management_system_followup_log") ||
+        "Månadsvis uppföljning av avvikelser, risker, bemanning och dokumenterade förbättringsåtgärder."
+    );
+    setAnswerValue("management_system_documents", data.documents);
+    setAnswerValue(
+      "management_system_decision_log",
+      getAnswerValue("management_system_decision_log") ||
+        `Version 1.0 fastställd ${today} av ${data.owner || "ansvarig funktion"}.`
+    );
+    setAnswerValue("management_system_next_review", getAnswerValue("management_system_next_review") || nextReviewDate);
+    setStatusMessage("AI-förslag infogat i ledningssystemet för ansökan.");
+  }
+
+  async function suggestResponsiblePeople() {
+    if (!canUseAiSupport || !activePlan) {
+      setStatusMessage("AI-stöd i ansökan ingår i Klinikklar Ansökan, Klinikklar Komplett och Klinikklar Premium.");
+      return;
+    }
+
+    setIsAiSuggestingResponsiblePeople(true);
+    setStatusMessage("");
+
+    const response = await fetch("/api/ai/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        feature: "responsible_people",
+        clinicName: profile.clinicName,
+        municipality: profile.municipality,
+        currentResponsiblePeople: {
+          operationsManagerName: getAnswerValue("responsible_operations_manager_name"),
+          operationsManagerRole: getAnswerValue("responsible_operations_manager_role"),
+          operationsManagerLicense: getAnswerValue("responsible_operations_manager_license"),
+          medicalResponsibleName: getAnswerValue("responsible_medical_name"),
+          medicalResponsibleRole: getAnswerValue("responsible_medical_role"),
+          medicalResponsibleLicense: getAnswerValue("responsible_medical_license"),
+          qualityResponsibleName: getAnswerValue("responsible_quality_name"),
+          qualityResponsibleRole: getAnswerValue("responsible_quality_role"),
+          qualityResponsibleCompetence: getAnswerValue("responsible_quality_competence"),
+        },
+      }),
+    });
+
+    setIsAiSuggestingResponsiblePeople(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setStatusMessage(data.error || "Kunde inte skapa AI-förslag för ansvariga personer.");
+      return;
+    }
+
+    const data = (await response.json()) as AiResponsiblePeopleSuggestion;
+
+    if (data.feature !== "responsible_people") {
+      setStatusMessage("AI-svaret för ansvariga personer hade fel format. Försök igen.");
+      return;
+    }
+
+    setAnswerValue("responsible_operations_manager_name", data.operationsManagerName);
+    setAnswerValue("responsible_operations_manager_role", data.operationsManagerRole);
+    setAnswerValue("responsible_operations_manager_license", data.operationsManagerLicense);
+    setAnswerValue("responsible_medical_name", data.medicalResponsibleName);
+    setAnswerValue("responsible_medical_role", data.medicalResponsibleRole);
+    setAnswerValue("responsible_medical_license", data.medicalResponsibleLicense);
+    setAnswerValue("responsible_quality_name", data.qualityResponsibleName);
+    setAnswerValue("responsible_quality_role", data.qualityResponsibleRole);
+    setAnswerValue("responsible_quality_competence", data.qualityResponsibleCompetence);
+    setStatusMessage("AI-förslag infogat för ansvariga personer.");
+  }
+
+  async function suggestOwnershipSuitability() {
+    if (!canUseAiSupport || !activePlan) {
+      setStatusMessage("AI-stöd i ansökan ingår i Klinikklar Ansökan, Klinikklar Komplett och Klinikklar Premium.");
+      return;
+    }
+
+    setIsAiSuggestingOwnership(true);
+    setStatusMessage("");
+
+    const response = await fetch("/api/ai/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        feature: "ownership_suitability",
+        clinicName: profile.clinicName,
+        municipality: profile.municipality,
+        currentOwnershipSuitability: {
+          legalEntityName: getAnswerValue("ownership_legal_entity_name"),
+          legalEntityOrgNumber: getAnswerValue("ownership_legal_entity_org_number"),
+          representativeName: getAnswerValue("ownership_representative_name"),
+          ownershipStructureDescription: getAnswerValue("ownership_structure_description"),
+          suitabilityStatement: getAnswerValue("ownership_suitability_statement"),
+        },
+      }),
+    });
+
+    setIsAiSuggestingOwnership(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setStatusMessage(data.error || "Kunde inte skapa AI-förslag för ägarbild och lämplighet.");
+      return;
+    }
+
+    const data = (await response.json()) as AiOwnershipSuitabilitySuggestion;
+
+    if (data.feature !== "ownership_suitability") {
+      setStatusMessage("AI-svaret för ägarbild och lämplighet hade fel format. Försök igen.");
+      return;
+    }
+
+    setAnswerValue("ownership_legal_entity_name", data.legalEntityName);
+    setAnswerValue("ownership_legal_entity_org_number", data.legalEntityOrgNumber);
+    setAnswerValue("ownership_representative_name", data.representativeName);
+    setAnswerValue("ownership_structure_description", data.ownershipStructureDescription);
+    setAnswerValue("ownership_suitability_statement", data.suitabilityStatement);
+    setStatusMessage("AI-förslag infogat för ägarbild och lämplighet.");
+  }
+
+  async function suggestFacilityAndEquipment() {
+    if (!canUseAiSupport || !activePlan) {
+      setStatusMessage("AI-stöd i ansökan ingår i Klinikklar Ansökan, Klinikklar Komplett och Klinikklar Premium.");
+      return;
+    }
+
+    setIsAiSuggestingFacility(true);
+    setStatusMessage("");
+
+    const response = await fetch("/api/ai/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        feature: "facility_and_equipment",
+        clinicName: profile.clinicName,
+        municipality: profile.municipality,
+        currentFacilityAndEquipment: {
+          premisesDescription: getAnswerValue("facility_premises_description"),
+          hygieneFlow: getAnswerValue("facility_hygiene_flow"),
+          equipmentScope: getAnswerValue("facility_equipment_scope"),
+          specialRisks: getAnswerValue("facility_special_risks"),
+        },
+      }),
+    });
+
+    setIsAiSuggestingFacility(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setStatusMessage(data.error || "Kunde inte skapa AI-förslag för lokaler och utrustning.");
+      return;
+    }
+
+    const data = (await response.json()) as AiFacilitySuggestion;
+
+    if (data.feature !== "facility_and_equipment") {
+      setStatusMessage("AI-svaret för lokaler och utrustning hade fel format. Försök igen.");
+      return;
+    }
+
+    setAnswerValue("facility_premises_description", data.premisesDescription);
+    setAnswerValue("facility_hygiene_flow", data.hygieneFlow);
+    setAnswerValue("facility_equipment_scope", data.equipmentScope);
+    setAnswerValue("facility_special_risks", data.specialRisks);
+    setStatusMessage("AI-förslag infogat för lokaler och utrustning.");
+  }
+
+  async function suggestAttachmentChecklist() {
+    if (!canUseAiSupport || !activePlan) {
+      setStatusMessage("AI-stöd i ansökan ingår i Klinikklar Ansökan, Klinikklar Komplett och Klinikklar Premium.");
+      return;
+    }
+
+    setIsAiSuggestingAttachments(true);
+    setStatusMessage("");
+
+    const response = await fetch("/api/ai/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        feature: "attachment_checklist",
+        clinicName: profile.clinicName,
+        municipality: profile.municipality,
+        currentAttachmentChecklist: {
+          coverNote: getAnswerValue("attachment_cover_note"),
+          businessDescriptionRef: getAnswerValue("attachment_business_description_ref"),
+          managementSystemRef: getAnswerValue("attachment_management_system_ref"),
+          staffingRef: getAnswerValue("attachment_staffing_ref"),
+          evidenceIndexRef: getAnswerValue("attachment_evidence_index_ref"),
+        },
+      }),
+    });
+
+    setIsAiSuggestingAttachments(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setStatusMessage(data.error || "Kunde inte skapa AI-förslag för bilagechecklistan.");
+      return;
+    }
+
+    const data = (await response.json()) as AiAttachmentChecklistSuggestion;
+
+    if (data.feature !== "attachment_checklist") {
+      setStatusMessage("AI-svaret för bilagechecklistan hade fel format. Försök igen.");
+      return;
+    }
+
+    setAnswerValue("attachment_cover_note", data.coverNote);
+    setAnswerValue("attachment_business_description_ref", data.businessDescriptionRef);
+    setAnswerValue("attachment_management_system_ref", data.managementSystemRef);
+    setAnswerValue("attachment_staffing_ref", data.staffingRef);
+    setAnswerValue("attachment_evidence_index_ref", data.evidenceIndexRef);
+    setStatusMessage("AI-förslag infogat för bilagechecklistan.");
+  }
+
   useEffect(() => {
     void loadApplicationState();
     void loadEvidence();
@@ -369,7 +902,7 @@ export default function AnsokanPage() {
         </p>
         <h1 className="mt-2 text-3xl font-semibold text-[color:var(--ink)]">Frågeguide och underlag</h1>
         <p className="mt-3 max-w-3xl text-[color:var(--muted)]">
-          Här samlar vi frågeguiden, dokumentgranskning, evidens och export inför inskick.
+          Här samlar du frågeguiden, underlagen, evidensen och statusen inför inskick till IVO.
         </p>
         <div className="mt-4 inline-flex rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
           Nuvarande status: {stageLabels[applicationStatus]}
@@ -425,46 +958,17 @@ export default function AnsokanPage() {
           })}
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          {applicationStatus !== "draft" ? (
-            <button
-              type="button"
-              onClick={() => updateApplicationStatus("draft")}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-            >
-              Återställ till utkast
-            </button>
-          ) : null}
-          {applicationStatus === "draft" ? (
-            <button
-              type="button"
-              onClick={() => updateApplicationStatus("in_review")}
-              disabled={!checklist?.canMoveToReady}
-              className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
-            >
-              Markera klar för granskning
-            </button>
-          ) : null}
-          {applicationStatus === "in_review" ? (
-            <button
-              type="button"
-              onClick={() => updateApplicationStatus("ready_to_submit")}
-              disabled={!checklist?.canMoveToReady}
-              className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
-            >
-              Godkänn ansökan
-            </button>
-          ) : null}
-          {applicationStatus === "ready_to_submit" ? (
-            <button
-              type="button"
-              onClick={() => updateApplicationStatus("submitted")}
-              disabled={!checklist?.canSubmit}
-              className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
-            >
-              Markera som klar att skicka
-            </button>
-          ) : null}
+        <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold text-[color:var(--ink)]">Frågeguiden fylls i här</p>
+          <p className="mt-2 text-sm text-[color:var(--muted)]">
+            Du kan gå igenom hela ansökningsguiden direkt på den här sidan utan att använda ledningssystemet eller andra vyer.
+          </p>
+          <a
+            href="#ansokan-guide"
+            className="mt-4 inline-flex rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
+          >
+            Gå till frågeguiden
+          </a>
         </div>
 
         <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
@@ -493,9 +997,9 @@ export default function AnsokanPage() {
         <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-[color:var(--ink)]">IVO-specifik ansokningsbild</p>
+              <p className="text-sm font-semibold text-[color:var(--ink)]">IVO-specifik ansökningsbild</p>
               <p className="mt-1 text-xs text-[color:var(--muted)]">
-                Kontrollpunkter som ligger narmare sjalva ansokan an den vanliga dokumentchecklistan.
+                Kontrollpunkter som ligger närmare själva ansökan än den vanliga dokumentchecklistan.
               </p>
             </div>
             <span
@@ -505,7 +1009,7 @@ export default function AnsokanPage() {
                   : "bg-amber-100 text-amber-800"
               }`}
             >
-              {checklist?.ivoChecklistComplete ? "Grundpaket komplett" : "Komplettering kravs"}
+              {checklist?.ivoChecklistComplete ? "Grundpaket komplett" : "Komplettering krävs"}
             </span>
           </div>
 
@@ -532,7 +1036,7 @@ export default function AnsokanPage() {
 
           {checklist?.missingIvoItems?.length ? (
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-              <p className="text-sm font-semibold text-amber-900">Kvar innan ansokningsunderlaget ar komplett i appen</p>
+              <p className="text-sm font-semibold text-amber-900">Kvar innan ansökningsunderlaget är komplett i appen</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">
                 {checklist.missingIvoItems.map((item) => (
                   <li key={item}>{item}</li>
@@ -551,6 +1055,371 @@ export default function AnsokanPage() {
               </ul>
             </div>
           ) : null}
+        </div>
+      </section>
+
+      <section id="ansokan-guide" className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+              Steg 1
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">Grunduppgifter och frågeguide</h2>
+            <p className="mt-1 text-sm text-[color:var(--muted)]">
+              Fyll i de uppgifter som behövs för att starta och komplettera ansökningsunderlaget.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold text-[color:var(--ink)]">Grunduppgifter</p>
+          <div className="mt-3">
+            <OrganizationProfileForm
+              value={profile}
+              onChange={(field, value) => setProfile((prev) => ({ ...prev, [field]: value }))}
+              disabled={isSavingGuide}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <p className="text-sm font-semibold text-[color:var(--ink)]">Frågeguide</p>
+          <div className="mt-3 grid gap-4">
+            {questionnaireItems.map((item) => (
+              <div key={item.key} className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
+                <label className="text-sm font-semibold text-[color:var(--ink)]">{item.label}</label>
+                <textarea
+                  value={getAnswerValue(item.key)}
+                  onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                  placeholder={item.placeholder}
+                  rows={4}
+                  className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+                {item.followUpLabel ? (
+                  <>
+                    <label className="mt-3 block text-sm font-medium text-[color:var(--ink)]">{item.followUpLabel}</label>
+                    <input
+                      value={getFollowUpValue(item.key)}
+                      onChange={(event) => setFollowUpValue(item.key, event.target.value)}
+                      placeholder={item.followUpPlaceholder}
+                      className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                    />
+                  </>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => void saveGuide("Grunduppgifter och frågeguide sparade.")}
+            disabled={isSavingGuide}
+            className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          >
+            {isSavingGuide ? "Sparar..." : "Spara grunduppgifter och frågeguide"}
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+          Steg 1
+        </p>
+        <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">Obligatoriska delar av ledningssystemet</h2>
+        <p className="mt-1 text-sm text-[color:var(--muted)]">
+          Här fyller du bara i de delar av ledningssystemet som behövs för ansökningsunderlaget. Det här är inte hela driftmodulen.
+        </p>
+
+        <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Det här behöver beskrivas</p>
+              <p className="mt-1 text-sm text-[color:var(--muted)]">
+                Syfte, omfattning, ansvar, uppföljning, styrande dokument och formellt fastställande.
+              </p>
+            </div>
+            {canUseAiSupport ? (
+              <button
+                type="button"
+                onClick={() => void suggestManagementSystem()}
+                disabled={isAiSuggestingManagement}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                {isAiSuggestingManagement ? "AI arbetar..." : "AI: Föreslå utkast"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Grund och ansvar</p>
+            <div className="mt-3 space-y-3">
+              {managementSystemRequirementItems.slice(0, 4).map((item) => (
+                <div key={item.key}>
+                  <label className="text-sm font-semibold text-[color:var(--ink)]">{item.label}</label>
+                  <textarea
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.label}
+                    rows={2}
+                    className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Processer och uppföljning</p>
+            <div className="mt-3 space-y-3">
+              {managementSystemRequirementItems.slice(4, 6).map((item) => (
+                <div key={item.key}>
+                  <label className="text-sm font-semibold text-[color:var(--ink)]">{item.label}</label>
+                  <textarea
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.label}
+                    rows={3}
+                    className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="text-sm font-semibold text-[color:var(--ink)]">{managementSystemRequirementItems[8].label}</label>
+                <input
+                  type="date"
+                  value={getAnswerValue(managementSystemRequirementItems[8].key)}
+                  onChange={(event) => setAnswerValue(managementSystemRequirementItems[8].key, event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4 lg:col-span-2">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Dokument och fastställande</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {managementSystemRequirementItems.slice(6, 8).map((item) => (
+                <div key={item.key}>
+                  <label className="text-sm font-semibold text-[color:var(--ink)]">{item.label}</label>
+                  <textarea
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.label}
+                    rows={3}
+                    className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => void saveGuide("Ledningssystemet för ansökan sparat.")}
+            disabled={isSavingGuide}
+            className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          >
+            {isSavingGuide ? "Sparar..." : "Spara ledningssystem"}
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+          Steg 1
+        </p>
+        <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">IVO-specifika kompletteringar</h2>
+        <p className="mt-1 text-sm text-[color:var(--muted)]">
+          Fyll i de ansökningsspecifika uppgifterna direkt här så att du inte behöver gå via andra sidor.
+        </p>
+
+        <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Ansvar och legitimation</p>
+          <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">Ansvariga personer i ansökan</h3>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[color:var(--muted)]">
+              Beskriv ansvariga roller, legitimationer och kompetens på en nivå som passar ansökningsunderlaget.
+            </p>
+            {canUseAiSupport ? (
+              <button
+                type="button"
+                onClick={() => void suggestResponsiblePeople()}
+                disabled={isAiSuggestingResponsiblePeople}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                {isAiSuggestingResponsiblePeople ? "AI arbetar..." : "AI: Föreslå utkast"}
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Verksamhetsansvarig</p>
+              <div className="mt-3 space-y-3">
+                {responsiblePersonRequirementItems.slice(0, 3).map((item) => (
+                  <input
+                    key={item.key}
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.placeholder}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Medicinskt ansvarig</p>
+              <div className="mt-3 space-y-3">
+                {responsiblePersonRequirementItems.slice(3, 6).map((item) => (
+                  <input
+                    key={item.key}
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.placeholder}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Kvalitetsansvarig</p>
+              <div className="mt-3 space-y-3">
+                {responsiblePersonRequirementItems.slice(6, 9).map((item) => (
+                  <input
+                    key={item.key}
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.placeholder}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Ägarbild och lämplighet</p>
+          <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">Huvudman och företrädare</h3>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[color:var(--muted)]">
+              Sammanfatta juridisk huvudman, företrädare och varför ledning och ägare bedöms lämpliga.
+            </p>
+            {canUseAiSupport ? (
+              <button
+                type="button"
+                onClick={() => void suggestOwnershipSuitability()}
+                disabled={isAiSuggestingOwnership}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                {isAiSuggestingOwnership ? "AI arbetar..." : "AI: Föreslå utkast"}
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {ownershipRequirementItems.map((item) => {
+              const isLongField = item.key === "ownership_structure_description" || item.key === "ownership_suitability_statement";
+
+              return isLongField ? (
+                <textarea
+                  key={item.key}
+                  value={getAnswerValue(item.key)}
+                  onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                  placeholder={item.placeholder}
+                  rows={4}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm md:col-span-2"
+                />
+              ) : (
+                <input
+                  key={item.key}
+                  value={getAnswerValue(item.key)}
+                  onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                  placeholder={item.placeholder}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Lokaler och utrustning</p>
+          <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">Lokaler, hygienflöden och riskområden</h3>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[color:var(--muted)]">
+              Beskriv lokaler, patientflöden, hygienkritiska moment och eventuella särskilda riskområden.
+            </p>
+            {canUseAiSupport ? (
+              <button
+                type="button"
+                onClick={() => void suggestFacilityAndEquipment()}
+                disabled={isAiSuggestingFacility}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                {isAiSuggestingFacility ? "AI arbetar..." : "AI: Föreslå utkast"}
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-4 grid gap-3">
+            {facilityRequirementItems.map((item) => (
+              <textarea
+                key={item.key}
+                value={getAnswerValue(item.key)}
+                onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                placeholder={item.placeholder}
+                rows={3}
+                className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">Bilagechecklista</p>
+          <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">Referenser till underlag</h3>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[color:var(--muted)]">
+              Lista vilka underlag som ska följa med ansökan och hur de är namngivna eller versionssatta.
+            </p>
+            {canUseAiSupport ? (
+              <button
+                type="button"
+                onClick={() => void suggestAttachmentChecklist()}
+                disabled={isAiSuggestingAttachments}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                {isAiSuggestingAttachments ? "AI arbetar..." : "AI: Föreslå utkast"}
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-4 grid gap-3">
+            {attachmentChecklistRequirementItems.map((item) => (
+              <textarea
+                key={item.key}
+                value={getAnswerValue(item.key)}
+                onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                placeholder={item.placeholder}
+                rows={2}
+                className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => void saveGuide("Ansökningsuppgifterna sparade.")}
+            disabled={isSavingGuide}
+            className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          >
+            {isSavingGuide ? "Sparar..." : "Spara ansökningsuppgifter"}
+          </button>
         </div>
       </section>
 
@@ -672,34 +1541,28 @@ export default function AnsokanPage() {
       <section className="grid gap-4 md:grid-cols-2">
         <article className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
-            Steg 1
-          </p>
-          <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">Fyll i frågeguiden</h2>
-          <p className="mt-2 text-[color:var(--muted)]">
-            Besvara underlagen steg för steg och spara löpande. Frågorna utgör grunden för ansökan.
-          </p>
-          <Link
-            href="/workspace?view=dokument"
-            className="mt-4 inline-flex rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
-          >
-            Öppna frågeguiden
-          </Link>
-        </article>
-
-        <article className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
             Steg 2
           </p>
           <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">Granska och exportera</h2>
           <p className="mt-2 text-[color:var(--muted)]">
-            När underlaget är klart markeras det som granskat och kan exporteras till Word eller PDF.
+            När underlaget är komplett kan det granskas och förberedas för export eller manuell inskick.
           </p>
-          <Link
-            href="/workspace?view=dokument"
-            className="mt-4 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-          >
-            Gå till dokumentgranskning
-          </Link>
+          <p className="mt-4 text-sm text-[color:var(--muted)]">
+            Använd readiness-checklistan, evidensen och statussteget här på sidan för att slutföra ansökan.
+          </p>
+        </article>
+
+        <article className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+            Nästa steg
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">Uppdatera ansökningsstatus</h2>
+          <p className="mt-2 text-[color:var(--muted)]">
+            När underlagen är ifyllda och evidensen är på plats kan du flytta ansökan vidare i processen.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {renderStatusAction(applicationStatus, checklist, updateApplicationStatus)}
+          </div>
         </article>
       </section>
 
@@ -709,19 +1572,19 @@ export default function AnsokanPage() {
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <p className="text-sm font-semibold text-[color:var(--ink)]">1. Samla fakta</p>
             <p className="mt-1 text-sm text-[color:var(--muted)]">
-              Fyll i verksamhet, rutiner och ansvar i appen.
+              Fyll i verksamhet, ansvar, krav och evidens i rätt ordning.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <p className="text-sm font-semibold text-[color:var(--ink)]">2. Skriv utkast</p>
             <p className="mt-1 text-sm text-[color:var(--muted)]">
-              Generera dokument i appen och justera innehållet direkt.
+              Generera utkast i appen och justera innehållet innan granskning.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <p className="text-sm font-semibold text-[color:var(--ink)]">3. Exportera</p>
             <p className="mt-1 text-sm text-[color:var(--muted)]">
-              Ladda ner som Word när materialet ska delas eller skickas in.
+              Exportera när materialet är granskat och klart att skickas in.
             </p>
           </div>
         </div>
@@ -729,16 +1592,10 @@ export default function AnsokanPage() {
 
       <div className="flex flex-wrap gap-3">
         <Link
-          href="/workspace"
+          href="/"
           className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
         >
-          Till startsida
-        </Link>
-        <Link
-          href="/workspace?view=ledningssystem"
-          className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
-        >
-          Till arbetsyta
+          Till startsidan
         </Link>
       </div>
     </div>

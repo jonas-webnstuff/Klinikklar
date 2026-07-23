@@ -8,14 +8,18 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 const createSchema = z.object({
   profile: organizationProfileSchema,
   phone: z.string().trim().optional().default(""),
-  plan: z.enum(["step1", "step2", "step3"]).optional().nullable(),
+  plan: z.enum(["ansokan", "step1", "step2", "step3"]).optional().nullable(),
 });
 
 const updateSchema = z.object({
   id: z.string().uuid(),
   profile: organizationProfileSchema,
   phone: z.string().trim().optional().default(""),
-  plan: z.enum(["step1", "step2", "step3"]).optional().nullable(),
+  plan: z.enum(["ansokan", "step1", "step2", "step3"]).optional().nullable(),
+});
+
+const deleteSchema = z.object({
+  id: z.string().uuid(),
 });
 
 async function upsertPrimaryClinic(
@@ -74,7 +78,7 @@ async function buildOrganizationResponse(
     org_number: string;
     email: string;
     phone: string | null;
-    plan: "step1" | "step2" | "step3" | null;
+    plan: "ansokan" | "step1" | "step2" | "step3" | null;
     created_at: string;
   }
 ) {
@@ -275,6 +279,30 @@ export async function PATCH(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Kunde inte uppdatera kund." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const access = await requireAdminAccess();
+
+    if ("error" in access) {
+      return access.error;
+    }
+
+    const payload = deleteSchema.parse(await request.json());
+    const supabase = createSupabaseAdminClient();
+
+    const { error } = await supabase.from("organizations").delete().eq("id", payload.id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ ok: true, deletedId: payload.id });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Kunde inte ta bort kund." },
       { status: 500 }
     );
   }

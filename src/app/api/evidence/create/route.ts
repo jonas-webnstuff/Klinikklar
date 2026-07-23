@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
     if (!context) {
       return NextResponse.json(
-        { ok: false, error: "Ingen aktiv ansökan hittades. Spara workspace först." },
+        { ok: false, error: "Ingen aktiv ansökan hittades. Spara ansökningsuppgifterna först." },
         { status: 400 }
       );
     }

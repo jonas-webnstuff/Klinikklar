@@ -10,7 +10,7 @@ type OrganizationRow = {
   org_number: string;
   email: string;
   phone: string | null;
-  plan: "step1" | "step2" | "step3" | null;
+  plan: "ansokan" | "step1" | "step2" | "step3" | null;
   created_at: string;
   clinicCount: number;
   membershipCount: number;

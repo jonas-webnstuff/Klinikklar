@@ -2937,6 +2937,69 @@ function WorkspacePageContent() {
     void loadControls();
   }
 
+  async function saveApplicationSection(successMessage: string) {
+    if (!profile.clinicName.trim()) {
+      setWorkspaceMessage("Ange klinikens namn innan du sparar.");
+      return;
+    }
+
+    if (!profile.orgNumber.trim()) {
+      setWorkspaceMessage("Ange organisationsnummer innan du sparar.");
+      return;
+    }
+
+    if (!profile.address.trim()) {
+      setWorkspaceMessage("Ange besöksadress innan du sparar.");
+      return;
+    }
+
+    if (!profile.postalCode.trim()) {
+      setWorkspaceMessage("Ange postnummer innan du sparar.");
+      return;
+    }
+
+    if (!profile.municipality.trim()) {
+      setWorkspaceMessage("Ange ort innan du sparar.");
+      return;
+    }
+
+    if (!profile.email.trim()) {
+      setWorkspaceMessage("Ange e-post innan du sparar.");
+      return;
+    }
+
+    setIsSaving(true);
+    setWorkspaceMessage("");
+
+    const requirements = complianceRequirements.map((item) => ({
+      code: item.code,
+      title: item.title,
+      status: completionMap.get(item.code) ? "complete" : "missing",
+    }));
+
+    const response = await fetch("/api/workspace/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: activePlan,
+        profile,
+        answers,
+        requirements,
+      }),
+    });
+
+    setIsSaving(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setWorkspaceMessage(data.error || "Kunde inte spara uppgifter.");
+      return;
+    }
+
+    setWorkspaceMessage(successMessage);
+    void loadApplicationReadiness();
+  }
+
   async function saveProfileOnly() {
     if (!profile.clinicName.trim()) {
       setWorkspaceMessage("Ange klinikens namn.");
@@ -5315,7 +5378,7 @@ function WorkspacePageContent() {
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => void saveWorkspace()}
+              onClick={() => void saveApplicationSection("Ansvariga personer sparade.")}
               disabled={isSaving}
               className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
             >
@@ -5383,7 +5446,7 @@ function WorkspacePageContent() {
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => void saveWorkspace()}
+              onClick={() => void saveApplicationSection("Ägaruppgifter sparade.")}
               disabled={isSaving}
               className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
             >
@@ -5433,7 +5496,7 @@ function WorkspacePageContent() {
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => void saveWorkspace()}
+              onClick={() => void saveApplicationSection("Lokaler och utrustning sparade.")}
               disabled={isSaving}
               className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
             >
@@ -5483,7 +5546,7 @@ function WorkspacePageContent() {
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => void saveWorkspace()}
+              onClick={() => void saveApplicationSection("Bilagechecklistan sparad.")}
               disabled={isSaving}
               className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
             >

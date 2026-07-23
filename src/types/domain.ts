@@ -21,7 +21,7 @@ export interface Organization {
   orgNumber: string;
   email: string;
   phone?: string;
-  plan?: "step1" | "step2" | "step3" | null;
+  plan?: "ansokan" | "step1" | "step2" | "step3" | null;
   createdAt: string;
 }
 

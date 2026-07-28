@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   complianceRequirements,
+  mainCareScopeCodes,
   managementSystemRequirementItems,
   questionnaireItems,
 } from "@/lib/requirements";
@@ -247,6 +248,17 @@ export async function POST(request: Request) {
 
     const managementSystemRequiredKeys = managementSystemRequirementItems.map((item) => item.key);
 
+    const { data: careScopeRows, error: careScopeError } = await supabase
+      .from("care_scope_codes")
+      .select("code")
+      .eq("application_id", applicationId);
+
+    if (careScopeError) throw careScopeError;
+
+    const hasMainCareScopeCode = (careScopeRows || []).some((row) =>
+      (mainCareScopeCodes as string[]).includes(row.code)
+    );
+
     const requirementRows = complianceRequirements.map((requirement) => {
       let isComplete = false;
 
@@ -254,6 +266,10 @@ export async function POST(request: Request) {
         isComplete = managementSystemRequiredKeys.every((key) =>
           Boolean(payload.answers[key]?.answer?.trim())
         );
+      } else if (requirement.code === "R-01") {
+        isComplete = hasMainCareScopeCode && Boolean(payload.answers["staffing"]?.answer?.trim());
+      } else if (requirement.code === "R-03") {
+        isComplete = hasMainCareScopeCode;
       } else {
         const mappedItems = questionnaireItems.filter((item) =>
           item.mapsToRequirements.includes(requirement.code)

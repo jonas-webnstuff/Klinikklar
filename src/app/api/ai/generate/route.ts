@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateContent } from "@/lib/ai/generate-content";
+import { AiAssistanceError } from "@/lib/ai/generate-assistance";
 import { complianceRequirements } from "@/lib/requirements";
 
 const planRank = {
@@ -17,6 +18,7 @@ const planLabels = {
 
 const bodySchema = z.object({
   plan: z.enum(["step1", "step2", "step3"]),
+  mode: z.enum(["ai", "manual"]).default("ai"),
   clinicName: z.string().min(1),
   municipality: z.string().min(1),
   careScope: z.string().min(1),
@@ -51,9 +53,13 @@ export async function POST(request: Request) {
 
     const content = await generateContent(payload);
     return NextResponse.json({ content });
-  } catch {
+  } catch (error) {
+    const reason = error instanceof AiAssistanceError ? error.reason : undefined;
     return NextResponse.json(
-      { error: "Kunde inte generera dokumentinnehåll" },
+      {
+        error: error instanceof Error ? error.message : "Kunde inte generera dokumentinnehåll",
+        reason,
+      },
       { status: 400 }
     );
   }

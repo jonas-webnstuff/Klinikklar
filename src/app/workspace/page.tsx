@@ -12,6 +12,7 @@ import {
   responsiblePersonRequirementItems,
 } from "@/lib/requirements";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { callAiAssist } from "@/lib/ai/request-assistance";
 import type {
   ControlTaskFrequency,
   ControlTaskStatus,
@@ -39,6 +40,7 @@ type GeneratedState = Partial<
       content: string;
       approved: boolean;
       isLoading: boolean;
+      error?: string;
     }
   >
 >;
@@ -682,6 +684,7 @@ function WorkspacePageContent() {
     regulation_watch: false,
     revision_readiness: false,
   });
+  const [aiAssistFailed, setAiAssistFailed] = useState<Partial<Record<AiAssistFeature, boolean>>>({});
   const [activeRoutineRequirementKey, setActiveRoutineRequirementKey] = useState(
     routineRequirementPoints[0].key
   );
@@ -1316,7 +1319,7 @@ function WorkspacePageContent() {
         summary.closed += 1;
       }
 
-      if (risk.probability * risk.consequence >= 15) {
+      if (risk.status !== "closed" && risk.probability * risk.consequence >= 15) {
         summary.highPriority += 1;
       }
     }
@@ -1614,7 +1617,12 @@ function WorkspacePageContent() {
   );
 
   const overviewActions = useMemo(() => {
-    const actions: Array<{ id: string; text: string; href: string }> = [];
+    const actions: Array<{
+      id: string;
+      text: string;
+      href: string;
+      severity: "alert" | "warn";
+    }> = [];
 
     if (ledningssystemMissingFields.length > 0) {
       const labels = ledningssystemMissingFields.slice(0, 2).join(", ");
@@ -1623,6 +1631,7 @@ function WorkspacePageContent() {
         id: "ledningssystem",
         text: `Komplettera ledningssystem (${labels}${suffix})`,
         href: "/workspace/ledningssystem",
+        severity: "warn",
       });
     }
 
@@ -1631,6 +1640,7 @@ function WorkspacePageContent() {
         id: "routines",
         text: `Spara rutiner för ${routineCoverageMissingPoints.length} lagkravspunkter`,
         href: "/workspace/rutiner",
+        severity: "warn",
       });
     }
 
@@ -1639,6 +1649,7 @@ function WorkspacePageContent() {
         id: "risks",
         text: `${riskSummary.highPriority} risker med hög prioritet behöver åtgärdsplan`,
         href: "/workspace/riskanalyser",
+        severity: "alert",
       });
     }
 
@@ -1647,6 +1658,7 @@ function WorkspacePageContent() {
         id: "controls",
         text: `${controlSummary.overdue} kontroller i årshjulet är försenade`,
         href: "/workspace/arshjul",
+        severity: "warn",
       });
     }
 
@@ -1655,10 +1667,17 @@ function WorkspacePageContent() {
         id: "incidents",
         text: `${incidentSummary.criticalOrHigh} avvikelser med hög/kritisk allvarlighetsgrad`,
         href: "/workspace/avvikelser",
+        severity: "alert",
       });
     }
 
-    return actions;
+    return actions.sort((a, b) => {
+      if (a.severity === b.severity) {
+        return 0;
+      }
+
+      return a.severity === "alert" ? -1 : 1;
+    });
   }, [
     ledningssystemMissingFields,
     canUseIncidentModule,
@@ -1669,6 +1688,244 @@ function WorkspacePageContent() {
     controlSummary.overdue,
     incidentSummary.criticalOrHigh,
   ]);
+  const overviewStatusCards = useMemo(() => {
+    const ledningssystemStatus =
+      ledningssystemMissingFields.length === 0
+        ? { tone: "ok", summary: "Alla grundfält ifyllda" }
+        : ledningssystemMissingFields.length >= 3
+          ? { tone: "alert", summary: `${ledningssystemMissingFields.length} punkter saknas` }
+          : { tone: "warn", summary: `${ledningssystemMissingFields.length} punkter saknas` };
+
+    const riskStatus =
+      riskSummary.highPriority > 0
+        ? { tone: "alert", summary: `Hög prioritet: ${riskSummary.highPriority}` }
+        : riskSummary.open > 0
+          ? { tone: "warn", summary: `Öppna risker: ${riskSummary.open}` }
+          : { tone: "ok", summary: "Allt OK" };
+
+    const controlStatus =
+      controlSummary.overdue > 0
+        ? { tone: "alert", summary: `Försenade kontroller: ${controlSummary.overdue}` }
+        : controlSummary.pending > 0
+          ? { tone: "warn", summary: `Planerade kontroller: ${controlSummary.pending}` }
+          : { tone: "ok", summary: "Allt OK" };
+
+    const incidentStatus =
+      incidentSummary.criticalOrHigh > 0
+        ? { tone: "alert", summary: `Hög/kritisk: ${incidentSummary.criticalOrHigh}` }
+        : incidentSummary.open > 0
+          ? { tone: "warn", summary: `Öppna avvikelser: ${incidentSummary.open}` }
+          : { tone: "ok", summary: "Allt OK" };
+
+    return {
+      ledningssystem: ledningssystemStatus,
+      risks: riskStatus,
+      controls: controlStatus,
+      incidents: incidentStatus,
+    };
+  }, [
+    ledningssystemMissingFields,
+    riskSummary.highPriority,
+    riskSummary.open,
+    controlSummary.overdue,
+    controlSummary.pending,
+    incidentSummary.criticalOrHigh,
+    incidentSummary.open,
+  ]);
+  const aiOverviewRecommendation = useMemo(() => {
+    if (!canUseAiSupport) {
+      return null;
+    }
+
+    const nearestPlannedControl = controls
+      .filter((control) => control.status !== "done" && control.nextDueDate)
+      .sort((a, b) => {
+        const aTime = new Date(a.nextDueDate || "").getTime();
+        const bTime = new Date(b.nextDueDate || "").getTime();
+        return aTime - bTime;
+      })[0];
+
+    const formatDate = (dateValue?: string | null) => {
+      if (!dateValue) {
+        return null;
+      }
+
+      const date = new Date(dateValue);
+      if (Number.isNaN(date.getTime())) {
+        return null;
+      }
+
+      return date.toLocaleDateString("sv-SE", {
+        day: "numeric",
+        month: "long",
+      });
+    };
+
+    const highestRisk = risks
+      .slice()
+      .filter((risk) => risk.status !== "closed")
+      .sort((a, b) => b.probability * b.consequence - a.probability * a.consequence)[0];
+
+    if (highestRisk && highestRisk.probability * highestRisk.consequence >= 15) {
+      const riskScore = highestRisk.probability * highestRisk.consequence;
+      const lacksActionPlan =
+        highestRisk.status === "open" ||
+        !highestRisk.ownerRole?.trim() ||
+        !highestRisk.dueDate?.trim();
+
+      return {
+        tone: "alert" as const,
+        label: "Prioriterad åtgärd",
+        title: `Prioritera riskanalysen \"${highestRisk.title}\".`,
+        text: lacksActionPlan
+          ? `Den har högst riskvärde (${riskScore}) och saknar tydlig åtgärdsplan.`
+          : `Den har högst riskvärde (${riskScore}) och bör hanteras först i arbetsflödet.`,
+        href: "/workspace/riskanalyser",
+        cta: "Öppna risk",
+      };
+    }
+
+    if (incidentSummary.criticalOrHigh > 0) {
+      return {
+        tone: "alert" as const,
+        label: "Prioriterad åtgärd",
+        title: "Prioritera avvikelser med hög eller kritisk allvarlighetsgrad.",
+        text: "Dessa bör hanteras före övriga förbättringar för att minska patientsäkerhetsrisker.",
+        href: "/workspace/avvikelser",
+        cta: "Öppna avvikelser",
+      };
+    }
+
+    if (controlSummary.overdue > 0 && nearestPlannedControl?.nextDueDate) {
+      const controlDate = formatDate(nearestPlannedControl.nextDueDate);
+
+      return {
+        tone: "warn" as const,
+        label: "Nästa rekommenderade steg",
+        title: `Genomför kontrollen \"${nearestPlannedControl.title}\".`,
+        text: controlDate
+          ? `Den skulle följas upp senast ${controlDate} och behöver slutföras nu.`
+          : "Den är försenad och behöver slutföras nu.",
+        href: "/workspace/arshjul",
+        cta: "Öppna årshjul",
+      };
+    }
+
+    if (controlSummary.overdue > 0) {
+      return {
+        tone: "warn" as const,
+        label: "Nästa rekommenderade steg",
+        title: "Ta igen försenade kontroller i årshjulet.",
+        text: "Det stärker spårbar uppföljning och minskar risken för efterlevnadsgap.",
+        href: "/workspace/arshjul",
+        cta: "Öppna årshjul",
+      };
+    }
+
+    if (routineCoverageMissingPoints.length > 0) {
+      return {
+        tone: "warn" as const,
+        label: "Nästa rekommenderade steg",
+        title: `Fyll i ${routineCoverageMissingPoints.length} saknade rutinpunkter.`,
+        text: "Det förbättrar dokumentstyrning, ansvar och kontinuitet i driften.",
+        href: "/workspace/rutiner",
+        cta: "Öppna rutiner",
+      };
+    }
+
+    const stableState =
+      incidentSummary.open === 0 &&
+      riskSummary.open === 0 &&
+      controlSummary.overdue === 0 &&
+      ledningssystemMissingFields.length === 0 &&
+      routineCoverageMissingPoints.length === 0;
+
+    if (stableState) {
+      const nextControlDate = formatDate(nearestPlannedControl?.nextDueDate);
+
+      return {
+        tone: "praise" as const,
+        label: "Bra jobbat!",
+        title: "Inga öppna avvikelser och alla grundrutiner är uppdaterade.",
+        text: nextControlDate
+          ? `Nästa planerade aktivitet är kontrollen ${nextControlDate}.`
+          : "Fortsätt med löpande uppföljning för att behålla nivån.",
+        href: "/workspace/arshjul",
+        cta: "Öppna planering",
+      };
+    }
+
+    return {
+      tone: "ok" as const,
+      label: "Nästa rekommenderade steg",
+      title: "Fortsätt med löpande uppföljning.",
+      text: "Behåll arbetstakten i ledningssystemet så upptäcker ni avvikelser och risker i tid.",
+      href: "/workspace/ledningssystem",
+      cta: "Öppna ledningssystem",
+    };
+  }, [
+    canUseAiSupport,
+    controls,
+    risks,
+    incidentSummary.open,
+    incidentSummary.criticalOrHigh,
+    riskSummary.open,
+    controlSummary.overdue,
+    ledningssystemMissingFields.length,
+    routineCoverageMissingPoints.length,
+  ]);
+
+  const overviewToneClass = (tone: "ok" | "warn" | "alert") => {
+    return "border-[color:var(--line)] bg-white";
+  };
+
+  const overviewToneBadgeClass = (tone: "ok" | "warn" | "alert") => {
+    if (tone === "ok") {
+      return "bg-emerald-100 text-emerald-800";
+    }
+
+    if (tone === "warn") {
+      return "bg-amber-100 text-amber-800";
+    }
+
+    return "bg-red-100 text-red-800";
+  };
+
+  const overviewToneLabel = (tone: "ok" | "warn" | "alert") => {
+    if (tone === "ok") {
+      return "Allt OK";
+    }
+
+    if (tone === "warn") {
+      return "Behöver ses över";
+    }
+
+    return "Kräver åtgärd";
+  };
+
+  const riskTone = (risk: RiskItem): "ok" | "warn" | "alert" => {
+    if (risk.status === "closed") {
+      return "ok";
+    }
+
+    if (risk.probability * risk.consequence >= 15) {
+      return "alert";
+    }
+
+    return "warn";
+  };
+
+  const riskCardClass = (tone: "ok" | "warn" | "alert") => {
+    if (tone === "ok") {
+      return "border-emerald-200 bg-emerald-50";
+    }
+
+    if (tone === "warn") {
+      return "border-amber-200 bg-amber-50";
+    }
+
+    return "border-red-200 bg-red-50";
+  };
 
   const canGenerate =
     profile.clinicName.trim() &&
@@ -2031,29 +2288,28 @@ function WorkspacePageContent() {
     element.focus();
   }
 
-  async function requestAiAssistance(feature: AiAssistFeature) {
+  async function requestAiAssistance(feature: AiAssistFeature, options?: { manual?: boolean }) {
     if (!canUseAiSupport) {
       return null;
     }
 
     setAiAssistLoading((prev) => ({ ...prev, [feature]: true }));
+    setAiAssistFailed((prev) => ({ ...prev, [feature]: false }));
 
-    const response = await fetch("/api/ai/assist", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        plan: activePlan,
-        feature,
-        clinicName: profile.clinicName,
-        municipality: profile.municipality,
-        careScope: answers.care_scope?.answer || "",
-        qualityProcess: answers.quality_process?.answer || "",
-        staffing: answers.staffing?.answer || "",
-        incidentRoutine: answers.incident_routine?.answer || "",
-        currentRisk: riskForm,
-        currentIncident: incidentForm,
-        currentControl: controlForm,
-        currentManagementSystem: {
+    const result = await callAiAssist<AiAssistResponse>("/api/ai/assist", {
+      plan: activePlan,
+      feature,
+      mode: options?.manual ? "manual" : "ai",
+      clinicName: profile.clinicName,
+      municipality: profile.municipality,
+      careScope: answers.care_scope?.answer || "",
+      qualityProcess: answers.quality_process?.answer || "",
+      staffing: answers.staffing?.answer || "",
+      incidentRoutine: answers.incident_routine?.answer || "",
+      currentRisk: riskForm,
+      currentIncident: incidentForm,
+      currentControl: controlForm,
+      currentManagementSystem: {
           owner: getAnswerValue("management_system_owner"),
           processes: getAnswerValue("management_system_processes"),
           documents: getAnswerValue("management_system_documents"),
@@ -2111,18 +2367,16 @@ function WorkspacePageContent() {
           overdueControls: controlSummary.overdue,
           revisionPercent: revisionProgress.percent,
         },
-      }),
     });
 
     setAiAssistLoading((prev) => ({ ...prev, [feature]: false }));
 
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string };
-      const message = data.error || "Kunde inte skapa AI-förslag.";
+    if (!result.ok) {
+      setAiAssistFailed((prev) => ({ ...prev, [feature]: true }));
 
-      if (feature === "risk_analysis") setRiskMessage(message);
-      if (feature === "incident_investigation") setIncidentMessage(message);
-      if (feature === "controls") setControlMessage(message);
+      if (feature === "risk_analysis") setRiskMessage(result.error);
+      if (feature === "incident_investigation") setIncidentMessage(result.error);
+      if (feature === "controls") setControlMessage(result.error);
       if (
         feature === "routine" ||
         feature === "management_system" ||
@@ -2131,16 +2385,16 @@ function WorkspacePageContent() {
         feature === "facility_and_equipment" ||
         feature === "attachment_checklist"
       ) {
-        setWorkspaceMessage(message);
+        setWorkspaceMessage(result.error);
       }
       return null;
     }
 
-    return (await response.json()) as AiAssistResponse;
+    return result.data;
   }
 
-  async function suggestRiskAnalysis() {
-    const suggestion = await requestAiAssistance("risk_analysis");
+  async function suggestRiskAnalysis(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("risk_analysis", options);
     if (!suggestion || suggestion.feature !== "risk_analysis") return;
 
     setRiskForm({
@@ -2155,9 +2409,10 @@ function WorkspacePageContent() {
   }
 
   async function suggestRoutineUpdate(
-    targetPoint: (typeof routineRequirementPoints)[number] = activeRoutineRequirement
+    targetPoint: (typeof routineRequirementPoints)[number] = activeRoutineRequirement,
+    options?: { manual?: boolean }
   ) {
-    const suggestion = await requestAiAssistance("routine");
+    const suggestion = await requestAiAssistance("routine", options);
     if (!suggestion || suggestion.feature !== "routine") return;
 
     const area = suggestion.area?.trim() || targetPoint.label;
@@ -2178,7 +2433,7 @@ function WorkspacePageContent() {
     setWorkspaceMessage(`AI-rutin skapad och sparad för punkt: ${targetPoint.label}.`);
   }
 
-  async function suggestRoutineForPoint(pointKey: string) {
+  async function suggestRoutineForPoint(pointKey: string, options?: { manual?: boolean }) {
     const point = routineRequirementPoints.find((item) => item.key === pointKey);
 
     if (!point) {
@@ -2187,7 +2442,7 @@ function WorkspacePageContent() {
 
     setActiveRoutineRequirementKey(pointKey);
     setAnswerValue("routine_updates_area", point.label);
-    await suggestRoutineUpdate(point);
+    await suggestRoutineUpdate(point, options);
   }
 
   async function suggestAllMissingRoutines() {
@@ -2208,8 +2463,8 @@ function WorkspacePageContent() {
     setWorkspaceMessage("AI har skapat rutiner för alla saknade lagkravspunkter.");
   }
 
-  async function writeIncidentInvestigation() {
-    const suggestion = await requestAiAssistance("incident_investigation");
+  async function writeIncidentInvestigation(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("incident_investigation", options);
     if (!suggestion || suggestion.feature !== "incident_investigation") return;
 
     setIncidentForm((prev) => ({
@@ -2220,8 +2475,8 @@ function WorkspacePageContent() {
     setIncidentMessage("AI-utredning infogad i avvikelsen.");
   }
 
-  async function generateManagementSystemDraft() {
-    const suggestion = await requestAiAssistance("management_system");
+  async function generateManagementSystemDraft(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("management_system", options);
     if (!suggestion || suggestion.feature !== "management_system") return;
 
     const today = new Date().toISOString().slice(0, 10);
@@ -2334,8 +2589,8 @@ function WorkspacePageContent() {
     setWorkspaceMessage("Sammanställningen har infogats i ledningssystem-utkastet.");
   }
 
-  async function suggestControls() {
-    const suggestion = await requestAiAssistance("controls");
+  async function suggestControls(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("controls", options);
     if (!suggestion || suggestion.feature !== "controls") return;
 
     setControlForm({
@@ -2348,8 +2603,8 @@ function WorkspacePageContent() {
     setControlMessage("AI-förslag infogat i kontrollpunkten.");
   }
 
-  async function suggestResponsiblePeople() {
-    const suggestion = await requestAiAssistance("responsible_people");
+  async function suggestResponsiblePeople(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("responsible_people", options);
     if (!suggestion || suggestion.feature !== "responsible_people") {
       return;
     }
@@ -2366,8 +2621,8 @@ function WorkspacePageContent() {
     setWorkspaceMessage("AI har fyllt i förslag för ansvariga personer.");
   }
 
-  async function suggestOwnershipSuitability() {
-    const suggestion = await requestAiAssistance("ownership_suitability");
+  async function suggestOwnershipSuitability(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("ownership_suitability", options);
     if (!suggestion || suggestion.feature !== "ownership_suitability") {
       return;
     }
@@ -2380,8 +2635,8 @@ function WorkspacePageContent() {
     setWorkspaceMessage("AI har fyllt i förslag för ägarbild och lämplighet.");
   }
 
-  async function suggestFacilityAndEquipment() {
-    const suggestion = await requestAiAssistance("facility_and_equipment");
+  async function suggestFacilityAndEquipment(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("facility_and_equipment", options);
     if (!suggestion || suggestion.feature !== "facility_and_equipment") {
       return;
     }
@@ -2393,8 +2648,8 @@ function WorkspacePageContent() {
     setWorkspaceMessage("AI har fyllt i förslag för lokaler och utrustning.");
   }
 
-  async function suggestAttachmentChecklist() {
-    const suggestion = await requestAiAssistance("attachment_checklist");
+  async function suggestAttachmentChecklist(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("attachment_checklist", options);
     if (!suggestion || suggestion.feature !== "attachment_checklist") {
       return;
     }
@@ -2407,8 +2662,8 @@ function WorkspacePageContent() {
     setWorkspaceMessage("AI har fyllt i förslag för bilagechecklistan.");
   }
 
-  async function suggestRegulationWatchAction() {
-    const suggestion = await requestAiAssistance("regulation_watch");
+  async function suggestRegulationWatchAction(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("regulation_watch", options);
     if (!suggestion || suggestion.feature !== "regulation_watch") {
       return;
     }
@@ -2471,8 +2726,8 @@ function WorkspacePageContent() {
     setWorkspaceMessage("Regelbevakning sparad.");
   }
 
-  async function suggestRevisionReadiness() {
-    const suggestion = await requestAiAssistance("revision_readiness");
+  async function suggestRevisionReadiness(options?: { manual?: boolean }) {
+    const suggestion = await requestAiAssistance("revision_readiness", options);
     if (!suggestion || suggestion.feature !== "revision_readiness") {
       return;
     }
@@ -3154,7 +3409,7 @@ function WorkspacePageContent() {
     void loadControls();
   }
 
-  async function generateDocument(kind: DocumentKind) {
+  async function generateDocument(kind: DocumentKind, options?: { manual?: boolean }) {
     const requirement = complianceRequirements.find((item) => item.documentKind === kind);
     if (requirement && !hasPlanAccess(requirement.availableFrom)) {
       return;
@@ -3166,45 +3421,42 @@ function WorkspacePageContent() {
         content: prev[kind]?.content || "",
         approved: prev[kind]?.approved || false,
         isLoading: true,
+        error: undefined,
       },
     }));
 
-    const response = await fetch("/api/ai/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        plan: activePlan,
-        clinicName: profile.clinicName,
-        municipality: profile.municipality,
-        careScope: answers.care_scope.answer,
-        qualityProcess: answers.quality_process.answer,
-        staffing: answers.staffing.answer,
-        incidentRoutine: answers.incident_routine.answer,
-        documentKind: kind,
-      }),
+    const result = await callAiAssist<{ content: string }>("/api/ai/generate", {
+      plan: activePlan,
+      mode: options?.manual ? "manual" : "ai",
+      clinicName: profile.clinicName,
+      municipality: profile.municipality,
+      careScope: answers.care_scope.answer,
+      qualityProcess: answers.quality_process.answer,
+      staffing: answers.staffing.answer,
+      incidentRoutine: answers.incident_routine.answer,
+      documentKind: kind,
     });
 
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string };
+    if (!result.ok) {
       setGenerated((prev) => ({
         ...prev,
         [kind]: {
-          content: data.error || "Kunde inte generera innehåll. Försök igen.",
+          content: prev[kind]?.content || "",
           approved: false,
           isLoading: false,
+          error: result.error,
         },
       }));
       return;
     }
 
-    const data = (await response.json()) as { content: string };
-
     setGenerated((prev) => ({
       ...prev,
       [kind]: {
-        content: data.content,
+        content: result.data.content,
         approved: false,
         isLoading: false,
+        error: undefined,
       },
     }));
   }
@@ -3818,12 +4070,21 @@ function WorkspacePageContent() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={generateManagementSystemDraft}
+                    onClick={() => generateManagementSystemDraft()}
                     disabled={aiAssistLoading.management_system}
                     className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
                   >
                     {aiAssistLoading.management_system ? "AI arbetar..." : "AI: Generera utkast"}
                   </button>
+                  {aiAssistFailed.management_system ? (
+                    <button
+                      type="button"
+                      onClick={() => generateManagementSystemDraft({ manual: true })}
+                      className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+                    >
+                      Fortsätt utan AI-hjälp (fyll i mall)
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={insertManagementSystemSummaryDraft}
@@ -4162,12 +4423,21 @@ function WorkspacePageContent() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={suggestRegulationWatchAction}
+                        onClick={() => suggestRegulationWatchAction()}
                         disabled={aiAssistLoading.regulation_watch}
                         className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
                       >
                         {aiAssistLoading.regulation_watch ? "AI arbetar..." : "AI: analysera"}
                       </button>
+                      {aiAssistFailed.regulation_watch ? (
+                        <button
+                          type="button"
+                          onClick={() => suggestRegulationWatchAction({ manual: true })}
+                          className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-xs font-semibold text-[color:var(--muted)]"
+                        >
+                          Fortsätt utan AI-hjälp (fyll i mall)
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={saveRegulationWatchEntry}
@@ -4286,12 +4556,21 @@ function WorkspacePageContent() {
                   <div className="mt-3 space-y-2">
                     <button
                       type="button"
-                      onClick={suggestRevisionReadiness}
+                      onClick={() => suggestRevisionReadiness()}
                       disabled={aiAssistLoading.revision_readiness}
                       className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
                     >
                       {aiAssistLoading.revision_readiness ? "AI arbetar..." : "AI: prioritera revision"}
                     </button>
+                    {aiAssistFailed.revision_readiness ? (
+                      <button
+                        type="button"
+                        onClick={() => suggestRevisionReadiness({ manual: true })}
+                        className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-xs font-semibold text-[color:var(--muted)]"
+                      >
+                        Fortsätt utan AI-hjälp (fyll i mall)
+                      </button>
+                    ) : null}
                     <textarea
                       value={getAnswerValue("revision_focus")}
                       onChange={(event) => setAnswerValue("revision_focus", event.target.value)}
@@ -4561,6 +4840,15 @@ function WorkspacePageContent() {
                 >
                   {aiAssistLoading.routine ? "AI arbetar..." : "AI: Skapa för vald punkt"}
                 </button>
+                {aiAssistFailed.routine ? (
+                  <button
+                    type="button"
+                    onClick={() => void suggestRoutineUpdate(activeRoutineRequirement, { manual: true })}
+                    className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+                  >
+                    Fortsätt utan AI-hjälp (fyll i mall)
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={suggestAllMissingRoutines}
@@ -4706,14 +4994,67 @@ function WorkspacePageContent() {
           </div>
         </div>
 
+        <div className="grid gap-4 lg:grid-cols-2">
+          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">Behöver göras idag</p>
+            {overviewActions.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {overviewActions.map((action) => (
+                  <li key={action.id} className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2">
+                    <a href={action.href} className="flex items-start justify-between gap-3 text-sm font-medium text-[color:var(--ink)] hover:text-[color:var(--brand)]">
+                      <span>{action.text}</span>
+                      <span
+                        className={`mt-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          action.severity === "alert" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {action.severity === "alert" ? "Hög" : "Medel"}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-emerald-700">Inga akuta åtgärder just nu.</p>
+            )}
+          </article>
+
+          {aiOverviewRecommendation ? (
+            <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+              <p
+                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.12em] ${
+                  aiOverviewRecommendation.tone === "alert"
+                    ? "bg-red-100 text-red-800"
+                    : aiOverviewRecommendation.tone === "warn"
+                      ? "bg-amber-100 text-amber-800"
+                      : aiOverviewRecommendation.tone === "praise"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-[color:var(--brand-soft)] text-[color:var(--brand)]"
+                }`}
+              >
+                {aiOverviewRecommendation.label}
+              </p>
+              <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">{aiOverviewRecommendation.title}</h3>
+              <p className="mt-2 text-sm text-[color:var(--muted)]">{aiOverviewRecommendation.text}</p>
+              <a
+                href={aiOverviewRecommendation.href}
+                className="mt-3 inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
+              >
+                {aiOverviewRecommendation.cta}
+              </a>
+            </article>
+          ) : null}
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <article className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <article className={`flex h-full flex-col rounded-2xl border p-4 ${overviewToneClass(overviewStatusCards.ledningssystem.tone)}`}>
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Ledningssystem</p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
-              {ledningssystemMissingFields.length === 0
-                ? "Alla grundfält ifyllda"
-                : `${ledningssystemMissingFields.length} punkter saknas`}
+              {overviewStatusCards.ledningssystem.summary}
             </p>
+            <span className={`mt-2 inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${overviewToneBadgeClass(overviewStatusCards.ledningssystem.tone)}`}>
+              {overviewToneLabel(overviewStatusCards.ledningssystem.tone)}
+            </span>
             <div className="mt-auto pt-4">
               <a
                 href="/workspace/ledningssystem"
@@ -4724,12 +5065,15 @@ function WorkspacePageContent() {
             </div>
           </article>
 
-          <article className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <article className={`flex h-full flex-col rounded-2xl border p-4 ${overviewToneClass(overviewStatusCards.risks.tone)}`}>
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Risker</p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
-              Hög prioritet: {riskSummary.highPriority}
+              {overviewStatusCards.risks.summary}
             </p>
             <p className="mt-1 text-xs text-[color:var(--muted)]">Öppna risker: {riskSummary.open}</p>
+            <span className={`mt-2 inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${overviewToneBadgeClass(overviewStatusCards.risks.tone)}`}>
+              {overviewToneLabel(overviewStatusCards.risks.tone)}
+            </span>
             <div className="mt-auto pt-4">
               <a
                 href="/workspace/riskanalyser"
@@ -4740,10 +5084,13 @@ function WorkspacePageContent() {
             </div>
           </article>
 
-          <article className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <article className={`flex h-full flex-col rounded-2xl border p-4 ${overviewToneClass(overviewStatusCards.controls.tone)}`}>
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Årshjul</p>
-            <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">Försenade kontroller: {controlSummary.overdue}</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{overviewStatusCards.controls.summary}</p>
             <p className="mt-1 text-xs text-[color:var(--muted)]">Planerade: {controlSummary.pending}</p>
+            <span className={`mt-2 inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${overviewToneBadgeClass(overviewStatusCards.controls.tone)}`}>
+              {overviewToneLabel(overviewStatusCards.controls.tone)}
+            </span>
             <div className="mt-auto pt-4">
               <a
                 href="/workspace/arshjul"
@@ -4754,12 +5101,15 @@ function WorkspacePageContent() {
             </div>
           </article>
 
-          <article className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+          <article className={`flex h-full flex-col rounded-2xl border p-4 ${overviewToneClass(overviewStatusCards.incidents.tone)}`}>
             <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Avvikelser</p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
-              Hög/kritisk: {incidentSummary.criticalOrHigh}
+              {overviewStatusCards.incidents.summary}
             </p>
             <p className="mt-1 text-xs text-[color:var(--muted)]">Öppna avvikelser: {incidentSummary.open}</p>
+            <span className={`mt-2 inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${overviewToneBadgeClass(overviewStatusCards.incidents.tone)}`}>
+              {overviewToneLabel(overviewStatusCards.incidents.tone)}
+            </span>
             <div className="mt-auto pt-4">
               <a
                 href="/workspace/avvikelser"
@@ -4770,23 +5120,6 @@ function WorkspacePageContent() {
             </div>
           </article>
         </div>
-
-        <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-          <p className="text-sm font-semibold text-[color:var(--ink)]">Behöver åtgärdas nu</p>
-          {overviewActions.length > 0 ? (
-            <ul className="mt-3 space-y-2">
-              {overviewActions.map((action) => (
-                <li key={action.id} className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2">
-                  <a href={action.href} className="text-sm font-medium text-[color:var(--ink)] hover:text-[color:var(--brand)]">
-                    {action.text}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm text-emerald-700">Inga akuta åtgärder just nu.</p>
-          )}
-        </article>
       </section>
       ) : null}
 
@@ -4816,11 +5149,20 @@ function WorkspacePageContent() {
               {canUseAiSupport ? (
                 <button
                   type="button"
-                  onClick={writeIncidentInvestigation}
+                  onClick={() => writeIncidentInvestigation()}
                   disabled={aiAssistLoading.incident_investigation}
                   className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
                 >
                   {aiAssistLoading.incident_investigation ? "AI arbetar..." : "AI: Skriv utredning"}
+                </button>
+              ) : null}
+              {aiAssistFailed.incident_investigation ? (
+                <button
+                  type="button"
+                  onClick={() => writeIncidentInvestigation({ manual: true })}
+                  className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+                >
+                  Fortsätt utan AI-hjälp (fyll i mall)
                 </button>
               ) : null}
               <input
@@ -4980,11 +5322,20 @@ function WorkspacePageContent() {
               {canUseAiSupport ? (
                 <button
                   type="button"
-                  onClick={suggestRiskAnalysis}
+                  onClick={() => suggestRiskAnalysis()}
                   disabled={aiAssistLoading.risk_analysis}
                   className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
                 >
                   {aiAssistLoading.risk_analysis ? "AI arbetar..." : "AI: Föreslå riskanalys"}
+                </button>
+              ) : null}
+              {aiAssistFailed.risk_analysis ? (
+                <button
+                  type="button"
+                  onClick={() => suggestRiskAnalysis({ manual: true })}
+                  className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+                >
+                  Fortsätt utan AI-hjälp (fyll i mall)
                 </button>
               ) : null}
               <input
@@ -5067,17 +5418,41 @@ function WorkspacePageContent() {
                   Inga risker registrerade än.
                 </p>
               ) : (
-                risks.map((risk) => (
-                  <article key={risk.id} className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+                risks.map((risk) => {
+                  const tone = riskTone(risk);
+
+                  return (
+                  <article key={risk.id} className={`rounded-2xl border px-4 py-3 ${riskCardClass(tone)}`}>
                     <p className="text-sm font-semibold text-[color:var(--ink)]">{risk.title}</p>
                     <p className="mt-1 text-sm text-[color:var(--muted)]">{risk.description}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
+                      <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
                         Riskvärde: {risk.probability * risk.consequence}
                       </span>
-                      <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                          tone === "alert"
+                            ? "border-red-200 bg-red-100 text-red-800"
+                            : tone === "warn"
+                              ? "border-amber-200 bg-amber-100 text-amber-800"
+                              : "border-emerald-200 bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
                         Status: {riskStatusLabels[risk.status]}
                       </span>
+                      {tone === "alert" ? (
+                        <span className="rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-800">
+                          Kräver åtgärd nu
+                        </span>
+                      ) : tone === "warn" ? (
+                        <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                          Behöver planeras
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                          Färdigbehandlad
+                        </span>
+                      )}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {risk.status !== "open" ? (
@@ -5109,7 +5484,8 @@ function WorkspacePageContent() {
                       ) : null}
                     </div>
                   </article>
-                ))
+                );
+                })
               )}
             </div>
           </div>
@@ -5144,12 +5520,21 @@ function WorkspacePageContent() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={suggestControls}
+                    onClick={() => suggestControls()}
                     disabled={aiAssistLoading.controls || isControlSubmitting}
                     className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
                   >
                     {aiAssistLoading.controls ? "AI arbetar..." : "AI: Föreslå en kontroll"}
                   </button>
+                  {aiAssistFailed.controls ? (
+                    <button
+                      type="button"
+                      onClick={() => suggestControls({ manual: true })}
+                      className="rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+                    >
+                      Fortsätt utan AI-hjälp (fyll i mall)
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={createAnnualControlTemplate}
@@ -5372,6 +5757,10 @@ function WorkspacePageContent() {
           <p className="mt-2 text-sm text-[color:var(--muted)]">
             Dokumentera de personer och roller som ska stå för ledning, medicinskt ansvar och kvalitetsarbete i ansökningsunderlaget.
           </p>
+          <p className="mt-2 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs text-[color:var(--muted)]">
+            Ansvariga personer, ägarbild, bilagechecklista och bemanning hanteras numera som strukturerade krav (R-06–R-09) i
+            ansökningsflödet. Fälten här påverkar inte längre ansökans readiness-status.
+          </p>
 
           {canUseAiSupport ? (
             <button
@@ -5381,6 +5770,15 @@ function WorkspacePageContent() {
               className="mt-4 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
             >
               {aiAssistLoading.responsible_people ? "AI arbetar..." : "AI: Föreslå ansvariga roller"}
+            </button>
+          ) : null}
+          {aiAssistFailed.responsible_people ? (
+            <button
+              type="button"
+              onClick={() => suggestResponsiblePeople({ manual: true })}
+              className="mt-2 rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+            >
+              Fortsätt utan AI-hjälp (fyll i mall)
             </button>
           ) : null}
 
@@ -5467,6 +5865,15 @@ function WorkspacePageContent() {
               {aiAssistLoading.ownership_suitability ? "AI arbetar..." : "AI: Föreslå ägarbild och lämplighet"}
             </button>
           ) : null}
+          {aiAssistFailed.ownership_suitability ? (
+            <button
+              type="button"
+              onClick={() => suggestOwnershipSuitability({ manual: true })}
+              className="mt-2 rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+            >
+              Fortsätt utan AI-hjälp (fyll i mall)
+            </button>
+          ) : null}
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {ownershipRequirementItems.map((item) => {
@@ -5535,6 +5942,15 @@ function WorkspacePageContent() {
               {aiAssistLoading.facility_and_equipment ? "AI arbetar..." : "AI: Föreslå lokaler och utrustning"}
             </button>
           ) : null}
+          {aiAssistFailed.facility_and_equipment ? (
+            <button
+              type="button"
+              onClick={() => suggestFacilityAndEquipment({ manual: true })}
+              className="mt-2 rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+            >
+              Fortsätt utan AI-hjälp (fyll i mall)
+            </button>
+          ) : null}
 
           <div className="mt-4 grid gap-3">
             {facilityRequirementItems.map((item) => (
@@ -5583,6 +5999,15 @@ function WorkspacePageContent() {
               className="mt-4 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
             >
               {aiAssistLoading.attachment_checklist ? "AI arbetar..." : "AI: Föreslå bilagechecklista"}
+            </button>
+          ) : null}
+          {aiAssistFailed.attachment_checklist ? (
+            <button
+              type="button"
+              onClick={() => suggestAttachmentChecklist({ manual: true })}
+              className="mt-2 rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
+            >
+              Fortsätt utan AI-hjälp (fyll i mall)
             </button>
           ) : null}
 
@@ -5861,6 +6286,20 @@ function WorkspacePageContent() {
                       {state?.isLoading ? "Genererar..." : "Generera"}
                     </button>
                   </div>
+
+                  {state?.error ? (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      <p>{state.error}</p>
+                      <button
+                        type="button"
+                        onClick={() => generateDocument(kind, { manual: true })}
+                        disabled={!canGenerate || isLocked || isApplicationSubmitted}
+                        className="mt-2 rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        Fortsätt utan AI-hjälp (fyll i mall)
+                      </button>
+                    </div>
+                  ) : null}
 
                   <textarea
                     value={state?.content || ""}

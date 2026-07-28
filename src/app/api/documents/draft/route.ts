@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { generateAssistance } from "@/lib/ai/generate-assistance";
+import { AiAssistanceError, generateAssistance } from "@/lib/ai/generate-assistance";
 import { documentKindFromRequirementCode } from "@/lib/document-drafts";
 import { logApplicationEvent, resolveUserApplicationContext } from "@/lib/application-status";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -11,6 +11,7 @@ const bodySchema = z.object({
   title: z.string().optional().default(""),
   body: z.string().optional().default(""),
   note: z.string().optional().default(""),
+  mode: z.enum(["ai", "manual"]).default("ai"),
 });
 
 export async function POST(request: Request) {
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
     const assistance = await generateAssistance({
       plan: (organization?.plan as "ansokan" | "step1" | "step2" | "step3") || "ansokan",
       feature: "document_draft",
+      mode: payload.mode,
       clinicName: clinic?.name || organization?.name || "",
       municipality: clinic?.municipality || "",
       currentDocumentDraft: {
@@ -71,27 +73,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Kunde inte skapa dokumentutkast." }, { status: 400 });
     }
 
+    const draftBody =
+      payload.mode === "manual"
+        ? `OBS: Manuellt startdokument – skriv klart och komplettera innan granskning.\n\n${assistance.body}`
+        : assistance.body;
+
     const { data: document, error: documentError } = await supabase
-      .from("generated_documents")
-      .insert({
-        application_id: context.applicationId,
-        kind,
-        title: assistance.title,
-        body: assistance.body,
-        is_approved: false,
+      .rpc("create_document_draft_version", {
+        p_application_id: context.applicationId,
+        p_kind: kind,
+        p_title: assistance.title,
+        p_body: draftBody,
+        p_source: payload.mode,
       })
-      .select("id, kind, title, body, is_approved, created_at")
+      .select("id, kind, title, body, is_approved, is_current, source, created_at")
       .single();
 
     if (documentError) throw documentError;
-
-    const { error: versionError } = await supabase.from("document_versions").insert({
-      generated_document_id: document.id,
-      version: 1,
-      body: assistance.body,
-    });
-
-    if (versionError) throw versionError;
 
     await logApplicationEvent(supabase, {
       applicationId: context.applicationId,
@@ -107,10 +105,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, document });
   } catch (error) {
+    const reason = error instanceof AiAssistanceError ? error.reason : undefined;
     return NextResponse.json(
       {
         ok: false,
         error: error instanceof Error ? error.message : "Kunde inte skapa dokumentutkast",
+        reason,
       },
       { status: 400 }
     );

@@ -54,7 +54,7 @@ export async function POST() {
 
     const { data: documents, error: documentError } = await supabase
       .from("generated_documents")
-      .select("id, kind, title, body, is_approved, created_at")
+      .select("id, kind, title, body, is_approved, is_current, source, created_at")
       .eq("application_id", application.id)
       .order("created_at", { ascending: false });
 
@@ -81,6 +81,8 @@ export async function POST() {
         title: item.title,
         body: item.body,
         isApproved: item.is_approved,
+        isCurrent: item.is_current,
+        source: item.source,
         createdAt: item.created_at,
         reviewedBy: versionMap.get(item.id)?.reviewedBy || null,
         reviewedAt: versionMap.get(item.id)?.reviewedAt || null,

@@ -1,13 +1,14 @@
 import {
-  attachmentChecklistRequirementItems,
   complianceRequirements,
   facilityRequirementItems,
   ivoReadinessItemDefinitions,
+  mainCareScopeCodes,
   managementSystemRequirementItems,
-  ownershipRequirementItems,
   questionnaireItems,
-  responsiblePersonRequirementItems,
+  structuredRequirementDefinitions,
+  type StructuredRequirementCode,
 } from "@/lib/requirements";
+import { isPlaceholderDocumentDraftBody } from "@/lib/document-drafts";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export type ApplicationStatus = "draft" | "in_review" | "ready_to_submit" | "submitted";
@@ -36,6 +37,8 @@ export type ReadinessChecklist = {
   }>;
   missingIvoItems: string[];
   advisoryIvoGaps: string[];
+  missingDocumentRequirements: string[];
+  missingStructuredRequirementFields: string[];
   canMoveToReady: boolean;
   canSubmit: boolean;
   evidenceCount: number;
@@ -213,18 +216,11 @@ export async function computeReadinessChecklist(
   if (clinicId) {
     const { data: clinic, error: clinicError } = await supabase
       .from("clinics")
-      .select("name, address, postal_code, municipality, region")
+      .select("name, address, postal_code, municipality")
       .eq("id", clinicId)
       .maybeSingle();
 
     if (clinicError) throw clinicError;
-
-    hasClinic = Boolean(
-      clinic?.name?.trim() &&
-        clinic?.address?.trim() &&
-        clinic?.municipality?.trim() &&
-        clinic?.region?.trim()
-    );
 
     clinicProfileComplete = Boolean(
       clinic?.name?.trim() &&
@@ -232,6 +228,13 @@ export async function computeReadinessChecklist(
         clinic?.postal_code?.trim() &&
         clinic?.municipality?.trim()
     );
+
+    // hasClinic and clinicProfileComplete previously required different field sets
+    // (hasClinic required `region`, which is never actually collected from the
+    // user and is always hardcoded to "Ej angivet" — see getOrCreateClinic in
+    // /api/workspace/save/route.ts). They now share one definition so they can't
+    // silently diverge again.
+    hasClinic = clinicProfileComplete;
   }
 
   const { data: responses, error: responsesError } = await supabase
@@ -248,7 +251,20 @@ export async function computeReadinessChecklist(
 
   const responseValue = (key: string) => answerMap.get(key)?.trim() || "";
 
-  const requiredQuestionKeys = questionnaireItems.map((item) => item.key);
+  const { data: careScopeRows, error: careScopeError } = await supabase
+    .from("care_scope_codes")
+    .select("code")
+    .eq("application_id", applicationId);
+
+  if (careScopeError) throw careScopeError;
+
+  const hasMainCareScopeCode = (careScopeRows || []).some((row) =>
+    (mainCareScopeCodes as string[]).includes(row.code)
+  );
+
+  const requiredQuestionKeys = questionnaireItems
+    .map((item) => item.key)
+    .filter((key) => key !== "care_scope");
   const questionnaireComplete = requiredQuestionKeys.every((key) =>
     Boolean(answerMap.get(key)?.trim())
   );
@@ -269,9 +285,117 @@ export async function computeReadinessChecklist(
     requirementIds.push(row.id);
   }
 
+  const { data: documentRows, error: documentsError } = await supabase
+    .from("generated_documents")
+    .select("kind, is_approved, body")
+    .eq("application_id", applicationId)
+    .eq("is_current", true);
+
+  if (documentsError) throw documentsError;
+
+  const hasApprovedSubstantiveDraft = new Set(
+    (documentRows || [])
+      .filter((row) => row.is_approved && !isPlaceholderDocumentDraftBody(row.body))
+      .map((row) => row.kind)
+  );
+
   const completeRequirementCount = complianceRequirements.filter(
-    (requirement) => requirementMap.get(requirement.code) === "complete"
+    (requirement) =>
+      requirementMap.get(requirement.code) === "complete" &&
+      hasApprovedSubstantiveDraft.has(requirement.documentKind)
   ).length;
+
+  const missingDocumentRequirements = complianceRequirements
+    .filter((requirement) => !hasApprovedSubstantiveDraft.has(requirement.documentKind))
+    .map((requirement) => `${requirement.code} – ${requirement.title}: saknar godkänt, ifyllt dokumentutkast`);
+
+  const { data: structuredRows, error: structuredError } = await supabase
+    .from("structured_requirement_items")
+    .select("requirement_code, fields, file_path")
+    .eq("application_id", applicationId);
+
+  if (structuredError) throw structuredError;
+
+  const missingStructuredRequirementFields: string[] = [];
+
+  for (const code of Object.keys(structuredRequirementDefinitions) as StructuredRequirementCode[]) {
+    const rows = (structuredRows || []).filter((row) => row.requirement_code === code);
+    const def = structuredRequirementDefinitions[code];
+
+    if (code === "R-09") {
+      for (const preset of def.quickPicks || []) {
+        const standardType = preset.fields.standardType;
+
+        if (!standardType) {
+          continue;
+        }
+
+        // Requires an actually uploaded file, not just the self-declared "status: finns"
+        // text — a row can otherwise claim a document exists without one ever having
+        // been attached. Status is now a label derived from file_path, not a source of truth.
+        const hasFulfilledRow = rows.some((row) => {
+          const fields = row.fields as Record<string, unknown>;
+          return fields?.standardType === standardType && Boolean(row.file_path);
+        });
+
+        if (!hasFulfilledRow) {
+          missingStructuredRequirementFields.push(`R-09: ${preset.label.toLowerCase()} saknas`);
+        }
+      }
+      continue;
+    }
+
+    if (rows.length === 0) {
+      missingStructuredRequirementFields.push(`${code}: minst en ${def.itemLabel} måste läggas till`);
+      continue;
+    }
+
+    for (const field of def.fields) {
+      if (field.optional) {
+        continue;
+      }
+
+      const missingCount = rows.filter(
+        (row) => !String((row.fields as Record<string, unknown>)?.[field.key] ?? "").trim()
+      ).length;
+
+      if (missingCount > 0) {
+        missingStructuredRequirementFields.push(
+          `${code}: ${field.label.toLowerCase()} saknas för ${missingCount} av ${rows.length} (${def.itemLabel})`
+        );
+      }
+    }
+
+    if (code === "R-08") {
+      const totalPercent = rows.reduce(
+        (sum, row) => sum + (Number((row.fields as Record<string, unknown>)?.ownershipPercent) || 0),
+        0
+      );
+
+      if (Math.abs(totalPercent - 100) > 0.5) {
+        missingStructuredRequirementFields.push(
+          `R-08: ägarandelarna summerar till ${totalPercent}%, måste bli 100%`
+        );
+      }
+    }
+
+    for (const field of def.fields) {
+      if (!field.requiresAtLeastOne) {
+        continue;
+      }
+
+      const hasAtLeastOne = rows.some(
+        (row) => String((row.fields as Record<string, unknown>)?.[field.key] ?? "").toLowerCase() === "true"
+      );
+
+      if (!hasAtLeastOne) {
+        missingStructuredRequirementFields.push(field.requiresAtLeastOneMessage || `${code}: ${field.label} saknas`);
+      }
+    }
+  }
+
+  const isStructuredRequirementComplete = (code: StructuredRequirementCode) =>
+    !missingStructuredRequirementFields.some((message) => message.startsWith(`${code}:`));
 
   const requirementsComplete =
     requirementCount > 0 && completeRequirementCount === requirementCount;
@@ -299,16 +423,7 @@ export async function computeReadinessChecklist(
   const managementSystemComplete = managementSystemRequirementItems.every((item) =>
     Boolean(responseValue(item.key))
   );
-  const responsiblePeopleComplete = responsiblePersonRequirementItems.every((item) =>
-    Boolean(responseValue(item.key))
-  );
-  const ownershipSuitabilityComplete = ownershipRequirementItems.every((item) =>
-    Boolean(responseValue(item.key))
-  );
   const facilityAndEquipmentComplete = facilityRequirementItems.every((item) =>
-    Boolean(responseValue(item.key))
-  );
-  const attachmentChecklistComplete = attachmentChecklistRequirementItems.every((item) =>
     Boolean(responseValue(item.key))
   );
 
@@ -319,9 +434,9 @@ export async function computeReadinessChecklist(
       case "clinic_location":
         return { key: item.key, label: item.label, detail: item.description, done: clinicProfileComplete };
       case "care_scope":
-        return { key: item.key, label: item.label, detail: item.description, done: Boolean(responseValue("care_scope")) };
+        return { key: item.key, label: item.label, detail: item.description, done: hasMainCareScopeCode };
       case "staffing":
-        return { key: item.key, label: item.label, detail: item.description, done: Boolean(responseValue("staffing")) };
+        return { key: item.key, label: item.label, detail: item.description, done: isStructuredRequirementComplete("R-06") };
       case "quality_process":
         return {
           key: item.key,
@@ -339,13 +454,13 @@ export async function computeReadinessChecklist(
       case "management_system":
         return { key: item.key, label: item.label, detail: item.description, done: managementSystemComplete };
       case "responsible_people":
-        return { key: item.key, label: item.label, detail: item.description, done: responsiblePeopleComplete };
+        return { key: item.key, label: item.label, detail: item.description, done: isStructuredRequirementComplete("R-07") };
       case "ownership_suitability":
         return {
           key: item.key,
           label: item.label,
           detail: item.description,
-          done: ownershipSuitabilityComplete,
+          done: isStructuredRequirementComplete("R-08"),
         };
       case "facility_and_equipment":
         return {
@@ -354,12 +469,19 @@ export async function computeReadinessChecklist(
           detail: item.description,
           done: facilityAndEquipmentComplete,
         };
+      case "economic_conditions":
+        return {
+          key: item.key,
+          label: item.label,
+          detail: item.description,
+          done: isStructuredRequirementComplete("R-10"),
+        };
       case "attachment_checklist":
         return {
           key: item.key,
           label: item.label,
           detail: item.description,
-          done: attachmentChecklistComplete,
+          done: isStructuredRequirementComplete("R-09"),
         };
       case "evidence_package":
         return { key: item.key, label: item.label, detail: item.description, done: evidenceLinked };
@@ -386,6 +508,8 @@ export async function computeReadinessChecklist(
     ivoChecklistItems,
     missingIvoItems,
     advisoryIvoGaps,
+    missingDocumentRequirements,
+    missingStructuredRequirementFields,
     canMoveToReady,
     canSubmit,
     evidenceCount,

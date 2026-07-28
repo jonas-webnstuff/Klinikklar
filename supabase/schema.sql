@@ -114,8 +114,38 @@ create table if not exists generated_documents (
   title text not null,
   body text not null,
   is_approved boolean not null default false,
+  is_current boolean not null default true,
+  source text not null default 'ai' check (source in ('ai', 'manual')),
   created_at timestamptz not null default now()
 );
+
+alter table generated_documents
+  add column if not exists is_current boolean not null default true;
+
+alter table generated_documents
+  add column if not exists source text not null default 'ai' check (source in ('ai', 'manual'));
+
+-- Backfill: bara senaste raden per (application_id, kind) ska vara aktuell.
+-- Krävs innan unique-indexet nedan kan skapas på databaser som redan har
+-- flera rader per krav (annars defaultar alla befintliga rader till
+-- is_current = true och indexet hittar dubbletter).
+with ranked as (
+  select id, row_number() over (
+    partition by application_id, kind order by created_at desc, id desc
+  ) as rn
+  from generated_documents
+)
+update generated_documents
+set is_current = false
+where id in (select id from ranked where rn > 1);
+
+update generated_documents
+set source = 'manual'
+where source = 'ai' and body like 'OBS: Manuellt startdokument%';
+
+create unique index if not exists generated_documents_one_current_per_kind
+  on generated_documents (application_id, kind)
+  where is_current;
 
 create table if not exists document_versions (
   id uuid primary key default gen_random_uuid(),
@@ -126,6 +156,208 @@ create table if not exists document_versions (
   reviewed_at timestamptz,
   unique (generated_document_id, version)
 );
+
+-- Atomisk demote-gammal + insert-ny, anropas från documents/draft/route.ts.
+create or replace function public.create_document_draft_version(
+  p_application_id uuid,
+  p_kind text,
+  p_title text,
+  p_body text,
+  p_source text
+) returns generated_documents
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_document generated_documents;
+begin
+  update generated_documents
+  set is_current = false
+  where application_id = p_application_id
+    and kind = p_kind
+    and is_current = true;
+
+  insert into generated_documents (application_id, kind, title, body, is_approved, is_current, source)
+  values (p_application_id, p_kind, p_title, p_body, false, true, p_source)
+  returning * into v_document;
+
+  insert into document_versions (generated_document_id, version, body)
+  values (v_document.id, 1, p_body);
+
+  return v_document;
+end;
+$$;
+
+revoke all on function public.create_document_draft_version(uuid, text, text, text, text) from public;
+grant execute on function public.create_document_draft_version(uuid, text, text, text, text) to service_role;
+
+-- Atomisk demote-gammal + promote-vald + nollställ granskningsinfo, anropas
+-- från documents/restore/route.ts.
+create or replace function public.restore_document_draft_version(
+  p_document_id uuid,
+  p_application_id uuid
+) returns generated_documents
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_target generated_documents;
+begin
+  select * into v_target
+  from generated_documents
+  where id = p_document_id
+    and application_id = p_application_id
+  for update;
+
+  if not found then
+    raise exception 'document_not_found';
+  end if;
+
+  if v_target.is_current then
+    return v_target;
+  end if;
+
+  update generated_documents
+  set is_current = false
+  where application_id = p_application_id
+    and kind = v_target.kind
+    and is_current = true;
+
+  update generated_documents
+  set is_current = true, is_approved = false
+  where id = v_target.id
+  returning * into v_target;
+
+  update document_versions
+  set reviewed_by = null, reviewed_at = null
+  where generated_document_id = v_target.id;
+
+  return v_target;
+end;
+$$;
+
+revoke all on function public.restore_document_draft_version(uuid, uuid) from public;
+grant execute on function public.restore_document_draft_version(uuid, uuid) to service_role;
+
+create table if not exists structured_requirement_items (
+  id uuid primary key default gen_random_uuid(),
+  application_id uuid not null references applications(id) on delete cascade,
+  requirement_code text not null check (requirement_code in ('R-06', 'R-07', 'R-08', 'R-09', 'R-10')),
+  fields jsonb not null default '{}'::jsonb,
+  file_path text,
+  file_name text,
+  file_size bigint,
+  file_mime_type text,
+  uploaded_at timestamptz,
+  uploaded_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id)
+);
+
+alter table structured_requirement_items
+  add column if not exists file_path text;
+
+alter table structured_requirement_items
+  add column if not exists file_name text,
+  add column if not exists file_size bigint,
+  add column if not exists file_mime_type text,
+  add column if not exists uploaded_at timestamptz,
+  add column if not exists uploaded_by uuid references auth.users(id);
+
+-- Private bucket for real file uploads (R-09 today, R-08 later). Path convention:
+-- {organization_id}/{application_id}/{requirement_code}/{item_id}/{version}-{safe_filename}
+-- so the org id is always the first path segment and storage RLS can reuse is_org_member().
+insert into storage.buckets (id, name, public)
+values ('requirement-attachments', 'requirement-attachments', false)
+on conflict (id) do nothing;
+
+-- Full upload history: replacing a file never deletes the old object from Storage or
+-- this table, mirroring the document_versions precedent for R-01-R-05 drafts.
+create table if not exists structured_requirement_item_attachments (
+  id uuid primary key default gen_random_uuid(),
+  structured_requirement_item_id uuid not null references structured_requirement_items(id) on delete cascade,
+  file_path text not null,
+  file_name text not null,
+  file_size bigint not null,
+  file_mime_type text not null,
+  uploaded_at timestamptz not null default now(),
+  uploaded_by uuid references auth.users(id)
+);
+
+create index if not exists structured_requirement_item_attachments_item_idx
+  on structured_requirement_item_attachments (structured_requirement_item_id, uploaded_at desc);
+
+-- Atomic history-insert + current-pointer-update, analogous to
+-- create_document_draft_version. Called from
+-- structured-requirements/attachments/route.ts AFTER the file is already
+-- uploaded to Storage — this function only touches the database.
+create or replace function public.replace_structured_requirement_attachment(
+  p_item_id uuid,
+  p_application_id uuid,
+  p_file_path text,
+  p_file_name text,
+  p_file_size bigint,
+  p_file_mime_type text,
+  p_uploaded_by uuid
+) returns structured_requirement_items
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_item structured_requirement_items;
+begin
+  select * into v_item
+  from structured_requirement_items
+  where id = p_item_id
+    and application_id = p_application_id
+  for update;
+
+  if not found then
+    raise exception 'structured_requirement_item_not_found';
+  end if;
+
+  insert into structured_requirement_item_attachments (
+    structured_requirement_item_id, file_path, file_name, file_size, file_mime_type, uploaded_by
+  )
+  values (p_item_id, p_file_path, p_file_name, p_file_size, p_file_mime_type, p_uploaded_by);
+
+  update structured_requirement_items
+  set file_path = p_file_path,
+      file_name = p_file_name,
+      file_size = p_file_size,
+      file_mime_type = p_file_mime_type,
+      uploaded_at = now(),
+      uploaded_by = p_uploaded_by,
+      updated_at = now(),
+      updated_by = p_uploaded_by
+  where id = p_item_id
+  returning * into v_item;
+
+  return v_item;
+end;
+$$;
+
+revoke all on function public.replace_structured_requirement_attachment(uuid, uuid, text, text, bigint, text, uuid) from public;
+grant execute on function public.replace_structured_requirement_attachment(uuid, uuid, text, text, bigint, text, uuid) to service_role;
+
+create index if not exists structured_requirement_items_app_kind_idx
+  on structured_requirement_items (application_id, requirement_code, created_at);
+
+create table if not exists care_scope_codes (
+  id uuid primary key default gen_random_uuid(),
+  application_id uuid not null references applications(id) on delete cascade,
+  code text not null check (code in ('A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10', 'A11', 'A12')),
+  created_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id),
+  unique (application_id, code)
+);
+
+create index if not exists care_scope_codes_app_idx
+  on care_scope_codes (application_id, created_at);
 
 create table if not exists compliance_audit_events (
   id uuid primary key default gen_random_uuid(),
@@ -310,6 +542,9 @@ alter table evidence enable row level security;
 alter table document_templates enable row level security;
 alter table generated_documents enable row level security;
 alter table document_versions enable row level security;
+alter table structured_requirement_items enable row level security;
+alter table structured_requirement_item_attachments enable row level security;
+alter table care_scope_codes enable row level security;
 alter table compliance_audit_events enable row level security;
 alter table compliance_cycles enable row level security;
 alter table risk_register_entries enable row level security;
@@ -475,6 +710,48 @@ with check (
     where gd.id = document_versions.generated_document_id
       and public.is_org_member(a.organization_id)
   )
+);
+
+drop policy if exists structured_requirement_item_attachments_member_policy on structured_requirement_item_attachments;
+create policy structured_requirement_item_attachments_member_policy
+on structured_requirement_item_attachments
+for all
+using (
+  exists (
+    select 1
+    from structured_requirement_items sri
+    join applications a on a.id = sri.application_id
+    where sri.id = structured_requirement_item_attachments.structured_requirement_item_id
+      and public.is_org_member(a.organization_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from structured_requirement_items sri
+    join applications a on a.id = sri.application_id
+    where sri.id = structured_requirement_item_attachments.structured_requirement_item_id
+      and public.is_org_member(a.organization_id)
+  )
+);
+
+-- Defense-in-depth: the app writes/reads via the service-role route layer (same
+-- pattern as every other table here), so this isn't the primary access control,
+-- but it stops a leaked anon/authenticated token from reaching other orgs' files.
+drop policy if exists requirement_attachments_select_own_org on storage.objects;
+create policy requirement_attachments_select_own_org
+on storage.objects for select
+using (
+  bucket_id = 'requirement-attachments'
+  and public.is_org_member((storage.foldername(name))[1]::uuid)
+);
+
+drop policy if exists requirement_attachments_insert_own_org on storage.objects;
+create policy requirement_attachments_insert_own_org
+on storage.objects for insert
+with check (
+  bucket_id = 'requirement-attachments'
+  and public.is_org_member((storage.foldername(name))[1]::uuid)
 );
 
 drop policy if exists compliance_audit_events_member_policy on compliance_audit_events;

@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { DocumentKind } from "@/types/domain";
+import { AiAssistanceError, extractOutputText, type OpenAiResponsesPayload } from "@/lib/ai/generate-assistance";
 
 type PlanLevel = "step1" | "step2" | "step3";
 
 const inputSchema = z.object({
   plan: z.enum(["step1", "step2", "step3"]),
+  mode: z.enum(["ai", "manual"]).default("ai"),
   clinicName: z.string().min(1),
   municipality: z.string().min(1),
   careScope: z.string().min(1),
@@ -128,10 +130,18 @@ function fallbackTemplate(input: GenerateContentInput): string {
 
 export async function generateContent(rawInput: unknown): Promise<string> {
   const input = inputSchema.parse(rawInput);
+
+  if (input.mode === "manual") {
+    return fallbackTemplate(input);
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
-    return fallbackTemplate(input);
+    throw new AiAssistanceError(
+      "missing_api_key",
+      "AI-tjänsten är inte konfigurerad just nu. Fortsätt utan AI-hjälp eller försök igen senare."
+    );
   }
 
   const prompt = [
@@ -151,26 +161,44 @@ export async function generateContent(rawInput: unknown): Promise<string> {
     `Avvikelserutin: ${input.incidentRoutine}`,
   ].join("\n");
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4.1-mini",
-      input: prompt,
-      temperature: 0.2,
-    }),
-  });
+  let response: Response;
 
-  if (!response.ok) {
-    return fallbackTemplate(input);
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        input: prompt,
+        temperature: 0.2,
+      }),
+    });
+  } catch {
+    throw new AiAssistanceError(
+      "upstream_error",
+      "AI-tjänsten svarade inte just nu. Försök igen om en stund eller fortsätt utan AI-hjälp."
+    );
   }
 
-  const data = (await response.json()) as {
-    output_text?: string;
-  };
+  if (!response.ok) {
+    throw new AiAssistanceError(
+      "upstream_error",
+      `AI-tjänsten svarade med fel (status ${response.status}). Försök igen om en stund eller fortsätt utan AI-hjälp.`
+    );
+  }
 
-  return data.output_text?.trim() || fallbackTemplate(input);
+  const data = (await response.json()) as OpenAiResponsesPayload;
+  const outputText = extractOutputText(data);
+
+  if (!outputText) {
+    throw new AiAssistanceError(
+      "invalid_response",
+      "AI-tjänsten gav ett tomt svar. Försök igen eller fortsätt utan AI-hjälp."
+    );
+  }
+
+  return outputText;
 }

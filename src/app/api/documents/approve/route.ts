@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { logApplicationEvent, resolveUserApplicationContext } from "@/lib/application-status";
+import { isPlaceholderDocumentDraftBody } from "@/lib/document-drafts";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
 
     const { data: document, error: documentError } = await supabase
       .from("generated_documents")
-      .select("id, title, kind, body, is_approved")
+      .select("id, title, kind, body, is_approved, is_current")
       .eq("id", payload.documentId)
       .eq("application_id", context.applicationId)
       .maybeSingle();
@@ -41,6 +42,13 @@ export async function POST(request: Request) {
 
     if (!document?.id) {
       return NextResponse.json({ ok: false, error: "Dokumentutkastet hittades inte." }, { status: 404 });
+    }
+
+    if (!document.is_current) {
+      return NextResponse.json(
+        { ok: false, error: "Endast den aktuella versionen kan godkännas." },
+        { status: 400 }
+      );
     }
 
     const { error: updateError } = await supabase
@@ -74,6 +82,8 @@ export async function POST(request: Request) {
       if (reviewError) throw reviewError;
     }
 
+    const isPlaceholder = isPlaceholderDocumentDraftBody(document.body);
+
     await logApplicationEvent(supabase, {
       applicationId: context.applicationId,
       userId: user.id,
@@ -82,10 +92,16 @@ export async function POST(request: Request) {
       metadata: {
         documentId: document.id,
         kind: document.kind,
+        isPlaceholder,
       },
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      warning: isPlaceholder
+        ? "Detta dokument innehåller bara mallstruktur, inget substantiellt innehåll – exportera inte till IVO utan att komplettera det först."
+        : undefined,
+    });
   } catch (error) {
     return NextResponse.json(
       {

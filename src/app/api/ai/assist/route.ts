@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { generateAssistance } from "@/lib/ai/generate-assistance";
+import { AiAssistanceError, generateAssistance } from "@/lib/ai/generate-assistance";
 
 const bodySchema = z.object({
   plan: z.enum(["ansokan", "step1", "step2", "step3"]),
+  mode: z.enum(["ai", "manual"]).default("ai"),
   feature: z.enum([
     "risk_analysis",
     "routine",
@@ -117,9 +118,13 @@ export async function POST(request: Request) {
 
     const result = await generateAssistance(payload);
     return NextResponse.json(result);
-  } catch {
+  } catch (error) {
+    const reason = error instanceof AiAssistanceError ? error.reason : undefined;
     return NextResponse.json(
-      { error: "Kunde inte skapa AI-förslag." },
+      {
+        error: error instanceof Error ? error.message : "Kunde inte skapa AI-förslag.",
+        reason,
+      },
       { status: 400 }
     );
   }

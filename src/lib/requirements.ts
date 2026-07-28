@@ -2,6 +2,26 @@ import type { DocumentKind } from "@/types/domain";
 
 type PlanLevel = "step1" | "step2" | "step3";
 
+export type CareScopeCode =
+  | "A01"
+  | "A02"
+  | "A03"
+  | "A04"
+  | "A05"
+  | "A06"
+  | "A07"
+  | "A08"
+  | "A09"
+  | "A10"
+  | "A11"
+  | "A12";
+
+export interface CareScopeCodeDefinition {
+  code: CareScopeCode;
+  label: string;
+  group: "main" | "specialist";
+}
+
 export interface QuestionnaireItem {
   key: string;
   label: string;
@@ -100,14 +120,14 @@ export const complianceRequirements: ComplianceRequirement[] = [
 export const questionnaireItems: QuestionnaireItem[] = [
   {
     key: "care_scope",
-    label: "Vilka behandlingar ska kliniken erbjuda?",
-    placeholder: "Ex: allmäntandvård, kirurgi, implantat",
+    label: "Ytterligare beskrivning av vårdutbudet",
+    placeholder: "Valfritt: fördjupa gärna inriktningskoderna ovan, t.ex. särskilda behandlingsmetoder eller patientgrupper.",
     followUpLabel: "Behövs särskild utrustning eller kompetens?",
     followUpPlaceholder: "Beskriv kort vad som krävs",
     helpDescription:
-      "Beskriv vårdutbudet så konkret som möjligt: behandlingskategorier, om ni utför avancerad vård och vilka riskmoment som behöver särskilda rutiner.",
+      "Inriktningen anges primärt genom kryssvalen ovan (A01–A12). Använd det här fältet för valfri fördjupning: behandlingskategorier, om ni utför avancerad vård och vilka riskmoment som behöver särskilda rutiner.",
     helpChecklist: [
-      "Vilka behandlingstyper som erbjuds, till exempel allmäntandvård, kirurgi eller implantat.",
+      "Eventuella behandlingstyper utöver inriktningskoderna som är relevanta att känna till.",
       "Om ni utför vård som kräver särskild utrustning, särskilda lokaler eller särskilda hygienrutiner.",
       "Vilka patientgrupper eller riskmoment som kräver egna arbetsprocesser.",
     ],
@@ -174,6 +194,23 @@ export const questionnaireItems: QuestionnaireItem[] = [
     mapsToRequirements: ["R-04", "R-05"],
   },
 ];
+
+export const careScopeCodeDefinitions: CareScopeCodeDefinition[] = [
+  { code: "A01", label: "Tandhygienistverksamhet", group: "main" },
+  { code: "A02", label: "Tandläkarverksamhet, allmän tandvård", group: "main" },
+  { code: "A12", label: "Verksamhet utanför traditionell mottagning", group: "main" },
+  { code: "A03", label: "Pedodonti", group: "specialist" },
+  { code: "A04", label: "Ortodonti", group: "specialist" },
+  { code: "A05", label: "Parodontologi", group: "specialist" },
+  { code: "A06", label: "Oral kirurgi", group: "specialist" },
+  { code: "A07", label: "Endodonti", group: "specialist" },
+  { code: "A08", label: "Oral protetik", group: "specialist" },
+  { code: "A09", label: "Odontologisk radiologi", group: "specialist" },
+  { code: "A10", label: "Bettfysiologi", group: "specialist" },
+  { code: "A11", label: "Orofacial medicin", group: "specialist" },
+];
+
+export const mainCareScopeCodes: CareScopeCode[] = ["A01", "A02", "A12"];
 
 export const managementSystemRequirementItems: ManagementSystemRequirementItem[] = [
   { key: "management_system_purpose", label: "Syfte" },
@@ -334,7 +371,7 @@ export const ivoReadinessItemDefinitions: IvoReadinessItemDefinition[] = [
   {
     key: "care_scope",
     label: "Vårdutbudet är beskrivet",
-    description: "Planerade behandlingar och vårdomfattning är dokumenterade.",
+    description: "Minst en inriktningskategori (A01, A02 eller A12) är vald enligt IVO:s kodlista.",
   },
   {
     key: "staffing",
@@ -372,6 +409,11 @@ export const ivoReadinessItemDefinitions: IvoReadinessItemDefinition[] = [
     description: "Lokaler, hygienflöden, utrustning och särskilda riskområden finns beskrivna i ansökningsunderlaget.",
   },
   {
+    key: "economic_conditions",
+    label: "Ekonomiska förutsättningar är beskrivna",
+    description: "Förväntade intäkter, kostnader och finansiering är dokumenterade per period.",
+  },
+  {
     key: "attachment_checklist",
     label: "Bilagechecklista för ansökan är komplett",
     description: "Det finns en tydlig referens till de underlag som ska skickas med ansökan.",
@@ -382,3 +424,172 @@ export const ivoReadinessItemDefinitions: IvoReadinessItemDefinition[] = [
     description: "Varje kravpost har minst ett kopplat underlag.",
   },
 ];
+
+export type StructuredRequirementCode = "R-06" | "R-07" | "R-08" | "R-09" | "R-10";
+
+export interface StructuredRequirementFieldDefinition {
+  key: string;
+  label: string;
+  placeholder: string;
+  type?: "text" | "number" | "checkbox";
+  /** Excluded from the generic "every row must have this field filled" completeness check. */
+  optional?: boolean;
+  /** At most one row per requirement code may have this field set to "true". */
+  exclusive?: boolean;
+  /** At least one row per requirement code must have this field set to "true". */
+  requiresAtLeastOne?: boolean;
+  /** Message pushed to missingStructuredRequirementFields when requiresAtLeastOne is violated. */
+  requiresAtLeastOneMessage?: string;
+}
+
+export interface StructuredRequirementQuickPick {
+  label: string;
+  fields: Record<string, string>;
+}
+
+export interface StructuredRequirementDefinition {
+  code: StructuredRequirementCode;
+  title: string;
+  description: string;
+  itemLabel: string;
+  fields: StructuredRequirementFieldDefinition[];
+  quickPicks?: StructuredRequirementQuickPick[];
+}
+
+export const structuredRequirementDefinitions: Record<StructuredRequirementCode, StructuredRequirementDefinition> = {
+  "R-06": {
+    code: "R-06",
+    title: "Bemanning och kompetens",
+    description: "Roller, antal och kompetenskrav för planerad bemanning.",
+    itemLabel: "roll",
+    fields: [
+      { key: "role", label: "Roll", placeholder: "Ex. Tandläkare" },
+      { key: "headcount", label: "Antal", placeholder: "Ex. 2", type: "number" },
+      { key: "competenceNotes", label: "Kompetenskrav", placeholder: "Ex. Legitimerad, minst 3 års erfarenhet" },
+    ],
+  },
+  "R-07": {
+    code: "R-07",
+    title: "Ansvariga personer, roller och legitimationer",
+    description: "Namn, roll och legitimationsnummer för varje ansvarig person.",
+    itemLabel: "person",
+    fields: [
+      { key: "name", label: "Namn", placeholder: "Ex. Anna Andersson" },
+      { key: "role", label: "Roll", placeholder: "Ex. Tandläkare, Kvalitetsansvarig" },
+      { key: "licenseNumber", label: "Legitimationsnummer", placeholder: "Ex. 123456" },
+      {
+        key: "isOperationsManager",
+        label: "Detta är verksamhetschefen",
+        placeholder: "",
+        type: "checkbox",
+        optional: true,
+        exclusive: true,
+        requiresAtLeastOne: true,
+        requiresAtLeastOneMessage: "R-07: verksamhetschef måste anges",
+      },
+      {
+        key: "hasInsightLegislation",
+        label: "Kunskap om patientsäkerhetslagen, tandvårdslagen, patientdatalagen och föreskrifter",
+        placeholder: "",
+        type: "checkbox",
+        optional: true,
+        requiresAtLeastOne: true,
+        requiresAtLeastOneMessage:
+          "R-07: kunskap om patientsäkerhetslagen, tandvårdslagen och patientdatalagen måste anges av minst en person",
+      },
+      {
+        key: "hasInsightLaborLaw",
+        label: "Kunskap om arbetsrätt och arbetsmiljörätt",
+        placeholder: "",
+        type: "checkbox",
+        optional: true,
+        requiresAtLeastOne: true,
+        requiresAtLeastOneMessage: "R-07: kunskap om arbetsrätt och arbetsmiljörätt måste anges av minst en person",
+      },
+      {
+        key: "hasInsightEconomy",
+        label: "Kunskap om ekonomiska regelverk",
+        placeholder: "",
+        type: "checkbox",
+        optional: true,
+        requiresAtLeastOne: true,
+        requiresAtLeastOneMessage: "R-07: kunskap om ekonomiska regelverk måste anges av minst en person",
+      },
+    ],
+  },
+  "R-08": {
+    code: "R-08",
+    title: "Ägarbild och lämplighetsuppgifter",
+    description: "Ägare, ägarandel i procent (ska summera till 100%) och lämplighetsstatus.",
+    itemLabel: "ägare",
+    fields: [
+      { key: "ownerName", label: "Namn", placeholder: "Ex. Anna Andersson" },
+      { key: "ownershipPercent", label: "Ägarandel (%)", placeholder: "Ex. 50", type: "number" },
+      { key: "suitabilityStatus", label: "Lämplighetsstatus", placeholder: "Ex. Bedömd lämplig" },
+    ],
+  },
+  "R-09": {
+    code: "R-09",
+    title: "Bilagechecklista",
+    description: "Bilagenamn, kopplat krav och status (finns/saknas) per bilaga.",
+    itemLabel: "bilaga",
+    fields: [
+      { key: "attachmentName", label: "Bilagenamn", placeholder: "Ex. Verksamhetsbeskrivning v1" },
+      { key: "relatedRequirement", label: "Kopplat krav", placeholder: "Ex. R-01" },
+      { key: "status", label: "Status", placeholder: "finns / saknas" },
+    ],
+    quickPicks: [
+      {
+        label: "Lokalritningar",
+        fields: { attachmentName: "Lokalritningar", status: "saknas", standardType: "premises_drawing" },
+      },
+      {
+        label: "Hyreskontrakt eller dispositionsrätt",
+        fields: {
+          attachmentName: "Hyreskontrakt eller annan handling som visar dispositionsrätt till lokalerna",
+          status: "saknas",
+          standardType: "lease_disposal_right",
+        },
+      },
+      {
+        label: "Handling som styrker insikt",
+        fields: {
+          attachmentName:
+            "Handling som styrker insikt (t.ex. examensbevis, tjänsteintyg) för ägar-/ledningskretsen",
+          status: "saknas",
+          standardType: "insight_document",
+        },
+      },
+      {
+        label: "Handling som visar samtliga delägare",
+        fields: {
+          attachmentName: "Handling som visar samtliga delägare",
+          relatedRequirement: "R-08",
+          status: "saknas",
+          standardType: "co_owners_document",
+        },
+      },
+      {
+        label: "Bilaga per mottagning/verksamhetsställe",
+        fields: {
+          attachmentName: "Bilaga per mottagning/verksamhetsställe (om fler än en mottagning ingår i ansökan)",
+          status: "saknas",
+          standardType: "per_site_attachment",
+        },
+      },
+    ],
+  },
+  "R-10": {
+    code: "R-10",
+    title: "Ekonomiska förutsättningar",
+    description: "Förväntade intäkter, kostnader och finansiering per period, så att IVO kan bedöma att verksamheten bär sina kostnader.",
+    itemLabel: "budgetpost",
+    fields: [
+      { key: "period", label: "Period", placeholder: "Ex. År 1 eller Kvartal 1 2027" },
+      { key: "expectedRevenue", label: "Förväntade intäkter", placeholder: "Ex. 1200000", type: "number" },
+      { key: "expectedCosts", label: "Förväntade kostnader", placeholder: "Ex. 950000", type: "number" },
+      { key: "fundingSource", label: "Finansiering av ev. underskott", placeholder: "Ex. eget kapital, banklån, ägartillskott" },
+      { key: "notes", label: "Kommentarer", placeholder: "Ex. antaganden eller känslighetsanalys" },
+    ],
+  },
+};

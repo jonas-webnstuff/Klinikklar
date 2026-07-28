@@ -30,3 +30,11 @@ export function documentKindLabel(kind: DocumentKind) {
       return "Egenkontroll";
   }
 }
+
+export const FALLBACK_DOCUMENT_DRAFT_BODY_MARKER =
+  "1. Syfte\nDokumentet beskriver hur verksamheten uppfyller kravet och hur ansvaret är organiserat.";
+
+export function isPlaceholderDocumentDraftBody(body: string | null | undefined): boolean {
+  const trimmed = body?.trim() || "";
+  return trimmed.length < 40 || trimmed.includes(FALLBACK_DOCUMENT_DRAFT_BODY_MARKER);
+}

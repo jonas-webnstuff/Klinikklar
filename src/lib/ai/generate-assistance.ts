@@ -1,4 +1,15 @@
 import { z } from "zod";
+import { FALLBACK_DOCUMENT_DRAFT_BODY_MARKER } from "@/lib/document-drafts";
+
+export class AiAssistanceError extends Error {
+  reason: "missing_api_key" | "upstream_error" | "invalid_response";
+
+  constructor(reason: "missing_api_key" | "upstream_error" | "invalid_response", message: string) {
+    super(message);
+    this.name = "AiAssistanceError";
+    this.reason = reason;
+  }
+}
 
 const featureSchema = z.enum([
   "risk_analysis",
@@ -19,6 +30,7 @@ const featureSchema = z.enum([
 const inputSchema = z.object({
   plan: z.enum(["ansokan", "step1", "step2", "step3"]),
   feature: featureSchema,
+  mode: z.enum(["ai", "manual"]).default("ai"),
   clinicName: z.string().default(""),
   municipality: z.string().default(""),
   careScope: z.string().default(""),
@@ -487,8 +499,7 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
             `Dokumenttyp: ${input.currentDocumentDraft?.kind || "ansökningsunderlag"}`,
             `Kopplat krav: ${requirementLabel || "Ej angivet"}`,
             "",
-            "1. Syfte",
-            "Dokumentet beskriver hur verksamheten uppfyller kravet och hur ansvaret är organiserat.",
+            FALLBACK_DOCUMENT_DRAFT_BODY_MARKER,
             "",
             "2. Huvudinnehåll",
             "- Kort nulägesbeskrivning",
@@ -740,40 +751,101 @@ function parseJson(text: string) {
   return JSON.parse(withoutFence);
 }
 
+export type OpenAiResponsesPayload = {
+  output_text?: string;
+  status?: string;
+  incomplete_details?: { reason?: string };
+  output?: Array<{
+    type?: string;
+    status?: string;
+    content?: Array<{ type?: string; text?: string; refusal?: string }>;
+  }>;
+};
+
+// The REST response from /v1/responses does not include a top-level `output_text`
+// convenience field when called via plain fetch — that field is computed by the
+// official OpenAI SDKs, not part of the actual JSON body. Extract from `output` instead.
+export function extractOutputText(data: OpenAiResponsesPayload): string {
+  if (data.output_text?.trim()) {
+    return data.output_text.trim();
+  }
+
+  const texts = (data.output || [])
+    .filter((item) => item.type === "message")
+    .flatMap((item) => item.content || [])
+    .filter((part) => part.type === "output_text" && typeof part.text === "string")
+    .map((part) => part.text as string);
+
+  return texts.join("\n").trim();
+}
+
 export async function generateAssistance(rawInput: unknown): Promise<GenerateAssistanceOutput> {
   const input = inputSchema.parse(rawInput);
+
+  if (input.mode === "manual") {
+    return fallbackOutput(input);
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
-    return fallbackOutput(input);
+    throw new AiAssistanceError(
+      "missing_api_key",
+      "AI-tjänsten är inte konfigurerad just nu. Fortsätt utan AI-hjälp eller försök igen senare."
+    );
   }
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4.1-mini",
-      input: buildPrompt(input),
-      temperature: 0.2,
-    }),
-  });
+  let response: Response;
+
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        input: buildPrompt(input),
+        temperature: 0.2,
+      }),
+    });
+  } catch {
+    throw new AiAssistanceError(
+      "upstream_error",
+      "AI-tjänsten svarade inte just nu. Försök igen om en stund eller fortsätt utan AI-hjälp."
+    );
+  }
 
   if (!response.ok) {
-    return fallbackOutput(input);
+    throw new AiAssistanceError(
+      "upstream_error",
+      `AI-tjänsten svarade med fel (status ${response.status}). Försök igen om en stund eller fortsätt utan AI-hjälp.`
+    );
   }
 
-  const data = (await response.json()) as { output_text?: string };
+  const data = (await response.json()) as OpenAiResponsesPayload;
+  const outputText = extractOutputText(data);
 
-  if (!data.output_text?.trim()) {
-    return fallbackOutput(input);
+  if (!outputText) {
+    const reasonDetail = data.incomplete_details?.reason
+      ? ` (${data.status || "incomplete"}: ${data.incomplete_details.reason})`
+      : data.status && data.status !== "completed"
+        ? ` (status: ${data.status})`
+        : "";
+
+    throw new AiAssistanceError(
+      "invalid_response",
+      `AI-tjänsten gav ett tomt svar${reasonDetail}. Försök igen eller fortsätt utan AI-hjälp.`
+    );
   }
 
   try {
-    return outputSchema.parse(parseJson(data.output_text));
+    return outputSchema.parse(parseJson(outputText));
   } catch {
-    return fallbackOutput(input);
+    throw new AiAssistanceError(
+      "invalid_response",
+      "AI-tjänsten gav ett svar i fel format. Försök igen eller fortsätt utan AI-hjälp."
+    );
   }
 }

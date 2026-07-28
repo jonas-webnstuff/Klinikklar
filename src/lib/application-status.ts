@@ -44,6 +44,8 @@ export type ReadinessChecklist = {
   evidenceCount: number;
   completeRequirementCount: number;
   requirementCount: number;
+  completeStructuredRequirementCodeCount: number;
+  structuredRequirementCodeCount: number;
 };
 
 export function getEffectiveApplicationStatus(
@@ -397,6 +399,16 @@ export async function computeReadinessChecklist(
   const isStructuredRequirementComplete = (code: StructuredRequirementCode) =>
     !missingStructuredRequirementFields.some((message) => message.startsWith(`${code}:`));
 
+  // Computed once here, from the same isStructuredRequirementComplete used for the IVO
+  // checklist items below, and sent to the client as a plain number — the client must
+  // never re-derive this by re-parsing missingStructuredRequirementFields itself (that
+  // duplicated-prefix-matching pattern is exactly what caused the care_scope regression).
+  const structuredRequirementCodes = Object.keys(structuredRequirementDefinitions) as StructuredRequirementCode[];
+  const structuredRequirementCodeCount = structuredRequirementCodes.length;
+  const completeStructuredRequirementCodeCount = structuredRequirementCodes.filter(
+    isStructuredRequirementComplete
+  ).length;
+
   const requirementsComplete =
     requirementCount > 0 && completeRequirementCount === requirementCount;
 
@@ -515,5 +527,7 @@ export async function computeReadinessChecklist(
     evidenceCount,
     completeRequirementCount,
     requirementCount,
+    completeStructuredRequirementCodeCount,
+    structuredRequirementCodeCount,
   };
 }

@@ -79,6 +79,8 @@ describe("computeReadinessChecklist", () => {
     expect(result.ivoChecklistItems.every((item) => item.done)).toBe(true);
     expect(result.canMoveToReady).toBe(true);
     expect(result.canSubmit).toBe(true);
+    expect(result.completeStructuredRequirementCodeCount).toBe(5);
+    expect(result.structuredRequirementCodeCount).toBe(5);
   });
 
   describe("test #2: each checklist item's signal is independent of every other item's", () => {
@@ -144,6 +146,17 @@ describe("computeReadinessChecklist", () => {
     const attachmentChecklist = result.ivoChecklistItems.find((item) => item.key === "attachment_checklist");
     expect(attachmentChecklist?.done).toBe(false);
     expect(result.missingStructuredRequirementFields).toContain("R-09: lokalritningar saknas");
+  });
+
+  it("test #8: completeStructuredRequirementCodeCount tracks a single broken R-06-R-10 code, not derived client-side from message prefixes", async () => {
+    const goldenPath = buildGoldenPathTables();
+    const brokenTables = BREAKERS.ownership_suitability(goldenPath); // breaks only R-08
+
+    const supabase = createFakeSupabase(brokenTables);
+    const result = await computeReadinessChecklist(supabase, TEST_APPLICATION_ID);
+
+    expect(result.structuredRequirementCodeCount).toBe(5);
+    expect(result.completeStructuredRequirementCodeCount).toBe(4);
   });
 
   describe("test #6: a broken query throws instead of silently reporting an all-false checklist", () => {

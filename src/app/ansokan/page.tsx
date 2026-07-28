@@ -92,6 +92,8 @@ type ReadinessChecklist = {
   evidenceCount: number;
   completeRequirementCount: number;
   requirementCount: number;
+  completeStructuredRequirementCodeCount: number;
+  structuredRequirementCodeCount: number;
 };
 
 type RequirementOption = {
@@ -2174,7 +2176,7 @@ export default function AnsokanPage() {
           </a>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
+        <div id="readiness-checklist" className="mt-5 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
           <p className="text-sm font-semibold text-[color:var(--ink)]">Readiness-checklista</p>
           <ul className="mt-3 space-y-2 text-sm">
             {readinessItems.map((item) => (
@@ -3144,14 +3146,34 @@ export default function AnsokanPage() {
           Här samlar du all export på ett ställe innan manuell inskickning till IVO.
         </p>
 
+        {uiChecklist && !uiChecklist.canMoveToReady ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-900">
+              Ansökan är inte komplett än – {uiChecklist.missingIvoItems.length} punkter saknar uppgifter.
+            </p>
+            <a href="#readiness-checklist" className="mt-1 inline-block text-sm font-semibold text-amber-900 underline">
+              Granska readiness-checklistan innan du skickar in
+            </a>
+          </div>
+        ) : null}
+
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Komplett ansökningspaket</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Komplett ansökningspaket</p>
+              {uiChecklist && !uiChecklist.canMoveToReady ? (
+                <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                  Ofullständig
+                </span>
+              ) : null}
+            </div>
             <p className="mt-1 text-xs text-[color:var(--muted)]">
               Innehåller godkända dokumentutkast samt kopplade underlag och evidens.
             </p>
             <p className="mt-2 text-xs text-[color:var(--muted)]">
-              Godkända dokument: {approvedDocumentDraftCount}. Kopplade underlag: {evidence.length}.
+              Godkända dokument: {approvedDocumentDraftCount}. Kopplade underlag: {evidence.length}. Strukturerade
+              krav (R-06–R-10) klara: {uiChecklist?.completeStructuredRequirementCodeCount ?? 0}/
+              {uiChecklist?.structuredRequirementCodeCount ?? 0}.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button

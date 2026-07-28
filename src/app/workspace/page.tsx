@@ -1691,31 +1691,31 @@ function WorkspacePageContent() {
   const overviewStatusCards = useMemo(() => {
     const ledningssystemStatus =
       ledningssystemMissingFields.length === 0
-        ? { tone: "ok", summary: "Alla grundfält ifyllda" }
+        ? { tone: "ok" as const, summary: "Alla grundfält ifyllda" }
         : ledningssystemMissingFields.length >= 3
-          ? { tone: "alert", summary: `${ledningssystemMissingFields.length} punkter saknas` }
-          : { tone: "warn", summary: `${ledningssystemMissingFields.length} punkter saknas` };
+          ? { tone: "alert" as const, summary: `${ledningssystemMissingFields.length} punkter saknas` }
+          : { tone: "warn" as const, summary: `${ledningssystemMissingFields.length} punkter saknas` };
 
     const riskStatus =
       riskSummary.highPriority > 0
-        ? { tone: "alert", summary: `Hög prioritet: ${riskSummary.highPriority}` }
+        ? { tone: "alert" as const, summary: `Hög prioritet: ${riskSummary.highPriority}` }
         : riskSummary.open > 0
-          ? { tone: "warn", summary: `Öppna risker: ${riskSummary.open}` }
-          : { tone: "ok", summary: "Allt OK" };
+          ? { tone: "warn" as const, summary: `Öppna risker: ${riskSummary.open}` }
+          : { tone: "ok" as const, summary: "Allt OK" };
 
     const controlStatus =
       controlSummary.overdue > 0
-        ? { tone: "alert", summary: `Försenade kontroller: ${controlSummary.overdue}` }
+        ? { tone: "alert" as const, summary: `Försenade kontroller: ${controlSummary.overdue}` }
         : controlSummary.pending > 0
-          ? { tone: "warn", summary: `Planerade kontroller: ${controlSummary.pending}` }
-          : { tone: "ok", summary: "Allt OK" };
+          ? { tone: "warn" as const, summary: `Planerade kontroller: ${controlSummary.pending}` }
+          : { tone: "ok" as const, summary: "Allt OK" };
 
     const incidentStatus =
       incidentSummary.criticalOrHigh > 0
-        ? { tone: "alert", summary: `Hög/kritisk: ${incidentSummary.criticalOrHigh}` }
+        ? { tone: "alert" as const, summary: `Hög/kritisk: ${incidentSummary.criticalOrHigh}` }
         : incidentSummary.open > 0
-          ? { tone: "warn", summary: `Öppna avvikelser: ${incidentSummary.open}` }
-          : { tone: "ok", summary: "Allt OK" };
+          ? { tone: "warn" as const, summary: `Öppna avvikelser: ${incidentSummary.open}` }
+          : { tone: "ok" as const, summary: "Allt OK" };
 
     return {
       ledningssystem: ledningssystemStatus,

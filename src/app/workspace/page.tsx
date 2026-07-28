@@ -1217,24 +1217,23 @@ function WorkspacePageContent() {
 
     const questionnaireRatio = filledRatio(questionnaireItems);
     const managementRatio = filledRatio(managementSystemRequirementItems);
-    const responsibleRatio = filledRatio(responsiblePersonRequirementItems);
-    const ownershipRatio = filledRatio(ownershipRequirementItems);
     const facilityRatio = filledRatio(facilityRequirementItems);
-    const attachmentRatio = filledRatio(attachmentChecklistRequirementItems);
     const routineRatio =
       routineRequirementPoints.length > 0
         ? completedRoutineCount / routineRequirementPoints.length
         : 1;
     const requirementRatio = totalRequirements > 0 ? completeRequirements / totalRequirements : 1;
 
+    // responsibleRatio/ownershipRatio/attachmentRatio (R-07/R-08/R-09's old free-text fields)
+    // are deliberately excluded — they no longer affect real IVO readiness (see the
+    // disclaimers on those sections), so including them here would let this number look
+    // healthier than the application actually is. Removing them re-normalizes the average
+    // automatically; no separate reweighting needed.
     const sectionRatios = [
       profileRatio,
       questionnaireRatio,
       managementRatio,
-      responsibleRatio,
-      ownershipRatio,
       facilityRatio,
-      attachmentRatio,
       routineRatio,
       requirementRatio,
     ];
@@ -4988,9 +4987,9 @@ function WorkspacePageContent() {
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Efterlevnad</p>
+            <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">Ifyllnadsgrad i workspace</p>
             <p className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{overviewCompliancePercent}%</p>
-            <p className="mt-1 text-xs text-[color:var(--muted)]">Samlad ifyllnadsgrad</p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">Speglar inte automatiskt IVO-ansökans readiness-status</p>
           </div>
         </div>
 
@@ -5757,9 +5756,11 @@ function WorkspacePageContent() {
           <p className="mt-2 text-sm text-[color:var(--muted)]">
             Dokumentera de personer och roller som ska stå för ledning, medicinskt ansvar och kvalitetsarbete i ansökningsunderlaget.
           </p>
-          <p className="mt-2 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs text-[color:var(--muted)]">
-            Ansvariga personer, ägarbild, bilagechecklista och bemanning hanteras numera som strukturerade krav (R-06–R-09) i
-            ansökningsflödet. Fälten här påverkar inte längre ansökans readiness-status.
+          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Detta fält räknas INTE längre för er IVO-ansökan. Ansvariga personer hanteras numera som ett eget,
+            strukturerat krav (R-07) i Ansökan-flödet – med stöd för flera personer, legitimationsnummer och korrekt
+            koppling till ansökans readiness-status. Det här fältet är kvar för historisk referens men uppdaterar
+            inte ansökningsunderlaget.
           </p>
 
           {canUseAiSupport ? (
@@ -5838,9 +5839,6 @@ function WorkspacePageContent() {
             >
               {isSaving ? "Sparar..." : "Spara ansvariga personer"}
             </button>
-            <p className="text-sm text-[color:var(--muted)]">
-              Dessa fält används nu i readiness för IVO-ansökan.
-            </p>
           </div>
         </div>
 
@@ -5853,6 +5851,12 @@ function WorkspacePageContent() {
           </h3>
           <p className="mt-2 text-sm text-[color:var(--muted)]">
             Samla den grundläggande information som beskriver juridisk huvudman, företrädare och varför ledning och ägare bedöms lämpliga.
+          </p>
+          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Detta fält räknas INTE längre för er IVO-ansökan. Ägarbild hanteras numera som ett eget, strukturerat
+            krav (R-08) i Ansökan-flödet – med stöd för flera ägare, ägarandelar i procent och korrekt koppling till
+            ansökans readiness-status. Det här fältet är kvar för historisk referens men uppdaterar inte
+            ansökningsunderlaget.
           </p>
 
           {canUseAiSupport ? (
@@ -5915,9 +5919,6 @@ function WorkspacePageContent() {
             >
               {isSaving ? "Sparar..." : "Spara ägaruppgifter"}
             </button>
-            <p className="text-sm text-[color:var(--muted)]">
-              Readiness för IVO kräver nu att dessa uppgifter är ifyllda.
-            </p>
           </div>
         </div>
 
@@ -5990,6 +5991,12 @@ function WorkspacePageContent() {
           <p className="mt-2 text-sm text-[color:var(--muted)]">
             Ange vilka dokument eller versioner som ska skickas med ansökan så att paketet går att granska och exportera tydligt.
           </p>
+          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Detta fält räknas INTE längre för er IVO-ansökan. Bilagechecklistan hanteras numera som ett eget,
+            strukturerat krav (R-09) i Ansökan-flödet – med stöd för uppladdade filer och korrekt koppling till
+            ansökans readiness-status. Det här fältet är kvar för historisk referens men uppdaterar inte
+            ansökningsunderlaget.
+          </p>
 
           {canUseAiSupport ? (
             <button
@@ -6033,9 +6040,6 @@ function WorkspacePageContent() {
             >
               {isSaving ? "Sparar..." : "Spara bilagechecklista"}
             </button>
-            <p className="text-sm text-[color:var(--muted)]">
-              Detta blir produktens första explicita checklista för ansökningsbilagor.
-            </p>
           </div>
         </div>
 

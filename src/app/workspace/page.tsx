@@ -5751,7 +5751,7 @@ function WorkspacePageContent() {
             Ansvar och legitimation
           </p>
           <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">
-            Ansvariga personer i ansökan
+            Ansvariga personer (historisk referens)
           </h3>
           <p className="mt-2 text-sm text-[color:var(--muted)]">
             Dokumentera de personer och roller som ska stå för ledning, medicinskt ansvar och kvalitetsarbete i ansökningsunderlaget.
@@ -5847,7 +5847,7 @@ function WorkspacePageContent() {
             Ägarbild och lämplighet
           </p>
           <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">
-            Huvudman och företrädare i ansökan
+            Huvudman och företrädare (historisk referens)
           </h3>
           <p className="mt-2 text-sm text-[color:var(--muted)]">
             Samla den grundläggande information som beskriver juridisk huvudman, företrädare och varför ledning och ägare bedöms lämpliga.
@@ -5986,10 +5986,10 @@ function WorkspacePageContent() {
             Bilagechecklista
           </p>
           <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">
-            Referenser till ansökans underlag
+            Bilagereferenser (historisk referens)
           </h3>
           <p className="mt-2 text-sm text-[color:var(--muted)]">
-            Ange vilka dokument eller versioner som ska skickas med ansökan så att paketet går att granska och exportera tydligt.
+            Tidigare användes detta fält för att lista vilka dokument eller versioner som skulle skickas med ansökan.
           </p>
           <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             Detta fält räknas INTE längre för er IVO-ansökan. Bilagechecklistan hanteras numera som ett eget,

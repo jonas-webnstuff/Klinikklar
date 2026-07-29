@@ -6215,169 +6215,20 @@ function WorkspacePageContent() {
             </p>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-[color:var(--ink)]">Exportera ansökningspaket</p>
-                <p className="mt-1 text-sm text-[color:var(--muted)]">
-                  Skapa en samlad export med grunduppgifter, ansvariga personer, ägarbild, bilagechecklista och dokumentstatus.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void exportApplicationPackage("docx")}
-                  disabled={isApplicationPackageExporting}
-                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                >
-                  {isApplicationPackageExporting ? "Exporterar..." : "Exportera ansökningspaket Word"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void exportApplicationPackage("pdf")}
-                  disabled={isApplicationPackageExporting}
-                  className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                >
-                  {isApplicationPackageExporting ? "Exporterar..." : "Exportera ansökningspaket PDF"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            {complianceRequirements.map((requirement) => {
-              const kind = requirement.documentKind;
-              const state = generated[kind];
-              const isLocked = !hasPlanAccess(requirement.availableFrom);
-              const packageStatus = resolveDocumentPackageStatus(kind);
-              return (
-                <article
-                  key={requirement.code}
-                  className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-[color:var(--muted)]">
-                        {requirement.code}
-                      </p>
-                      <h3 className="text-base font-semibold text-[color:var(--ink)]">
-                        {requirement.title}
-                      </h3>
-                      {isLocked ? (
-                        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">
-                          Låst - ingår från {planLabels[requirement.availableFrom]}
-                        </p>
-                      ) : null}
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <span
-                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                            packageStatus.tone === "ready"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : packageStatus.tone === "pending"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
-                          {packageStatus.shortLabel}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => generateDocument(kind)}
-                      disabled={!canGenerate || state?.isLoading || isLocked || isApplicationSubmitted}
-                      className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-                    >
-                      {state?.isLoading ? "Genererar..." : "Generera"}
-                    </button>
-                  </div>
-
-                  {state?.error ? (
-                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                      <p>{state.error}</p>
-                      <button
-                        type="button"
-                        onClick={() => generateDocument(kind, { manual: true })}
-                        disabled={!canGenerate || isLocked || isApplicationSubmitted}
-                        className="mt-2 rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 disabled:cursor-not-allowed disabled:text-slate-400"
-                      >
-                        Fortsätt utan AI-hjälp (fyll i mall)
-                      </button>
-                    </div>
-                  ) : null}
-
-                  <textarea
-                    value={state?.content || ""}
-                    onChange={(event) =>
-                      setGenerated((prev) => ({
-                        ...prev,
-                        [kind]: {
-                          content: event.target.value,
-                          approved: prev[kind]?.approved || false,
-                          isLoading: false,
-                        },
-                      }))
-                    }
-                    disabled={isLocked || isApplicationSubmitted}
-                    className="mt-3 w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
-
-                  {isApplicationSubmitted ? (
-                    <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                      Ansökan är markerad som klar att skicka och låst för ändringar.
-                    </p>
-                  ) : (
-                    <label className="mt-3 flex items-center gap-2 text-sm text-[color:var(--ink)]">
-                      <input
-                        type="checkbox"
-                        checked={state?.approved || false}
-                        disabled={isLocked}
-                        onChange={(event) =>
-                          setGenerated((prev) => ({
-                            ...prev,
-                            [kind]: {
-                              content: prev[kind]?.content || "",
-                              approved: event.target.checked,
-                              isLoading: false,
-                            },
-                          }))
-                        }
-                      />
-                      Jag har granskat och verifierat innehållet
-                    </label>
-                  )}
-
-                  <p className="mt-3 text-xs text-[color:var(--muted)]">{packageStatus.detailLabel}</p>
-
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => exportDocument(kind, "docx")}
-                      disabled={isLocked || !state?.approved || !state?.content}
-                      className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                    >
-                      Exportera Word
-                    </button>
-                    <button
-                      onClick={() => exportDocument(kind, "pdf")}
-                      disabled={isLocked || !state?.approved || !state?.content}
-                      className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-                    >
-                      Exportera PDF
-                    </button>
-                  </div>
-
-                  {state?.approved && !isApplicationApproved && !isApplicationSubmitted ? (
-                    <button
-                      type="button"
-                      onClick={() => updateApplicationStatus("ready_to_submit")}
-                      disabled={!readiness.canMoveToReady}
-                      className="mt-3 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
-                    >
-                      Förbered inskick
-                    </button>
-                  ) : null}
-                </article>
-              );
-            })}
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-900">
+              Det kompletta ansökningspaketet förbereds och exporteras numera i Ansökan-flödet.
+            </p>
+            <p className="mt-1 text-sm text-amber-900">
+              Dokumentgenerering, granskning och export av ansökningsunderlaget (inklusive bilagor) hanteras där, med
+              korrekt koppling till ansökans readiness-status.
+            </p>
+            <a
+              href="/ansokan"
+              className="mt-3 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)]"
+            >
+              Öppna ansökan →
+            </a>
           </div>
         </section>
       ) : null}

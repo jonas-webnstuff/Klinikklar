@@ -129,6 +129,13 @@ type RoutineEntry = {
   updatedAt: string;
 };
 
+type RoutineFormState = {
+  area: string;
+  changeLog: string;
+  owner: string;
+  nextReview: string;
+};
+
 type RegulationWatchEntry = {
   id: string;
   title: string;
@@ -328,6 +335,13 @@ const initialRiskForm: RiskFormState = {
   dueDate: "",
 };
 
+const initialRoutineForm: RoutineFormState = {
+  area: "",
+  changeLog: "",
+  owner: "",
+  nextReview: "",
+};
+
 const initialControlForm: ControlFormState = {
   title: "",
   description: "",
@@ -421,6 +435,37 @@ const controlStatusLabels: Record<ControlTaskStatus, string> = {
   overdue: "Försenad",
   skipped: "Hoppad över",
 };
+
+// Derives the status actually shown/counted: control_tasks.status only flips to "overdue"
+// when someone clicks the manual button, so a control past its nextDueDate that nobody has
+// touched otherwise stays "pending" forever. This is display-only — it never writes back to
+// the database, so manually resetting a still-overdue control to "pending" just shows
+// "Försenad" again immediately rather than silently un-overdue something that's still late.
+function getEffectiveControlStatus(control: ControlItem, todayIso: string): ControlTaskStatus {
+  if (control.status === "done" || control.status === "skipped") {
+    return control.status;
+  }
+
+  if (control.nextDueDate && control.nextDueDate < todayIso) {
+    return "overdue";
+  }
+
+  return control.status;
+}
+
+// Same tone convention as riskCardClass: emerald for done, amber for overdue — status
+// badges elsewhere in this file (risks) already color-code this way, controls didn't.
+function controlStatusBadgeClass(status: ControlTaskStatus) {
+  if (status === "done") {
+    return "border-emerald-200 bg-emerald-100 text-emerald-800";
+  }
+
+  if (status === "overdue") {
+    return "border-amber-200 bg-amber-100 text-amber-800";
+  }
+
+  return "border-[color:var(--line)] bg-white text-[color:var(--ink)]";
+}
 
 const incidentSeverityLabels: Record<IncidentSeverity, string> = {
   low: "Låg",
@@ -655,6 +700,10 @@ function WorkspacePageContent() {
   const [supportMessage, setSupportMessage] = useState("");
   const [isSupportSubmitting, setIsSupportSubmitting] = useState(false);
   const [isRevisionExporting, setIsRevisionExporting] = useState(false);
+  const [routines, setRoutines] = useState<RoutineEntry[]>([]);
+  const [routineForm, setRoutineForm] = useState<RoutineFormState>(initialRoutineForm);
+  const [isRoutinesLoading, setIsRoutinesLoading] = useState(false);
+  const [isRoutineSubmitting, setIsRoutineSubmitting] = useState(false);
   const [routineMessage, setRoutineMessage] = useState("");
   const [aiAssistLoading, setAiAssistLoading] = useState<Record<AiAssistFeature, boolean>>({
     risk_analysis: false,
@@ -892,61 +941,6 @@ function WorkspacePageContent() {
   const canUseControlModule = hasPlanAccess("step1");
   const canUseAiSupport = activePlan === "step1" || activePlan === "step3";
   const canUsePremiumAi = hasPlanAccess("step3");
-  const routineEntries = useMemo<RoutineEntry[]>(() => {
-    const raw = answers.routine_updates_entries?.answer;
-
-    if (!raw) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-
-      return parsed
-        .map((item) => {
-          if (!item || typeof item !== "object") {
-            return null;
-          }
-
-          const candidate = item as Partial<RoutineEntry>;
-
-          if (
-            typeof candidate.requirementKey !== "string" ||
-            typeof candidate.requirementLabel !== "string" ||
-            typeof candidate.area !== "string" ||
-            typeof candidate.changeLog !== "string" ||
-            typeof candidate.owner !== "string" ||
-            typeof candidate.nextReview !== "string"
-          ) {
-            return null;
-          }
-
-          return {
-            id:
-              typeof candidate.id === "string" && candidate.id
-                ? candidate.id
-                : `${candidate.requirementKey}-${Date.now()}`,
-            requirementKey: candidate.requirementKey,
-            requirementLabel: candidate.requirementLabel,
-            area: candidate.area,
-            changeLog: candidate.changeLog,
-            owner: candidate.owner,
-            nextReview: candidate.nextReview,
-            updatedAt:
-              typeof candidate.updatedAt === "string" && candidate.updatedAt
-                ? candidate.updatedAt
-                : new Date().toISOString(),
-          };
-        })
-        .filter((entry): entry is RoutineEntry => Boolean(entry));
-    } catch {
-      return [];
-    }
-  }, [answers]);
   const regulationWatchEntries = useMemo<RegulationWatchEntry[]>(() => {
     const raw = answers.regulation_watch_entries?.answer;
 
@@ -1141,9 +1135,9 @@ function WorkspacePageContent() {
   const routineCoverageMissingPoints = useMemo(
     () =>
       routineRequirementPoints
-        .filter((point) => !routineEntries.some((entry) => entry.requirementKey === point.key))
+        .filter((point) => !routines.some((entry) => entry.requirementKey === point.key))
         .map((point) => point.label),
-    [routineEntries]
+    [routines]
   );
   const hasRoutineCoverage = routineCoverageMissingPoints.length === 0;
   const activeRoutineRequirement = useMemo(
@@ -1153,8 +1147,8 @@ function WorkspacePageContent() {
     [activeRoutineRequirementKey]
   );
   const selectedRoutineEntry = useMemo(
-    () => routineEntries.find((entry) => entry.requirementKey === activeRoutineRequirementKey) || null,
-    [activeRoutineRequirementKey, routineEntries]
+    () => routines.find((entry) => entry.requirementKey === activeRoutineRequirementKey) || null,
+    [activeRoutineRequirementKey, routines]
   );
   const ledningssystemMissingFields = useMemo(
     () =>
@@ -1170,14 +1164,14 @@ function WorkspacePageContent() {
   const nextMissingRoutinePoint = useMemo(
     () =>
       routineRequirementPoints.find(
-        (point) => !routineEntries.some((entry) => entry.requirementKey === point.key)
+        (point) => !routines.some((entry) => entry.requirementKey === point.key)
       ) || null,
-    [routineEntries]
+    [routines]
   );
   const completedRoutineCount = useMemo(() => {
-    const uniqueKeys = new Set(routineEntries.map((entry) => entry.requirementKey));
+    const uniqueKeys = new Set(routines.map((entry) => entry.requirementKey));
     return uniqueKeys.size;
-  }, [routineEntries]);
+  }, [routines]);
   const overviewCompliancePercent = useMemo(() => {
     const profileKeys: Array<keyof ProfileState> = [
       "clinicName",
@@ -1233,9 +1227,15 @@ function WorkspacePageContent() {
     completeRequirements,
   ]);
   const hasLedningssystemCoverage = ledningssystemMissingFields.length === 0;
+  const todayIso = new Date().toISOString().slice(0, 10);
   const isOverview = activeView === "overview";
   const isApplicationView = activeView === "dokument";
   const showSection = (view: Exclude<WorkspaceView, "overview">) => activeView === view;
+  // The workspace Rutiner tab's 6-point self-assessment used to also gate this (labeled
+  // "Rutiner (R-04)"), but that reused the R-04 code that already means something else
+  // (the real Avvikelsehantering AI document draft, see requirements.ts) and duplicated a
+  // check computeReadinessChecklist already enforces via readiness.canSubmit — removed so
+  // this matches the same canSubmit gate ansokan/page.tsx and the server use.
   const submissionBlockers = useMemo(() => {
     const blockers: string[] = [];
 
@@ -1243,18 +1243,8 @@ function WorkspacePageContent() {
       blockers.push(`Ledningssystem: ${ledningssystemMissingFields.join(", ")}`);
     }
 
-    if (canUseIncidentModule && !hasRoutineCoverage) {
-      blockers.push(`Rutiner (R-04): ${routineCoverageMissingPoints.join(", ")}`);
-    }
-
     return blockers;
-  }, [
-    hasLedningssystemCoverage,
-    ledningssystemMissingFields,
-    canUseIncidentModule,
-    hasRoutineCoverage,
-    routineCoverageMissingPoints,
-  ]);
+  }, [hasLedningssystemCoverage, ledningssystemMissingFields]);
   const canSubmitApplication = readiness.canSubmit && submissionBlockers.length === 0;
   const isApplicationSubmitted = applicationStatus === "submitted";
 
@@ -1320,19 +1310,21 @@ function WorkspacePageContent() {
     };
 
     for (const control of controls) {
-      if (control.status === "pending") {
+      const effectiveStatus = getEffectiveControlStatus(control, todayIso);
+
+      if (effectiveStatus === "pending") {
         summary.pending += 1;
-      } else if (control.status === "done") {
+      } else if (effectiveStatus === "done") {
         summary.done += 1;
-      } else if (control.status === "overdue") {
+      } else if (effectiveStatus === "overdue") {
         summary.overdue += 1;
-      } else if (control.status === "skipped") {
+      } else if (effectiveStatus === "skipped") {
         summary.skipped += 1;
       }
     }
 
     return summary;
-  }, [controls]);
+  }, [controls, todayIso]);
 
   const supportSlaSummary = useMemo(() => {
     const now = Date.now();
@@ -1511,15 +1503,13 @@ function WorkspacePageContent() {
   }, [premiumKpiEvents, regulationWatchEntries, supportTickets]);
 
   const managementSystemSummary = useMemo(() => {
-    const latestRoutineEntry = routineEntries
+    const latestRoutineEntry = routines
       .slice()
       .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
-    const routineArea =
-      latestRoutineEntry?.area || answers.routine_updates_area?.answer?.trim() || "Ej angivet";
-    const routineOwner =
-      latestRoutineEntry?.owner || answers.routine_updates_owner?.answer?.trim() || "Ej angivet";
+    const routineArea = latestRoutineEntry?.area || routineForm.area.trim() || "Ej angivet";
+    const routineOwner = latestRoutineEntry?.owner || routineForm.owner.trim() || "Ej angivet";
     const routineNextReview =
-      latestRoutineEntry?.nextReview || answers.routine_updates_next_review?.answer || "Ej satt";
+      latestRoutineEntry?.nextReview || routineForm.nextReview.trim() || "Ej satt";
 
     const managementOwner =
       answers.management_system_owner?.answer?.trim() || profile.clinicName.trim() || "Ej angivet";
@@ -1564,7 +1554,8 @@ function WorkspacePageContent() {
     risks,
     incidents,
     controls,
-    routineEntries,
+    routines,
+    routineForm,
     riskSummary,
     incidentSummary,
     controlSummary,
@@ -2100,74 +2091,60 @@ function WorkspacePageContent() {
     setWorkspaceMessage(`${cadenceLabel} uppföljning registrerad i loggen.`);
   }
 
-  const upsertRoutineEntry = useCallback(
-    (entry: Omit<RoutineEntry, "id" | "updatedAt">) => {
-      const updatedEntry: RoutineEntry = {
-        ...entry,
-        id: `${entry.requirementKey}-${Date.now()}`,
-        updatedAt: new Date().toISOString(),
-      };
+  const loadRoutines = useCallback(async () => {
+    setIsRoutinesLoading(true);
 
-      setAnswers((prev) => {
-        const previousRaw = prev.routine_updates_entries?.answer;
-        let previousEntries: RoutineEntry[] = [];
+    const response = await fetch("/api/routines/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
 
-        if (previousRaw) {
-          try {
-            const parsed = JSON.parse(previousRaw) as RoutineEntry[];
-            if (Array.isArray(parsed)) {
-              previousEntries = parsed;
-            }
-          } catch {
-            previousEntries = [];
-          }
-        }
+    setIsRoutinesLoading(false);
 
-        const nextEntries = [
-          ...previousEntries.filter((item) => item.requirementKey !== entry.requirementKey),
-          updatedEntry,
-        ];
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setRoutineMessage(data.error || "Kunde inte hämta rutiner.");
+      return;
+    }
 
-        return {
-          ...prev,
-          routine_updates_entries: {
-            answer: JSON.stringify(nextEntries),
-            followUpAnswer: prev.routine_updates_entries?.followUpAnswer || "",
-          },
-          routine_updates_area: {
-            answer: entry.area,
-            followUpAnswer: prev.routine_updates_area?.followUpAnswer || "",
-          },
-          routine_updates_change_log: {
-            answer: entry.changeLog,
-            followUpAnswer: prev.routine_updates_change_log?.followUpAnswer || "",
-          },
-          routine_updates_owner: {
-            answer: entry.owner,
-            followUpAnswer: prev.routine_updates_owner?.followUpAnswer || "",
-          },
-          routine_updates_next_review: {
-            answer: entry.nextReview,
-            followUpAnswer: prev.routine_updates_next_review?.followUpAnswer || "",
-          },
-        };
-      });
-    },
-    []
-  );
+    const data = (await response.json()) as { routines: RoutineEntry[] };
+    setRoutines(data.routines || []);
+  }, []);
 
-  function saveRoutineForPoint() {
-    const area = getAnswerValue("routine_updates_area").trim();
-    const changeLog = getAnswerValue("routine_updates_change_log").trim();
-    const owner = getAnswerValue("routine_updates_owner").trim();
-    const nextReview = getAnswerValue("routine_updates_next_review").trim();
+  async function saveRoutineEntry(entry: Omit<RoutineEntry, "id" | "updatedAt">) {
+    setIsRoutineSubmitting(true);
+
+    const response = await fetch("/api/routines/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entry),
+    });
+
+    setIsRoutineSubmitting(false);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setRoutineMessage(data.error || "Kunde inte spara rutin.");
+      return false;
+    }
+
+    await loadRoutines();
+    return true;
+  }
+
+  async function saveRoutineForPoint() {
+    const area = routineForm.area.trim();
+    const changeLog = routineForm.changeLog.trim();
+    const owner = routineForm.owner.trim();
+    const nextReview = routineForm.nextReview.trim();
 
     if (!area || !changeLog || !owner || !nextReview) {
       setRoutineMessage("Fyll i område, ändring, ansvarig och nästa uppföljning innan du sparar rutin.");
       return;
     }
 
-    upsertRoutineEntry({
+    const saved = await saveRoutineEntry({
       requirementKey: activeRoutineRequirement.key,
       requirementLabel: activeRoutineRequirement.label,
       area,
@@ -2176,50 +2153,42 @@ function WorkspacePageContent() {
       nextReview,
     });
 
-    setRoutineMessage(`Rutin sparad för punkt: ${activeRoutineRequirement.label}.`);
+    if (saved) {
+      setRoutineMessage(`Rutin sparad för punkt: ${activeRoutineRequirement.label}.`);
+    }
   }
 
   function editRoutineForPoint(requirementKey: string) {
-    const entry = routineEntries.find((item) => item.requirementKey === requirementKey);
+    const entry = routines.find((item) => item.requirementKey === requirementKey);
 
     if (!entry) {
       return;
     }
 
     setActiveRoutineRequirementKey(entry.requirementKey);
-    setAnswerValue("routine_updates_area", entry.area);
-    setAnswerValue("routine_updates_change_log", entry.changeLog);
-    setAnswerValue("routine_updates_owner", entry.owner);
-    setAnswerValue("routine_updates_next_review", entry.nextReview);
+    setRoutineForm({
+      area: entry.area,
+      changeLog: entry.changeLog,
+      owner: entry.owner,
+      nextReview: entry.nextReview,
+    });
     setWorkspaceMessage(`Rutin laddad för redigering: ${entry.requirementLabel}.`);
   }
 
-  function removeRoutineForPoint(requirementKey: string) {
-    setAnswers((prev) => {
-      const previousRaw = prev.routine_updates_entries?.answer;
-      let previousEntries: RoutineEntry[] = [];
-
-      if (previousRaw) {
-        try {
-          const parsed = JSON.parse(previousRaw) as RoutineEntry[];
-          if (Array.isArray(parsed)) {
-            previousEntries = parsed;
-          }
-        } catch {
-          previousEntries = [];
-        }
-      }
-
-      const nextEntries = previousEntries.filter((item) => item.requirementKey !== requirementKey);
-
-      return {
-        ...prev,
-        routine_updates_entries: {
-          answer: JSON.stringify(nextEntries),
-          followUpAnswer: prev.routine_updates_entries?.followUpAnswer || "",
-        },
-      };
+  async function removeRoutineForPoint(requirementKey: string) {
+    const response = await fetch("/api/routines/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requirementKey }),
     });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setWorkspaceMessage(data.error || "Kunde inte ta bort rutin.");
+      return;
+    }
+
+    await loadRoutines();
     setWorkspaceMessage("Rutin borttagen för vald punkt.");
   }
 
@@ -2238,7 +2207,7 @@ function WorkspacePageContent() {
   }
 
   function focusRoutinePoint(requirementKey: string) {
-    const entry = routineEntries.find((item) => item.requirementKey === requirementKey);
+    const entry = routines.find((item) => item.requirementKey === requirementKey);
 
     if (entry) {
       editRoutineForPoint(requirementKey);
@@ -2246,7 +2215,7 @@ function WorkspacePageContent() {
       const point = routineRequirementPoints.find((item) => item.key === requirementKey);
       if (point) {
         setActiveRoutineRequirementKey(point.key);
-        setAnswerValue("routine_updates_area", point.label);
+        setRoutineForm({ ...initialRoutineForm, area: point.label });
       }
     }
 
@@ -2318,10 +2287,10 @@ function WorkspacePageContent() {
         },
         currentRoutine: {
           requirementPoint: activeRoutineRequirement.label,
-          area: getAnswerValue("routine_updates_area"),
-          changeLog: getAnswerValue("routine_updates_change_log"),
-          owner: getAnswerValue("routine_updates_owner"),
-          nextReview: getAnswerValue("routine_updates_next_review"),
+          area: routineForm.area,
+          changeLog: routineForm.changeLog,
+          owner: routineForm.owner,
+          nextReview: routineForm.nextReview,
         },
         currentRegulationWatch: {
           title: regulationWatchForm.title,
@@ -2392,7 +2361,9 @@ function WorkspacePageContent() {
     const owner = suggestion.owner?.trim() || "Kvalitetsansvarig";
     const nextReview = suggestion.nextReview?.trim() || new Date().toISOString().slice(0, 10);
 
-    upsertRoutineEntry({
+    setRoutineForm({ area, changeLog, owner, nextReview });
+
+    const saved = await saveRoutineEntry({
       requirementKey: targetPoint.key,
       requirementLabel: targetPoint.label,
       area,
@@ -2401,7 +2372,9 @@ function WorkspacePageContent() {
       nextReview,
     });
 
-    setWorkspaceMessage(`AI-rutin skapad och sparad för punkt: ${targetPoint.label}.`);
+    if (saved) {
+      setWorkspaceMessage(`AI-rutin skapad och sparad för punkt: ${targetPoint.label}.`);
+    }
   }
 
   async function suggestRoutineForPoint(pointKey: string, options?: { manual?: boolean }) {
@@ -2412,7 +2385,7 @@ function WorkspacePageContent() {
     }
 
     setActiveRoutineRequirementKey(pointKey);
-    setAnswerValue("routine_updates_area", point.label);
+    setRoutineForm((prev) => ({ ...prev, area: point.label }));
     await suggestRoutineUpdate(point, options);
   }
 
@@ -2422,7 +2395,7 @@ function WorkspacePageContent() {
     }
 
     for (const point of routineRequirementPoints) {
-      const hasRoutine = routineEntries.some((entry) => entry.requirementKey === point.key);
+      const hasRoutine = routines.some((entry) => entry.requirementKey === point.key);
 
       if (hasRoutine) {
         continue;
@@ -2454,11 +2427,11 @@ function WorkspacePageContent() {
 
     const fallbackPurpose =
       "Ledningssystemet ska säkerställa lagkrav, kvalitet och patientsäkerhet genom systematisk uppföljning och tydlig ansvarsfördelning.";
-    const routineArea = answers.routine_updates_area?.answer?.trim() || "kärnprocesser";
+    const routineArea = routineForm.area.trim() || "kärnprocesser";
     const fallbackScope = `Omfattar ${routineArea.toLowerCase()}, avvikelsehantering, riskanalys, dokumentstyrning och egenkontroller.`;
     const fallbackProcessOwners = [
       `Ledningssystem: ${suggestion.owner || getAnswerValue("management_system_owner") || "Verksamhetschef"}`,
-      `Rutiner: ${getAnswerValue("routine_updates_owner") || "Kvalitetsansvarig"}`,
+      `Rutiner: ${routineForm.owner.trim() || "Kvalitetsansvarig"}`,
     ].join("\n");
 
     const fallbackNextReview = (() => {
@@ -2468,7 +2441,7 @@ function WorkspacePageContent() {
     })();
 
     const nextReview =
-      getAnswerValue("routine_updates_next_review") ||
+      routineForm.nextReview.trim() ||
       getAnswerValue("management_system_next_review") ||
       fallbackNextReview;
 
@@ -2497,7 +2470,7 @@ function WorkspacePageContent() {
   function insertManagementSystemSummaryDraft() {
     const today = new Date().toISOString().slice(0, 10);
     const routineArea = managementSystemSummary.routines.area;
-    const routineChangeLog = answers.routine_updates_change_log?.answer?.trim() || "Ej angivet";
+    const routineChangeLog = routineForm.changeLog.trim() || "Ej angivet";
 
     const processes = [
       `Rutiner (${routineArea}) med ansvarig ${managementSystemSummary.responsibility.routineOwner}.`,
@@ -3142,6 +3115,14 @@ function WorkspacePageContent() {
       return;
     }
 
+    loadRoutines();
+  }, [hasHydratedWorkspace, loadRoutines]);
+
+  useEffect(() => {
+    if (!hasHydratedWorkspace) {
+      return;
+    }
+
     void loadApplicationReadiness();
   }, [hasHydratedWorkspace]);
 
@@ -3216,6 +3197,7 @@ function WorkspacePageContent() {
     void loadIncidents();
     void loadRisks();
     void loadControls();
+    void loadRoutines();
   }
 
   async function saveApplicationSection(successMessage: string) {
@@ -3378,6 +3360,7 @@ function WorkspacePageContent() {
     void loadIncidents();
     void loadRisks();
     void loadControls();
+    void loadRoutines();
   }
 
   async function exportRevisionPackage(format: "docx" | "pdf") {
@@ -3417,11 +3400,11 @@ function WorkspacePageContent() {
         );
 
       const overdueControls = controls
-        .filter((control) => control.status === "overdue")
+        .filter((control) => getEffectiveControlStatus(control, dateStamp) === "overdue")
         .slice(0, 10)
         .map(
           (control) =>
-            `- ${control.title} | Frekvens ${controlFrequencyLabels[control.frequency]} | Status ${controlStatusLabels[control.status]}`
+            `- ${control.title} | Frekvens ${controlFrequencyLabels[control.frequency]} | Status ${controlStatusLabels[getEffectiveControlStatus(control, dateStamp)]}`
         );
 
       const regulationLines = regulationWatchEntries.slice(0, 10).map((entry) => {
@@ -4505,7 +4488,7 @@ function WorkspacePageContent() {
               </p>
               <ul className="mt-3 space-y-2 text-sm text-[color:var(--ink)]">
                 {routineRequirementPoints.map((point) => {
-                  const hasValue = routineEntries.some((entry) => entry.requirementKey === point.key);
+                  const hasValue = routines.some((entry) => entry.requirementKey === point.key);
                   const isActivePoint = point.key === activeRoutineRequirementKey;
 
                   return (
@@ -4584,23 +4567,23 @@ function WorkspacePageContent() {
             <div className="mt-3 space-y-3">
               <input
                 id="routine-field-area"
-                value={getAnswerValue("routine_updates_area")}
-                onChange={(event) => setAnswerValue("routine_updates_area", event.target.value)}
+                value={routineForm.area}
+                onChange={(event) => setRoutineForm((prev) => ({ ...prev, area: event.target.value }))}
                 placeholder="Berört område (ex. steril, journal, bemanning)"
                 className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
               />
               <textarea
-                value={getAnswerValue("routine_updates_change_log")}
+                value={routineForm.changeLog}
                 onChange={(event) =>
-                  setAnswerValue("routine_updates_change_log", event.target.value)
+                  setRoutineForm((prev) => ({ ...prev, changeLog: event.target.value }))
                 }
                 placeholder="Vad har ändrats och varför?"
                 rows={3}
                 className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
               />
               <input
-                value={getAnswerValue("routine_updates_owner")}
-                onChange={(event) => setAnswerValue("routine_updates_owner", event.target.value)}
+                value={routineForm.owner}
+                onChange={(event) => setRoutineForm((prev) => ({ ...prev, owner: event.target.value }))}
                 placeholder="Ansvarig för uppdateringen"
                 className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
               />
@@ -4608,24 +4591,25 @@ function WorkspacePageContent() {
                 Nästa uppföljning
                 <input
                   type="date"
-                  value={getAnswerValue("routine_updates_next_review")}
+                  value={routineForm.nextReview}
                   onChange={(event) =>
-                    setAnswerValue("routine_updates_next_review", event.target.value)
+                    setRoutineForm((prev) => ({ ...prev, nextReview: event.target.value }))
                   }
                   className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
                 />
               </label>
               <button
                 type="button"
-                onClick={saveRoutineForPoint}
-                className="w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => void saveRoutineForPoint()}
+                disabled={isRoutineSubmitting}
+                className="w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                Spara rutin för vald punkt
+                {isRoutineSubmitting ? "Sparar..." : "Spara rutin för vald punkt"}
               </button>
               {routineMessage ? (
                 <p className="text-sm text-[color:var(--muted)]">{routineMessage}</p>
               ) : (
-                <p className="text-xs text-[color:var(--muted)]">Spara punkten när innehållet är klart.</p>
+                <p className="text-xs text-[color:var(--muted)]">Rutinen sparas direkt till servern.</p>
               )}
               <div className="flex flex-wrap gap-2">
                 {selectedRoutineEntry ? (
@@ -4640,7 +4624,7 @@ function WorkspacePageContent() {
                 {selectedRoutineEntry ? (
                   <button
                     type="button"
-                    onClick={() => removeRoutineForPoint(activeRoutineRequirementKey)}
+                    onClick={() => void removeRoutineForPoint(activeRoutineRequirementKey)}
                     className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
                   >
                     Ta bort sparad rutin
@@ -4838,6 +4822,10 @@ function WorkspacePageContent() {
           <p className="mt-1 text-sm text-[color:var(--muted)]">
             Avvikelsehanteringsrutin finns dokumenterad och kan användas som underlag för ledningssystemet.
           </p>
+          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Mallen är generisk, inte klinikspecifik. Den behöver fastställas av ansvarig funktion och
+            anpassas till er exakta verksamhetsform innan den kan betraktas som fullt lagkravsanpassad.
+          </p>
           <a
             href="/avvikelser/rutin"
             className="mt-3 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-slate-50"
@@ -5010,6 +4998,10 @@ function WorkspacePageContent() {
           <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
           <p className="mt-1 text-sm text-[color:var(--muted)]">
             Riskanalysrutin finns dokumenterad och kan användas som underlag för ledningssystemet.
+          </p>
+          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Mallen är generisk, inte klinikspecifik. Den behöver fastställas av ansvarig funktion och
+            anpassas till er exakta verksamhetsform innan den kan betraktas som fullt lagkravsanpassad.
           </p>
           <a
             href="/riskanalyser/rutin"
@@ -5208,6 +5200,10 @@ function WorkspacePageContent() {
           <p className="mt-1 text-sm text-[color:var(--muted)]">
             Kontrollrutin för årshjul och egenkontroller finns dokumenterad och kan användas som underlag för ledningssystemet.
           </p>
+          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Mallen är generisk, inte klinikspecifik. Den behöver fastställas av ansvarig funktion och
+            anpassas till er exakta verksamhetsform innan den kan betraktas som fullt lagkravsanpassad.
+          </p>
           <a
             href="/arshjul/rutin"
             className="mt-3 inline-flex rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-slate-50"
@@ -5324,7 +5320,10 @@ function WorkspacePageContent() {
                   Inga kontrollpunkter registrerade än.
                 </p>
               ) : (
-                controls.map((control) => (
+                controls.map((control) => {
+                  const effectiveStatus = getEffectiveControlStatus(control, todayIso);
+
+                  return (
                   <article
                     key={control.id}
                     className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3"
@@ -5342,12 +5341,14 @@ function WorkspacePageContent() {
                       <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
                         Frekvens: {controlFrequencyLabels[control.frequency]}
                       </span>
-                      <span className="rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]">
-                        Status: {controlStatusLabels[control.status]}
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${controlStatusBadgeClass(effectiveStatus)}`}
+                      >
+                        Status: {controlStatusLabels[effectiveStatus]}
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {control.status !== "pending" ? (
+                      {effectiveStatus !== "pending" ? (
                         <button
                           type="button"
                           onClick={() => updateControlStatus(control.id, "pending")}
@@ -5356,27 +5357,28 @@ function WorkspacePageContent() {
                           Planerad
                         </button>
                       ) : null}
-                      {control.status !== "done" ? (
+                      {effectiveStatus !== "done" ? (
                         <button
                           type="button"
                           onClick={() => updateControlStatus(control.id, "done")}
-                          className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
+                          className="rounded-lg bg-[color:var(--brand)] px-3 py-1 text-xs font-semibold text-white"
                         >
                           Klar
                         </button>
                       ) : null}
-                      {control.status !== "overdue" ? (
+                      {effectiveStatus !== "overdue" ? (
                         <button
                           type="button"
                           onClick={() => updateControlStatus(control.id, "overdue")}
-                          className="rounded-lg bg-[color:var(--brand)] px-3 py-1 text-xs font-semibold text-white"
+                          className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-semibold text-white"
                         >
                           Försenad
                         </button>
                       ) : null}
                     </div>
                   </article>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

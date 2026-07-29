@@ -491,6 +491,20 @@ create table if not exists control_tasks (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists routine_entries (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations(id) on delete cascade,
+  requirement_key text not null,
+  requirement_label text not null,
+  area text not null,
+  change_log text not null,
+  owner_role text not null,
+  next_review date not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, requirement_key)
+);
+
 create index if not exists risk_register_entries_org_status_idx
 on risk_register_entries(organization_id, status);
 
@@ -499,6 +513,9 @@ on incident_reports(organization_id, status);
 
 create index if not exists control_tasks_org_due_idx
 on control_tasks(organization_id, next_due_date);
+
+create index if not exists routine_entries_org_idx
+on routine_entries(organization_id);
 
 create index if not exists compliance_audit_events_application_created_idx
 on compliance_audit_events(application_id, created_at desc);
@@ -543,6 +560,12 @@ before update on control_tasks
 for each row
 execute procedure public.set_updated_at();
 
+drop trigger if exists routine_entries_set_updated_at on routine_entries;
+create trigger routine_entries_set_updated_at
+before update on routine_entries
+for each row
+execute procedure public.set_updated_at();
+
 create or replace function public.is_org_member(target_org_id uuid)
 returns boolean
 language sql
@@ -577,6 +600,7 @@ alter table compliance_audit_events enable row level security;
 alter table risk_register_entries enable row level security;
 alter table incident_reports enable row level security;
 alter table control_tasks enable row level security;
+alter table routine_entries enable row level security;
 
 drop policy if exists profiles_select_own on profiles;
 create policy profiles_select_own
@@ -869,6 +893,13 @@ with check (public.is_org_member(organization_id));
 drop policy if exists control_tasks_member_policy on control_tasks;
 create policy control_tasks_member_policy
 on control_tasks
+for all
+using (public.is_org_member(organization_id))
+with check (public.is_org_member(organization_id));
+
+drop policy if exists routine_entries_member_policy on routine_entries;
+create policy routine_entries_member_policy
+on routine_entries
 for all
 using (public.is_org_member(organization_id))
 with check (public.is_org_member(organization_id));

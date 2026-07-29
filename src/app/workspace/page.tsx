@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   attachmentChecklistRequirementItems,
@@ -42,7 +43,7 @@ type HelpEntry = {
   ivoUrl: string;
 };
 
-type PlanLevel = "step1" | "step2" | "step3";
+type PlanLevel = "ansokan" | "step1" | "step2" | "step3";
 type WorkspaceView =
   | "overview"
   | "ledningssystem"
@@ -288,18 +289,21 @@ type AiAssistResponse =
     };
 
 const planLabels: Record<PlanLevel, string> = {
+  ansokan: "Klinikklar Ansökan",
   step1: "Klinikklar Komplett",
   step2: "Klinikklar Drift",
   step3: "Klinikklar Premium",
 };
 
 const planFeatureMap: Record<PlanLevel, string[]> = {
+  ansokan: ["Ansökningsstöd", "AI-stöd i Ansökan", "Dokumentgenomgång", "Kravtolkning", "Checklista"],
   step1: ["IVO", "AI-stöd i Ansökan", "Ledningssystem", "Dokument", "AI", "Checklistor", "Riskanalyser"],
   step2: ["Uppdateringar", "Avvikelser", "Rutiner", "Riskanalyser", "Årshjul"],
   step3: ["AI Compliance Officer", "Regelbevakning", "AI-förslag", "Revision", "Internkontroll"],
 };
 
 const planAccessRank: Record<PlanLevel, number> = {
+  ansokan: 0,
   step1: 1,
   step2: 2,
   step3: 3,
@@ -658,6 +662,37 @@ const ledningssystemModules = [
   },
 ];
 
+// Shown instead of a section's real content for Klinikklar Ansökan customers (no Drift/
+// Komplett access). Framed as the natural next step after a granted IVO permit — SOSFS
+// 2011:9 requires an ongoing management system regardless — not as invented upselling.
+function PlanLockPanel({ moduleLabel }: { moduleLabel: string }) {
+  return (
+    <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-6">
+      <p className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.1em] text-[color:var(--muted)]">
+        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.4">
+          <rect x="5" y="11" width="14" height="9" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+        Kräver Drift eller Komplett
+      </p>
+      <h3 className="mt-3 text-lg font-semibold text-[color:var(--ink)]">
+        {moduleLabel} ingår i Klinikklar Drift eller Komplett
+      </h3>
+      <p className="mt-2 text-sm text-[color:var(--muted)]">
+        Klinikklar Ansökan täcker själva IVO-tillståndsansökan. Efter ett godkänt tillstånd kräver
+        SOSFS 2011:9 ett löpande ledningssystem i drift — {moduleLabel.toLowerCase()} är en del av
+        det. Drift och Komplett ger er verktyget för den löpande delen.
+      </p>
+      <Link
+        href="/#priser"
+        className="mt-4 inline-flex rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white"
+      >
+        Se priser →
+      </Link>
+    </div>
+  );
+}
+
 function WorkspacePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -833,6 +868,15 @@ function WorkspacePageContent() {
         return;
       }
 
+      // Ansökan is a one-time, application-only product with no Ledningssystem/Drift
+      // access. Only the bare workspace landing ("startsidan") redirects to the
+      // application flow — a direct link into a specific locked module (e.g. from the
+      // header nav) should render that section's upgrade panel instead, not bounce away.
+      if (data.plan === "ansokan" && activeView === "overview") {
+        router.replace("/ansokan");
+        return;
+      }
+
       if (data.profile) {
         setProfile({
           ...data.profile,
@@ -840,7 +884,12 @@ function WorkspacePageContent() {
         });
       }
 
-      if (data.plan === "step1" || data.plan === "step2" || data.plan === "step3") {
+      if (
+        data.plan === "ansokan" ||
+        data.plan === "step1" ||
+        data.plan === "step2" ||
+        data.plan === "step3"
+      ) {
         setActivePlan(data.plan);
       }
 
@@ -860,7 +909,7 @@ function WorkspacePageContent() {
     return () => {
       isCancelled = true;
     };
-  }, [hasHydratedWorkspace]);
+  }, [hasHydratedWorkspace, router, activeView]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -3547,6 +3596,12 @@ function WorkspacePageContent() {
             <p className="text-sm text-[color:var(--muted)]">Fokus: återkommande efterlevnad</p>
           </div>
 
+          {!hasHydratedWorkspace ? (
+          <p className="mt-4 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
+          ) : !hasPlanAccess("step1") ? (
+          <PlanLockPanel moduleLabel="Ledningssystem" />
+          ) : (
+          <>
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
             <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
@@ -4447,6 +4502,8 @@ function WorkspacePageContent() {
               </button>
             </section>
           ) : null}
+          </>
+          )}
         </section>
       ) : null}
 
@@ -4464,6 +4521,12 @@ function WorkspacePageContent() {
           <p className="text-sm text-[color:var(--muted)]">Fokus: löpande förändringar och ansvar</p>
         </div>
 
+        {!hasHydratedWorkspace ? (
+        <p className="mt-4 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
+        ) : !hasPlanAccess("step1") ? (
+        <PlanLockPanel moduleLabel="Rutiner" />
+        ) : (
+        <>
         <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <p className="text-sm font-semibold text-[color:var(--ink)]">Överblick</p>
@@ -4643,6 +4706,8 @@ function WorkspacePageContent() {
             </button>
           </article>
         </div>
+        </>
+        )}
       </section>
       ) : null}
 
@@ -4833,10 +4898,10 @@ function WorkspacePageContent() {
             Öppna avvikelsehanteringsrutin
           </a>
         </div>
-        {!canUseIncidentModule ? (
-          <p className="mt-3 text-sm text-[color:var(--muted)]">
-            Uppgradera till {planLabels.step2} för att hantera avvikelser.
-          </p>
+        {!hasHydratedWorkspace ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
+        ) : !canUseIncidentModule ? (
+          <PlanLockPanel moduleLabel="Avvikelser" />
         ) : (
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
@@ -5010,10 +5075,10 @@ function WorkspacePageContent() {
             Öppna riskanalysrutin
           </a>
         </div>
-        {!canUseRiskModule ? (
-          <p className="mt-3 text-sm text-[color:var(--muted)]">
-            Uppgradera till {planLabels.step2} för att hantera riskregister.
-          </p>
+        {!hasHydratedWorkspace ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
+        ) : !canUseRiskModule ? (
+          <PlanLockPanel moduleLabel="Riskanalyser" />
         ) : (
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
@@ -5211,10 +5276,10 @@ function WorkspacePageContent() {
             Öppna kontrollrutin
           </a>
         </div>
-        {!canUseControlModule ? (
-          <p className="mt-3 text-sm text-[color:var(--muted)]">
-            Uppgradera till {planLabels.step2} för att hantera årshjul och kontroller.
-          </p>
+        {!hasHydratedWorkspace ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
+        ) : !canUseControlModule ? (
+          <PlanLockPanel moduleLabel="Årshjul och kontroller" />
         ) : (
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">

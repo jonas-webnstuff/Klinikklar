@@ -22,46 +22,41 @@ export function HeaderNav({ isAuthenticated, canAdminCustomers, activePlan }: He
   const isAvvikelserPath = pathname.startsWith("/workspace/avvikelser");
   const isRiskanalyserPath = pathname.startsWith("/workspace/riskanalyser");
   const isArshjulPath = pathname.startsWith("/workspace/arshjul");
-  const isAnsokanOnlyPlan = activePlan === "ansokan";
 
   return (
     <nav className="hidden items-center gap-6 text-[15px] font-medium text-[color:var(--ink)] lg:mr-4 lg:flex xl:mr-8 xl:gap-8">
       {isAuthenticated ? (
         <>
-          {!isAnsokanOnlyPlan ? (
-            <>
-              <Link
-                href="/workspace/ledningssystem"
-                className={`${baseLinkClass} ${isLedningssystemPath || (isWorkspaceRoot && view === "ledningssystem") ? activeLinkClass : ""}`}
-              >
-                Ledningssystem
-              </Link>
-              <Link
-                href="/workspace/rutiner"
-                className={`${baseLinkClass} ${isRutinerPath || (isWorkspaceRoot && view === "rutiner") ? activeLinkClass : ""}`}
-              >
-                Rutiner
-              </Link>
-              <Link
-                href="/workspace/riskanalyser"
-                className={`${baseLinkClass} ${isRiskanalyserPath || (isWorkspaceRoot && view === "riskanalyser") ? activeLinkClass : ""}`}
-              >
-                Riskanalyser
-              </Link>
-              <Link
-                href="/workspace/avvikelser"
-                className={`${baseLinkClass} ${isAvvikelserPath || (isWorkspaceRoot && view === "avvikelser") ? activeLinkClass : ""}`}
-              >
-                Avvikelser
-              </Link>
-              <Link
-                href="/workspace/arshjul"
-                className={`${baseLinkClass} ${isArshjulPath || (isWorkspaceRoot && view === "arshjul") ? activeLinkClass : ""}`}
-              >
-                Årshjul
-              </Link>
-            </>
-          ) : null}
+          <Link
+            href="/workspace/ledningssystem"
+            className={`${baseLinkClass} ${isLedningssystemPath || (isWorkspaceRoot && view === "ledningssystem") ? activeLinkClass : ""}`}
+          >
+            Ledningssystem
+          </Link>
+          <Link
+            href="/workspace/rutiner"
+            className={`${baseLinkClass} ${isRutinerPath || (isWorkspaceRoot && view === "rutiner") ? activeLinkClass : ""}`}
+          >
+            Rutiner
+          </Link>
+          <Link
+            href="/workspace/riskanalyser"
+            className={`${baseLinkClass} ${isRiskanalyserPath || (isWorkspaceRoot && view === "riskanalyser") ? activeLinkClass : ""}`}
+          >
+            Riskanalyser
+          </Link>
+          <Link
+            href="/workspace/avvikelser"
+            className={`${baseLinkClass} ${isAvvikelserPath || (isWorkspaceRoot && view === "avvikelser") ? activeLinkClass : ""}`}
+          >
+            Avvikelser
+          </Link>
+          <Link
+            href="/workspace/arshjul"
+            className={`${baseLinkClass} ${isArshjulPath || (isWorkspaceRoot && view === "arshjul") ? activeLinkClass : ""}`}
+          >
+            Årshjul
+          </Link>
           <Link
             href="/ansokan"
             className={`${baseLinkClass} ${pathname.startsWith("/ansokan") ? activeLinkClass : ""}`}

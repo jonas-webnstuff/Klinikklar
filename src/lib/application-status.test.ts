@@ -22,6 +22,14 @@ function withoutStructuredRows(tables: FakeTables, code: StructuredRequirementCo
   return clone;
 }
 
+function withoutRequirementSupportingDocument(tables: FakeTables, code: StructuredRequirementCode): FakeTables {
+  const clone = cloneTables(tables);
+  clone.requirement_supporting_documents = clone.requirement_supporting_documents.filter(
+    (row) => row.requirement_code !== code
+  );
+  return clone;
+}
+
 /**
  * One targeted mutation per IVO checklist item key, each breaking ONLY the data that
  * item is supposed to read. Test #2 below asserts each mutation flips exactly its own
@@ -159,8 +167,48 @@ describe("computeReadinessChecklist", () => {
     expect(result.completeStructuredRequirementCodeCount).toBe(4);
   });
 
+  it("test #9: R-08 with zero owner rows but an uploaded shared document reports only the missing-owner message, not a redundant missing-document one", async () => {
+    const tables = withoutStructuredRows(buildGoldenPathTables(), "R-08");
+    // Golden path already carries a requirement_supporting_documents row for R-08;
+    // withoutStructuredRows only touches structured_requirement_items, so the shared
+    // document is still present here — simulating "uploaded the aktiebok before adding
+    // any owner rows".
+
+    const supabase = createFakeSupabase(tables);
+    const result = await computeReadinessChecklist(supabase, TEST_APPLICATION_ID);
+
+    const ownershipSuitability = result.ivoChecklistItems.find((item) => item.key === "ownership_suitability");
+    expect(ownershipSuitability?.done).toBe(false);
+    expect(result.missingStructuredRequirementFields).toContain("R-08: minst en ägare måste läggas till");
+    expect(result.missingStructuredRequirementFields).not.toContain(
+      "R-08: styrkande handling (t.ex. aktiebok eller registreringsbevis) saknas"
+    );
+  });
+
+  it("test #10: R-08 with complete owner rows but no shared document reports the missing-document message, not a missing-owner one", async () => {
+    const tables = withoutRequirementSupportingDocument(buildGoldenPathTables(), "R-08");
+    // Golden path's R-08 owner row is already complete (name/percent=100/status) and
+    // untouched here — simulating "filled in every owner but never uploaded the
+    // aktiebok".
+
+    const supabase = createFakeSupabase(tables);
+    const result = await computeReadinessChecklist(supabase, TEST_APPLICATION_ID);
+
+    const ownershipSuitability = result.ivoChecklistItems.find((item) => item.key === "ownership_suitability");
+    expect(ownershipSuitability?.done).toBe(false);
+    expect(result.missingStructuredRequirementFields).toContain(
+      "R-08: styrkande handling (t.ex. aktiebok eller registreringsbevis) saknas"
+    );
+    expect(result.missingStructuredRequirementFields).not.toContain("R-08: minst en ägare måste läggas till");
+  });
+
   describe("test #6: a broken query throws instead of silently reporting an all-false checklist", () => {
-    const tablesToBreak = ["care_scope_codes", "organizations", "structured_requirement_items"];
+    const tablesToBreak = [
+      "care_scope_codes",
+      "organizations",
+      "structured_requirement_items",
+      "requirement_supporting_documents",
+    ];
 
     for (const table of tablesToBreak) {
       it(`propagates the error when "${table}" fails`, async () => {

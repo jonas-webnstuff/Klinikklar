@@ -129,6 +129,16 @@ export function buildGoldenPathTables(): FakeTables {
     generated_documents: documentRows,
     structured_requirement_items: structuredItems,
     evidence: requirementRows.map((row) => ({ id: `ev-${row.code}`, requirement_id: row.id })),
+    // R-08's shared supporting document (aktiebok/registreringsbevis) — one row per
+    // requirement, not per owner. Without this, R-08 would read as incomplete even
+    // when every owner row is fully filled in.
+    requirement_supporting_documents: [
+      {
+        application_id: TEST_APPLICATION_ID,
+        requirement_code: "R-08",
+        file_path: "org-1/app-1/R-08/shared/v1-test-file.pdf",
+      },
+    ],
   };
 }
 

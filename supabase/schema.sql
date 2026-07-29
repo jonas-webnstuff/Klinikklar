@@ -44,23 +44,6 @@ create table if not exists clinics (
   created_at timestamptz not null default now()
 );
 
-create table if not exists persons (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
-  full_name text not null,
-  role_title text not null,
-  legitimation_number text,
-  email text not null
-);
-
-create table if not exists ownership_roles (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
-  person_id uuid not null references persons(id) on delete cascade,
-  role_type text not null check (role_type in ('owner', 'medical_responsible', 'quality_responsible')),
-  ownership_percent numeric(5,2)
-);
-
 create table if not exists applications (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
@@ -347,6 +330,98 @@ grant execute on function public.replace_structured_requirement_attachment(uuid,
 create index if not exists structured_requirement_items_app_kind_idx
   on structured_requirement_items (application_id, requirement_code, created_at);
 
+-- NOT the same thing as structured_requirement_items / structured_requirement_item_attachments
+-- (R-09's per-ROW file uploads — one file per attachment line, scoped to a single item id).
+-- R-08 has one row per owner in structured_requirement_items, but a single handling
+-- (aktiebok, registreringsbevis från Bolagsverket) typically proves the whole ownership
+-- picture at once — it doesn't belong to any one owner row. So this file is scoped to
+-- (application_id, requirement_code) instead: one shared document per requirement, not
+-- one per row. Deliberately named with no "item"/"attachment" overlap with the R-09
+-- tables so the two can't be confused at a glance or queried by mistake.
+create table if not exists requirement_supporting_documents (
+  id uuid primary key default gen_random_uuid(),
+  application_id uuid not null references applications(id) on delete cascade,
+  requirement_code text not null,
+  file_path text,
+  file_name text,
+  file_size bigint,
+  file_mime_type text,
+  uploaded_at timestamptz not null default now(),
+  uploaded_by uuid references auth.users(id),
+  unique (application_id, requirement_code)
+);
+
+-- Full upload history, same "never overwrite or delete in Storage" principle as
+-- structured_requirement_item_attachments.
+create table if not exists requirement_supporting_document_versions (
+  id uuid primary key default gen_random_uuid(),
+  requirement_supporting_document_id uuid not null references requirement_supporting_documents(id) on delete cascade,
+  file_path text not null,
+  file_name text not null,
+  file_size bigint not null,
+  file_mime_type text not null,
+  uploaded_at timestamptz not null default now(),
+  uploaded_by uuid references auth.users(id)
+);
+
+create index if not exists requirement_supporting_document_versions_doc_idx
+  on requirement_supporting_document_versions (requirement_supporting_document_id, uploaded_at desc);
+
+-- Insert-or-update the shared "current file" pointer, then record this version in
+-- history — same atomicity principle as replace_structured_requirement_attachment,
+-- adapted for the fact that a first-ever upload has no pre-existing row to attach to.
+create or replace function public.replace_requirement_supporting_document(
+  p_application_id uuid,
+  p_requirement_code text,
+  p_file_path text,
+  p_file_name text,
+  p_file_size bigint,
+  p_file_mime_type text,
+  p_uploaded_by uuid
+) returns requirement_supporting_documents
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_document requirement_supporting_documents;
+begin
+  select * into v_document
+  from requirement_supporting_documents
+  where application_id = p_application_id
+    and requirement_code = p_requirement_code
+  for update;
+
+  if not found then
+    insert into requirement_supporting_documents (
+      application_id, requirement_code, file_path, file_name, file_size, file_mime_type, uploaded_by
+    )
+    values (p_application_id, p_requirement_code, p_file_path, p_file_name, p_file_size, p_file_mime_type, p_uploaded_by)
+    returning * into v_document;
+  else
+    update requirement_supporting_documents
+    set file_path = p_file_path,
+        file_name = p_file_name,
+        file_size = p_file_size,
+        file_mime_type = p_file_mime_type,
+        uploaded_at = now(),
+        uploaded_by = p_uploaded_by
+    where id = v_document.id
+    returning * into v_document;
+  end if;
+
+  insert into requirement_supporting_document_versions (
+    requirement_supporting_document_id, file_path, file_name, file_size, file_mime_type, uploaded_by
+  )
+  values (v_document.id, p_file_path, p_file_name, p_file_size, p_file_mime_type, p_uploaded_by);
+
+  return v_document;
+end;
+$$;
+
+revoke all on function public.replace_requirement_supporting_document(uuid, text, text, text, bigint, text, uuid) from public;
+grant execute on function public.replace_requirement_supporting_document(uuid, text, text, text, bigint, text, uuid) to service_role;
+
 create table if not exists care_scope_codes (
   id uuid primary key default gen_random_uuid(),
   application_id uuid not null references applications(id) on delete cascade,
@@ -369,23 +444,11 @@ create table if not exists compliance_audit_events (
   created_at timestamptz not null default now()
 );
 
-create table if not exists compliance_cycles (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
-  label text not null,
-  period_start date not null,
-  period_end date not null,
-  status text not null check (status in ('planned', 'active', 'completed', 'archived')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (organization_id, period_start, period_end)
-);
-
 create table if not exists risk_register_entries (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   clinic_id uuid references clinics(id) on delete set null,
-  cycle_id uuid references compliance_cycles(id) on delete set null,
+  cycle_id uuid,
   title text not null,
   description text not null,
   probability integer not null check (probability between 1 and 5),
@@ -401,7 +464,7 @@ create table if not exists incident_reports (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   clinic_id uuid references clinics(id) on delete set null,
-  cycle_id uuid references compliance_cycles(id) on delete set null,
+  cycle_id uuid,
   title text not null,
   event_date date not null,
   severity text not null check (severity in ('low', 'medium', 'high', 'critical')),
@@ -416,7 +479,7 @@ create table if not exists control_tasks (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   clinic_id uuid references clinics(id) on delete set null,
-  cycle_id uuid references compliance_cycles(id) on delete set null,
+  cycle_id uuid,
   title text not null,
   description text,
   frequency text not null check (frequency in ('weekly', 'monthly', 'quarterly', 'yearly', 'ad_hoc')),
@@ -428,26 +491,6 @@ create table if not exists control_tasks (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists improvement_actions (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
-  clinic_id uuid references clinics(id) on delete set null,
-  cycle_id uuid references compliance_cycles(id) on delete set null,
-  source_type text not null check (source_type in ('incident', 'risk', 'audit', 'manual')),
-  source_id uuid,
-  title text not null,
-  action_description text not null,
-  owner_role text,
-  due_date date,
-  status text not null check (status in ('planned', 'in_progress', 'completed', 'cancelled')),
-  completed_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists compliance_cycles_org_idx
-on compliance_cycles(organization_id, period_start desc);
-
 create index if not exists risk_register_entries_org_status_idx
 on risk_register_entries(organization_id, status);
 
@@ -456,9 +499,6 @@ on incident_reports(organization_id, status);
 
 create index if not exists control_tasks_org_due_idx
 on control_tasks(organization_id, next_due_date);
-
-create index if not exists improvement_actions_org_status_idx
-on improvement_actions(organization_id, status);
 
 create index if not exists compliance_audit_events_application_created_idx
 on compliance_audit_events(application_id, created_at desc);
@@ -485,12 +525,6 @@ before update on applications
 for each row
 execute procedure public.set_updated_at();
 
-drop trigger if exists compliance_cycles_set_updated_at on compliance_cycles;
-create trigger compliance_cycles_set_updated_at
-before update on compliance_cycles
-for each row
-execute procedure public.set_updated_at();
-
 drop trigger if exists risk_register_entries_set_updated_at on risk_register_entries;
 create trigger risk_register_entries_set_updated_at
 before update on risk_register_entries
@@ -506,12 +540,6 @@ execute procedure public.set_updated_at();
 drop trigger if exists control_tasks_set_updated_at on control_tasks;
 create trigger control_tasks_set_updated_at
 before update on control_tasks
-for each row
-execute procedure public.set_updated_at();
-
-drop trigger if exists improvement_actions_set_updated_at on improvement_actions;
-create trigger improvement_actions_set_updated_at
-before update on improvement_actions
 for each row
 execute procedure public.set_updated_at();
 
@@ -533,8 +561,6 @@ alter table organizations enable row level security;
 alter table profiles enable row level security;
 alter table organization_memberships enable row level security;
 alter table clinics enable row level security;
-alter table persons enable row level security;
-alter table ownership_roles enable row level security;
 alter table applications enable row level security;
 alter table questionnaire_responses enable row level security;
 alter table requirements enable row level security;
@@ -544,13 +570,13 @@ alter table generated_documents enable row level security;
 alter table document_versions enable row level security;
 alter table structured_requirement_items enable row level security;
 alter table structured_requirement_item_attachments enable row level security;
+alter table requirement_supporting_documents enable row level security;
+alter table requirement_supporting_document_versions enable row level security;
 alter table care_scope_codes enable row level security;
 alter table compliance_audit_events enable row level security;
-alter table compliance_cycles enable row level security;
 alter table risk_register_entries enable row level security;
 alter table incident_reports enable row level security;
 alter table control_tasks enable row level security;
-alter table improvement_actions enable row level security;
 
 drop policy if exists profiles_select_own on profiles;
 create policy profiles_select_own
@@ -593,20 +619,6 @@ with check (public.is_org_member(id));
 drop policy if exists clinics_member_policy on clinics;
 create policy clinics_member_policy
 on clinics
-for all
-using (public.is_org_member(organization_id))
-with check (public.is_org_member(organization_id));
-
-drop policy if exists persons_member_policy on persons;
-create policy persons_member_policy
-on persons
-for all
-using (public.is_org_member(organization_id))
-with check (public.is_org_member(organization_id));
-
-drop policy if exists ownership_roles_member_policy on ownership_roles;
-create policy ownership_roles_member_policy
-on ownership_roles
 for all
 using (public.is_org_member(organization_id))
 with check (public.is_org_member(organization_id));
@@ -735,6 +747,50 @@ with check (
   )
 );
 
+drop policy if exists requirement_supporting_documents_member_policy on requirement_supporting_documents;
+create policy requirement_supporting_documents_member_policy
+on requirement_supporting_documents
+for all
+using (
+  exists (
+    select 1
+    from applications a
+    where a.id = requirement_supporting_documents.application_id
+      and public.is_org_member(a.organization_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from applications a
+    where a.id = requirement_supporting_documents.application_id
+      and public.is_org_member(a.organization_id)
+  )
+);
+
+drop policy if exists requirement_supporting_document_versions_member_policy on requirement_supporting_document_versions;
+create policy requirement_supporting_document_versions_member_policy
+on requirement_supporting_document_versions
+for all
+using (
+  exists (
+    select 1
+    from requirement_supporting_documents rsd
+    join applications a on a.id = rsd.application_id
+    where rsd.id = requirement_supporting_document_versions.requirement_supporting_document_id
+      and public.is_org_member(a.organization_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from requirement_supporting_documents rsd
+    join applications a on a.id = rsd.application_id
+    where rsd.id = requirement_supporting_document_versions.requirement_supporting_document_id
+      and public.is_org_member(a.organization_id)
+  )
+);
+
 -- Defense-in-depth: the app writes/reads via the service-role route layer (same
 -- pattern as every other table here), so this isn't the primary access control,
 -- but it stops a leaked anon/authenticated token from reaching other orgs' files.
@@ -796,13 +852,6 @@ with check (
   )
 );
 
-drop policy if exists compliance_cycles_member_policy on compliance_cycles;
-create policy compliance_cycles_member_policy
-on compliance_cycles
-for all
-using (public.is_org_member(organization_id))
-with check (public.is_org_member(organization_id));
-
 drop policy if exists risk_register_entries_member_policy on risk_register_entries;
 create policy risk_register_entries_member_policy
 on risk_register_entries
@@ -824,9 +873,3 @@ for all
 using (public.is_org_member(organization_id))
 with check (public.is_org_member(organization_id));
 
-drop policy if exists improvement_actions_member_policy on improvement_actions;
-create policy improvement_actions_member_policy
-on improvement_actions
-for all
-using (public.is_org_member(organization_id))
-with check (public.is_org_member(organization_id));

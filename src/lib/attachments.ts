@@ -69,3 +69,21 @@ export function buildAttachmentStoragePath(input: {
 
   return `${input.organizationId}/${input.applicationId}/${input.requirementCode}/${input.itemId}/${version}-${stem}.${input.extension}`;
 }
+
+/**
+ * Same bucket and path shape as buildAttachmentStoragePath, but for a document shared
+ * across an entire requirement (e.g. R-08's aktiebok) rather than one attachment row —
+ * "shared" takes the place of the per-item id.
+ */
+export function buildRequirementSupportingDocumentStoragePath(input: {
+  organizationId: string;
+  applicationId: string;
+  requirementCode: string;
+  originalFileName: string;
+  extension: DetectedAttachmentType["extension"];
+}): string {
+  const stem = sanitizeFileNameStem(input.originalFileName);
+  const version = Date.now();
+
+  return `${input.organizationId}/${input.applicationId}/${input.requirementCode}/shared/${version}-${stem}.${input.extension}`;
+}

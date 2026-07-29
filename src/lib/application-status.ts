@@ -318,6 +318,20 @@ export async function computeReadinessChecklist(
 
   if (structuredError) throw structuredError;
 
+  // R-08's supporting document (aktiebok/registreringsbevis) is shared across the whole
+  // requirement, not one file per owner row — see requirement_supporting_documents in
+  // schema.sql for why this is a separate table from structured_requirement_items.
+  const { data: requirementDocumentRows, error: requirementDocumentError } = await supabase
+    .from("requirement_supporting_documents")
+    .select("requirement_code, file_path")
+    .eq("application_id", applicationId);
+
+  if (requirementDocumentError) throw requirementDocumentError;
+
+  const requirementSupportingDocumentByCode = new Map<string, string | null>(
+    (requirementDocumentRows || []).map((row) => [row.requirement_code, row.file_path])
+  );
+
   const missingStructuredRequirementFields: string[] = [];
 
   for (const code of Object.keys(structuredRequirementDefinitions) as StructuredRequirementCode[]) {
@@ -377,6 +391,16 @@ export async function computeReadinessChecklist(
       if (Math.abs(totalPercent - 100) > 0.5) {
         missingStructuredRequirementFields.push(
           `R-08: ägarandelarna summerar till ${totalPercent}%, måste bli 100%`
+        );
+      }
+
+      // Only checked once owner rows actually exist (this whole branch is skipped by
+      // the `rows.length === 0` continue above) — with zero owners, "minst en ägare
+      // måste läggas till" is already the whole story, and a second "handling saknas"
+      // message on top of it would just be noise pointing at the wrong problem.
+      if (!requirementSupportingDocumentByCode.get(code)) {
+        missingStructuredRequirementFields.push(
+          "R-08: styrkande handling (t.ex. aktiebok eller registreringsbevis) saknas"
         );
       }
     }

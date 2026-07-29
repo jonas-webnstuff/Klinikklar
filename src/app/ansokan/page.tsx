@@ -57,6 +57,17 @@ type StructuredRequirementRow = {
   createdAt: string;
 };
 
+// Document shared across an entire requirement (R-08's aktiebok/registreringsbevis) —
+// not one row per structured requirement item, see requirement_supporting_documents in
+// schema.sql for why this is a separate concept from StructuredRequirementRow's files.
+type RequirementSupportingDocument = {
+  requirementCode: string;
+  filePath: string | null;
+  fileName: string | null;
+  fileSize: number | null;
+  uploadedAt: string | null;
+};
+
 type ProfileState = {
   clinicName: string;
   orgNumber: string;
@@ -271,6 +282,14 @@ export default function AnsokanPage() {
   const [uploadingAttachmentRowId, setUploadingAttachmentRowId] = useState<string | null>(null);
   const [downloadingAttachmentRowId, setDownloadingAttachmentRowId] = useState<string | null>(null);
   const [attachmentErrorsByRowId, setAttachmentErrorsByRowId] = useState<Record<string, string>>({});
+  const [requirementSupportingDocuments, setRequirementSupportingDocuments] = useState<
+    Record<string, RequirementSupportingDocument>
+  >({});
+  const [uploadingRequirementCode, setUploadingRequirementCode] = useState<string | null>(null);
+  const [downloadingRequirementCode, setDownloadingRequirementCode] = useState<string | null>(null);
+  const [requirementAttachmentErrorsByCode, setRequirementAttachmentErrorsByCode] = useState<Record<string, string>>(
+    {}
+  );
   const [structuredRequirementMessage, setStructuredRequirementMessage] = useState("");
   const [careScopeCodes, setCareScopeCodes] = useState<CareScopeCode[]>([]);
   const [savingCareScopeCode, setSavingCareScopeCode] = useState<CareScopeCode | null>(null);
@@ -727,6 +746,26 @@ export default function AnsokanPage() {
     setStructuredRequirements(data.items || []);
   }
 
+  async function loadRequirementSupportingDocuments() {
+    const response = await fetch("/api/requirement-attachments/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as {
+      documents?: RequirementSupportingDocument[];
+    };
+
+    setRequirementSupportingDocuments(
+      Object.fromEntries((data.documents || []).map((doc) => [doc.requirementCode, doc]))
+    );
+  }
+
   async function loadCareScopeCodes() {
     const response = await fetch("/api/care-scope/list", {
       method: "POST",
@@ -991,6 +1030,72 @@ export default function AnsokanPage() {
     }
   }
 
+  function setRequirementAttachmentError(requirementCode: string, error: string | null) {
+    setRequirementAttachmentErrorsByCode((prev) => {
+      if (error === null) {
+        if (!(requirementCode in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[requirementCode];
+        return next;
+      }
+      return { ...prev, [requirementCode]: error };
+    });
+  }
+
+  // Mirrors uploadStructuredRowAttachment/downloadStructuredRowAttachment above, but for
+  // a document shared across the whole requirement (R-08's aktiebok) instead of one row.
+  async function uploadRequirementSupportingDocument(requirementCode: string, file: File) {
+    setUploadingRequirementCode(requirementCode);
+    setRequirementAttachmentError(requirementCode, null);
+
+    const formData = new FormData();
+    formData.append("requirementCode", requirementCode);
+    formData.append("file", file);
+
+    const response = await fetch("/api/requirement-attachments", {
+      method: "POST",
+      body: formData,
+    });
+
+    setUploadingRequirementCode(null);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setRequirementAttachmentError(requirementCode, data.error || "Kunde inte ladda upp filen.");
+      return;
+    }
+
+    await loadRequirementSupportingDocuments();
+    await loadApplicationState();
+  }
+
+  async function downloadRequirementSupportingDocument(requirementCode: string) {
+    setDownloadingRequirementCode(requirementCode);
+    setRequirementAttachmentError(requirementCode, null);
+
+    const response = await fetch("/api/requirement-attachments/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requirementCode }),
+    });
+
+    setDownloadingRequirementCode(null);
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setRequirementAttachmentError(requirementCode, data.error || "Kunde inte skapa nedladdningslänk.");
+      return;
+    }
+
+    const data = (await response.json()) as { url?: string };
+
+    if (data.url) {
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    }
+  }
+
   function renderStructuredRequirementSection(code: StructuredRequirementCode) {
     const def = structuredRequirementDefinitions[code];
     const rows = structuredRequirements.filter((row) => row.requirementCode === code);
@@ -1128,6 +1233,73 @@ export default function AnsokanPage() {
             </div>
           ))}
         </div>
+
+        {code === "R-08" ? (
+          <div className="mt-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+              Styrkande handling (delas av samtliga ägare ovan)
+            </p>
+            <p className="mt-1 text-xs text-[color:var(--muted)]">
+              T.ex. aktiebok eller registreringsbevis från Bolagsverket — en handling som styrker hela ägarbilden,
+              inte en fil per ägare.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
+              {requirementSupportingDocuments[code]?.filePath ? (
+                <>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                    ✓ Finns
+                  </span>
+                  <span className="text-sm text-[color:var(--ink)]">
+                    {requirementSupportingDocuments[code].fileName}
+                    {requirementSupportingDocuments[code].uploadedAt
+                      ? ` · uppladdad ${new Date(requirementSupportingDocuments[code].uploadedAt as string).toLocaleDateString("sv-SE")}`
+                      : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void downloadRequirementSupportingDocument(code)}
+                    disabled={downloadingRequirementCode === code}
+                    className="text-xs font-semibold text-[color:var(--brand)] disabled:text-slate-400"
+                  >
+                    {downloadingRequirementCode === code ? "Öppnar..." : "Ladda ner"}
+                  </button>
+                </>
+              ) : (
+                <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                  Saknas
+                </span>
+              )}
+              <label
+                className={`${secondaryButtonClass} cursor-pointer ${
+                  uploadingRequirementCode === code ? "pointer-events-none opacity-60" : ""
+                }`}
+              >
+                {uploadingRequirementCode === code
+                  ? "Laddar upp..."
+                  : requirementSupportingDocuments[code]?.filePath
+                    ? "Byt fil"
+                    : "Ladda upp fil"}
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  className="hidden"
+                  disabled={uploadingRequirementCode === code}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+
+                    if (file) {
+                      void uploadRequirementSupportingDocument(code, file);
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            {requirementAttachmentErrorsByCode[code] ? (
+              <p className="mt-2 text-xs font-semibold text-red-700">{requirementAttachmentErrorsByCode[code]}</p>
+            ) : null}
+          </div>
+        ) : null}
 
         {code === "R-09" ? (
           <div className="mt-3">
@@ -1832,6 +2004,23 @@ export default function AnsokanPage() {
       return ["## Bilagor (nedladdningslänkar)", introLine, "", body].join("\n");
     })();
 
+    const r08SupportingDocumentSection = (() => {
+      const document = requirementSupportingDocuments["R-08"];
+
+      if (!document?.filePath) {
+        return ["## R-08: Styrkande handling (ägarbild)", "Ingen delad handling uppladdad."].join("\n");
+      }
+
+      const uploadedAtText = document.uploadedAt ? new Date(document.uploadedAt).toLocaleString("sv-SE") : "-";
+      const openUrl = `${window.location.origin}/api/requirement-attachments/open?requirementCode=R-08`;
+
+      return [
+        "## R-08: Styrkande handling (ägarbild)",
+        `Fil: ${document.fileName || "-"} (uppladdad ${uploadedAtText})`,
+        `Nedladdning: ${openUrl}`,
+      ].join("\n");
+    })();
+
     const packageContent = [
       "# Komplett ansökningsunderlag",
       `Genererad: ${generatedAt}`,
@@ -1849,6 +2038,8 @@ export default function AnsokanPage() {
       structuredSection("R-07"),
       "",
       structuredSection("R-08"),
+      "",
+      r08SupportingDocumentSection,
       "",
       structuredSection("R-09"),
       "",
@@ -2076,6 +2267,7 @@ export default function AnsokanPage() {
     void loadEvidence();
     void loadDocumentDrafts();
     void loadStructuredRequirements();
+    void loadRequirementSupportingDocuments();
     void loadCareScopeCodes();
     void loadWorkspacePlanContext();
   }, []);

@@ -16,7 +16,6 @@ import { callAiAssist } from "@/lib/ai/request-assistance";
 import type {
   ControlTaskFrequency,
   ControlTaskStatus,
-  DocumentKind,
   IncidentSeverity,
   IncidentStatus,
   RiskStatus,
@@ -32,18 +31,6 @@ type ProfileState = {
 };
 
 type AnswersState = Record<string, { answer: string; followUpAnswer: string }>;
-
-type GeneratedState = Partial<
-  Record<
-    DocumentKind,
-    {
-      content: string;
-      approved: boolean;
-      isLoading: boolean;
-      error?: string;
-    }
-  >
->;
 
 type HelpEntry = {
   id: string;
@@ -639,7 +626,6 @@ function WorkspacePageContent() {
 
   const [profile, setProfile] = useState<ProfileState>(initialProfile);
   const [answers, setAnswers] = useState<AnswersState>(initialAnswers);
-  const [generated, setGenerated] = useState<GeneratedState>({});
   const [openHelpKey, setOpenHelpKey] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
@@ -669,7 +655,6 @@ function WorkspacePageContent() {
   const [supportMessage, setSupportMessage] = useState("");
   const [isSupportSubmitting, setIsSupportSubmitting] = useState(false);
   const [isRevisionExporting, setIsRevisionExporting] = useState(false);
-  const [isApplicationPackageExporting, setIsApplicationPackageExporting] = useState(false);
   const [routineMessage, setRoutineMessage] = useState("");
   const [aiAssistLoading, setAiAssistLoading] = useState<Record<AiAssistFeature, boolean>>({
     risk_analysis: false,
@@ -1272,7 +1257,6 @@ function WorkspacePageContent() {
   ]);
   const canSubmitApplication = readiness.canSubmit && submissionBlockers.length === 0;
   const isApplicationSubmitted = applicationStatus === "submitted";
-  const isApplicationApproved = applicationStatus === "ready_to_submit";
 
   const incidentSummary = useMemo(() => {
     const summary = {
@@ -1925,18 +1909,6 @@ function WorkspacePageContent() {
 
     return "border-red-200 bg-red-50";
   };
-
-  const canGenerate =
-    profile.clinicName.trim() &&
-    profile.address.trim() &&
-    profile.postalCode.trim() &&
-    profile.municipality.trim() &&
-    profile.orgNumber.trim() &&
-    profile.email.trim() &&
-    answers.care_scope?.answer.trim() &&
-    answers.quality_process?.answer.trim() &&
-    answers.staffing?.answer.trim() &&
-    answers.incident_routine?.answer.trim();
 
   const getAnswerValue = (key: string) => answers[key]?.answer || "";
 
@@ -3408,123 +3380,6 @@ function WorkspacePageContent() {
     void loadControls();
   }
 
-  async function generateDocument(kind: DocumentKind, options?: { manual?: boolean }) {
-    const requirement = complianceRequirements.find((item) => item.documentKind === kind);
-    if (requirement && !hasPlanAccess(requirement.availableFrom)) {
-      return;
-    }
-
-    setGenerated((prev) => ({
-      ...prev,
-      [kind]: {
-        content: prev[kind]?.content || "",
-        approved: prev[kind]?.approved || false,
-        isLoading: true,
-        error: undefined,
-      },
-    }));
-
-    const result = await callAiAssist<{ content: string }>("/api/ai/generate", {
-      plan: activePlan,
-      mode: options?.manual ? "manual" : "ai",
-      clinicName: profile.clinicName,
-      municipality: profile.municipality,
-      careScope: answers.care_scope.answer,
-      qualityProcess: answers.quality_process.answer,
-      staffing: answers.staffing.answer,
-      incidentRoutine: answers.incident_routine.answer,
-      documentKind: kind,
-    });
-
-    if (!result.ok) {
-      setGenerated((prev) => ({
-        ...prev,
-        [kind]: {
-          content: prev[kind]?.content || "",
-          approved: false,
-          isLoading: false,
-          error: result.error,
-        },
-      }));
-      return;
-    }
-
-    setGenerated((prev) => ({
-      ...prev,
-      [kind]: {
-        content: result.data.content,
-        approved: false,
-        isLoading: false,
-        error: undefined,
-      },
-    }));
-  }
-
-  async function exportDocument(kind: DocumentKind, format: "docx" | "pdf") {
-    const document = generated[kind];
-    if (!document?.content) {
-      return;
-    }
-
-    const title = `${kind} - ${profile.clinicName || "klinikklar"}`;
-
-    const response = await fetch("/api/documents/export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        format,
-        title,
-        content: document.content,
-      }),
-    });
-
-    if (!response.ok) {
-      return;
-    }
-
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = window.document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${title}.${format}`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function resolveDocumentPackageStatus(kind: DocumentKind) {
-    const state = generated[kind];
-    const hasGeneratedContent = Boolean(state?.content?.trim());
-    const isReadyToAttach = Boolean(hasGeneratedContent && state?.approved);
-
-    if (isReadyToAttach) {
-      return {
-        hasGeneratedContent,
-        isReadyToAttach,
-        shortLabel: "Redo att bifoga",
-        detailLabel: "Dokumentet är genererat, granskat och kan bifogas.",
-        tone: "ready" as const,
-      };
-    }
-
-    if (hasGeneratedContent) {
-      return {
-        hasGeneratedContent,
-        isReadyToAttach,
-        shortLabel: "Utkast kräver granskning",
-        detailLabel: "Utkast finns men måste granskas och markeras som verifierat.",
-        tone: "pending" as const,
-      };
-    }
-
-    return {
-      hasGeneratedContent,
-      isReadyToAttach,
-      shortLabel: "Saknar utkast",
-      detailLabel: "Dokumentet är ännu inte genererat.",
-      tone: "missing" as const,
-    };
-  }
-
   async function exportRevisionPackage(format: "docx" | "pdf") {
     if (!canUsePremiumAi) {
       return;
@@ -3671,153 +3526,6 @@ function WorkspacePageContent() {
       setWorkspaceMessage("Kunde inte exportera revisionspaket.");
     } finally {
       setIsRevisionExporting(false);
-    }
-  }
-
-  async function exportApplicationPackage(format: "docx" | "pdf") {
-    if (!profile.clinicName.trim()) {
-      setWorkspaceMessage("Ange klinikens namn innan ansökningspaketet exporteras.");
-      return;
-    }
-
-    setIsApplicationPackageExporting(true);
-
-    try {
-      const now = new Date();
-      const dateStamp = now.toISOString().slice(0, 10);
-      const exportedAt = now.toLocaleString("sv-SE");
-      const clinicLabel = profile.clinicName.trim() || "Ej angiven";
-      const applicationStatusLabel =
-        applicationStatus === "draft"
-          ? "Utkast"
-          : applicationStatus === "in_review"
-            ? "Klar för granskning"
-            : applicationStatus === "ready_to_submit"
-              ? "Godkänd"
-              : "Klar att skicka";
-
-      const responsiblePeopleLines = responsiblePersonRequirementItems.map(
-        (item) => `- ${item.label}: ${getAnswerValue(item.key) || "Ej angivet"}`
-      );
-
-      const ownershipLines = ownershipRequirementItems.map(
-        (item) => `- ${item.label}: ${getAnswerValue(item.key) || "Ej angivet"}`
-      );
-
-      const attachmentLines = attachmentChecklistRequirementItems.map(
-        (item) => `- ${item.label}: ${getAnswerValue(item.key) || "Ej angivet"}`
-      );
-
-      const facilityLines = facilityRequirementItems.map(
-        (item) => `- ${item.label}: ${getAnswerValue(item.key) || "Ej angivet"}`
-      );
-
-      const attachableDocuments = complianceRequirements
-        .filter((requirement) => resolveDocumentPackageStatus(requirement.documentKind).isReadyToAttach)
-        .map((requirement, index) => `- Bilaga ${index + 1}: ${requirement.code} ${requirement.title}`);
-
-      const pendingDocuments = complianceRequirements
-        .filter((requirement) => !resolveDocumentPackageStatus(requirement.documentKind).isReadyToAttach)
-        .map((requirement) => {
-          const status = resolveDocumentPackageStatus(requirement.documentKind);
-          return `- ${requirement.code} ${requirement.title}: ${status.shortLabel}`;
-        });
-
-      const generatedDocumentLines = complianceRequirements.map((requirement) => {
-        const status = resolveDocumentPackageStatus(requirement.documentKind);
-        return `- ${requirement.code} ${requirement.title}: ${status.shortLabel} | ${status.detailLabel}`;
-      });
-
-      const content = [
-        "Klinikklar - Ansökningspaket för IVO",
-        "Dokumenttyp: Samlad ansökningssammanställning",
-        "Version: 1.0",
-        `Klinik: ${clinicLabel}`,
-        `Exporterad: ${exportedAt}`,
-        `Ansökningsstatus: ${applicationStatusLabel}`,
-        `Redo för granskning: ${readiness.canMoveToReady ? "Ja" : "Nej"}`,
-        `Redo att skicka: ${canSubmitApplication ? "Ja" : "Nej"}`,
-        "",
-        "1. Grunduppgifter",
-        `- Kliniknamn: ${profile.clinicName || "Ej angivet"}`,
-        `- Organisationsnummer: ${profile.orgNumber || "Ej angivet"}`,
-        `- Besöksadress: ${profile.address || "Ej angivet"}`,
-        `- Postnummer: ${profile.postalCode || "Ej angivet"}`,
-        `- Ort: ${profile.municipality || "Ej angivet"}`,
-        `- E-post: ${profile.email || "Ej angivet"}`,
-        "",
-        "2. Verksamhetsbeskrivning och styrning",
-        `- Vårdutbud: ${getAnswerValue("care_scope") || "Ej angivet"}`,
-        `- Kvalitetsuppföljning: ${getAnswerValue("quality_process") || "Ej angivet"}`,
-        `- Bemanning: ${getAnswerValue("staffing") || "Ej angivet"}`,
-        `- Avvikelsehantering: ${getAnswerValue("incident_routine") || "Ej angivet"}`,
-        "",
-        "3. Ansvariga personer",
-        ...responsiblePeopleLines,
-        "",
-        "4. Ägarbild och lämplighet",
-        ...ownershipLines,
-        "",
-        "5. Lokaler, utrustning och riskområden",
-        ...facilityLines,
-        "",
-        "6. Bilagechecklista och referenser",
-        ...attachmentLines,
-        "",
-        "7. Bilagor redo att bifoga",
-        `- Antal redo att bifoga: ${attachableDocuments.length}/${complianceRequirements.length}`,
-        ...(attachableDocuments.length > 0
-          ? attachableDocuments
-          : ["- Inga dokument är ännu både genererade och granskade."]),
-        "",
-        "8. Dokument som fortfarande kräver arbete",
-        ...(pendingDocuments.length > 0
-          ? pendingDocuments
-          : ["- Alla dokument är markerade som redo att bifoga."]),
-        "",
-        "9. Full dokumentstatus",
-        ...generatedDocumentLines,
-        "",
-        "10. Kvarstående blockerare",
-        ...(submissionBlockers.length > 0
-          ? submissionBlockers.map((blocker) => `- ${blocker}`)
-          : ["- Inga extra blockerare registrerade i workspace."]),
-        "",
-        "11. Manuell slutkontroll",
-        "- Verifiera att uppgifterna fortfarande är aktuella vid inskick.",
-        "- Säkerställ att dokument markerade som redo att bifoga också är rätt version att skicka in.",
-        "- Paketet är en sammanställning från arbetsytan och ska granskas manuellt innan extern delning eller inskick.",
-      ].join("\n");
-
-      const title = `ansokningspaket-${clinicLabel}-${dateStamp}`;
-
-      const response = await fetch("/api/documents/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          format,
-          title,
-          content,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Kunde inte exportera ansökningspaket.");
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = window.document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${title}.${format}`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-
-      setWorkspaceMessage("Ansökningspaket exporterat.");
-    } catch {
-      setWorkspaceMessage("Kunde inte exportera ansökningspaket.");
-    } finally {
-      setIsApplicationPackageExporting(false);
     }
   }
 

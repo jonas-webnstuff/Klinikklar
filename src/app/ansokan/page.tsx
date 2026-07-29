@@ -842,6 +842,22 @@ export default function AnsokanPage() {
     setNewStructuredRowDrafts((prev) => ({ ...prev, [code]: { ...fields } }));
   }
 
+  // Builds a human-readable summary of a structured requirement row for use as an R-09
+  // attachment name. Excludes checkbox fields — without this, R-07's isOperationsManager/
+  // hasInsight* fields leak their raw "true"/"false" string straight into the summary
+  // (confirmed live in production data: "Anna Svensson — Verksamhetschef — 234524 — true").
+  function summarizeStructuredRow(row: StructuredRequirementRow) {
+    const def = structuredRequirementDefinitions[row.requirementCode];
+    const visibleFields = def.fields.filter((field) => field.type !== "checkbox");
+
+    return (
+      visibleFields
+        .map((field) => row.fields[field.key])
+        .filter(Boolean)
+        .join(" — ") || def.itemLabel
+    );
+  }
+
   function getInternalDocumentOptions() {
     const fromDrafts = approvedDocumentDrafts.map((draft) => {
       const requirement = complianceRequirements.find((item) => item.documentKind === draft.kind);
@@ -852,6 +868,8 @@ export default function AnsokanPage() {
         label: `${code} – ${draft.title}`,
         attachmentName: draft.title,
         relatedRequirement: code,
+        linkedDraftId: draft.id,
+        linkedItemId: undefined as string | undefined,
       };
     });
 
@@ -861,18 +879,15 @@ export default function AnsokanPage() {
           row.requirementCode === "R-06" || row.requirementCode === "R-07" || row.requirementCode === "R-08"
       )
       .map((row) => {
-        const def = structuredRequirementDefinitions[row.requirementCode];
-        const summary =
-          def.fields
-            .map((field) => row.fields[field.key])
-            .filter(Boolean)
-            .join(" — ") || def.itemLabel;
+        const summary = summarizeStructuredRow(row);
 
         return {
           value: `structured:${row.id}`,
           label: `${row.requirementCode} – ${summary}`,
           attachmentName: summary,
           relatedRequirement: row.requirementCode,
+          linkedItemId: row.id as string | undefined,
+          linkedDraftId: undefined as string | undefined,
         };
       });
 
@@ -891,6 +906,11 @@ export default function AnsokanPage() {
     startNewStructuredRowFromPreset("R-09", {
       attachmentName: option.attachmentName,
       relatedRequirement: option.relatedRequirement,
+      // Kept alongside the text snapshot so we can later detect if the source row/draft
+      // was deleted or changed — see getLinkedAttachmentWarning. Never used to gate
+      // completeness, purely informational.
+      ...(option.linkedItemId ? { linkedItemId: option.linkedItemId } : {}),
+      ...(option.linkedDraftId ? { linkedDraftId: option.linkedDraftId } : {}),
       status: isApprovedDraft ? "finns" : "kopplat, ej bifogat",
     });
   }
@@ -1096,6 +1116,61 @@ export default function AnsokanPage() {
     }
   }
 
+  /**
+   * An R-09 row created via "Koppla till befintligt dokument" stores a one-time text
+   * snapshot (attachmentName) of the R-06/07/08 row or document draft it pointed at —
+   * never a live reference. If the source is later deleted or edited, the snapshot goes
+   * stale silently. This detects that using linkedItemId/linkedDraftId (stored going
+   * forward, see selectInternalDocumentForAttachment) where available, and falls back to
+   * a weaker "can't verify" notice for rows saved before that tracking existed.
+   *
+   * Quickpick-created rows (standardType set) are category labels, not snapshots of a
+   * specific row/draft, and are never flagged.
+   */
+  function getLinkedAttachmentWarning(row: StructuredRequirementRow): string | null {
+    const fields = row.fields as Record<string, string | undefined>;
+
+    if (fields.standardType) {
+      return null;
+    }
+
+    if (fields.linkedItemId) {
+      const source = structuredRequirements.find((item) => item.id === fields.linkedItemId);
+
+      if (!source) {
+        return "Käll-raden för den här bilagan har tagits bort sedan kopplingen gjordes. Kontrollera att uppgiften fortfarande stämmer.";
+      }
+
+      const currentSummary = summarizeStructuredRow(source);
+
+      if (currentSummary !== fields.attachmentName) {
+        return `Källuppgiften har ändrats sedan kopplingen gjordes. Aktuell uppgift: "${currentSummary}".`;
+      }
+
+      return null;
+    }
+
+    if (fields.linkedDraftId) {
+      const source = documentDrafts.find((draft) => draft.id === fields.linkedDraftId);
+
+      if (!source) {
+        return "Det kopplade dokumentutkastet har tagits bort sedan kopplingen gjordes. Kontrollera att uppgiften fortfarande stämmer.";
+      }
+
+      if (source.title !== fields.attachmentName) {
+        return `Det kopplade dokumentutkastet har bytt titel sedan kopplingen gjordes. Aktuell titel: "${source.title}".`;
+      }
+
+      return null;
+    }
+
+    if (fields.relatedRequirement) {
+      return `Den här bilagan hänvisar till ${fields.relatedRequirement}, men kopplingen skapades innan käll-raden kunde spåras. Kontrollera manuellt att uppgiften fortfarande stämmer.`;
+    }
+
+    return null;
+  }
+
   function renderStructuredRequirementSection(code: StructuredRequirementCode) {
     const def = structuredRequirementDefinitions[code];
     const rows = structuredRequirements.filter((row) => row.requirementCode === code);
@@ -1204,6 +1279,11 @@ export default function AnsokanPage() {
                   </div>
                   {attachmentErrorsByRowId[row.id] ? (
                     <p className="mt-2 text-xs font-semibold text-red-700">{attachmentErrorsByRowId[row.id]}</p>
+                  ) : null}
+                  {getLinkedAttachmentWarning(row) ? (
+                    <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                      ⚠ {getLinkedAttachmentWarning(row)}
+                    </p>
                   ) : null}
                 </div>
               ) : null}
@@ -1936,7 +2016,12 @@ export default function AnsokanPage() {
           const visibleFields = def.fields.filter((field) => field.key !== "status");
           const line = visibleFields.map((field) => row.fields[field.key] || "-").join(" — ");
           const statusLabel = row.filePath ? `Finns${row.fileName ? ` (${row.fileName})` : ""}` : "Saknas";
-          return `${line} — ${statusLabel}`;
+          // Must reach the actual exported document, not just the web UI — a stale
+          // "Koppla till befintligt dokument" reference (deleted/changed source row) is
+          // exactly the kind of thing that must not silently slip into what gets sent to IVO.
+          const linkWarning = getLinkedAttachmentWarning(row);
+          const warningSuffix = linkWarning ? ` [VARNING: ${linkWarning}]` : "";
+          return `${line} — ${statusLabel}${warningSuffix}`;
         }
 
         return def.fields.map((field) => row.fields[field.key] || "-").join(" — ");
@@ -1973,14 +2058,24 @@ export default function AnsokanPage() {
         .map((row) => {
           const name = row.fields.attachmentName || "(namnlös bilaga)";
           const related = row.fields.relatedRequirement || "-";
+          // Must reach the actual exported document, not just the web UI — see
+          // getLinkedAttachmentWarning for what this catches.
+          const linkWarning = getLinkedAttachmentWarning(row);
+          const warningLine = linkWarning ? `⚠ VARNING: ${linkWarning}` : null;
 
           if (!row.filePath) {
             // Listed explicitly rather than silently omitted — otherwise the export
             // looks incomplete with no explanation for why a checklist item has no
             // download link.
-            return [`### ${name}`, `Kopplat krav: ${related}`, "Ingen fil bifogad – hanteras separat.", "", "---", ""].join(
-              "\n"
-            );
+            return [
+              `### ${name}`,
+              `Kopplat krav: ${related}`,
+              "Ingen fil bifogad – hanteras separat.",
+              ...(warningLine ? [warningLine] : []),
+              "",
+              "---",
+              "",
+            ].join("\n");
           }
 
           const uploadedAtText = row.uploadedAt ? new Date(row.uploadedAt).toLocaleString("sv-SE") : "-";
@@ -1994,6 +2089,7 @@ export default function AnsokanPage() {
             `Kopplat krav: ${related}`,
             `Fil: ${row.fileName || "-"} (uppladdad ${uploadedAtText})`,
             `Nedladdning: ${openUrl}`,
+            ...(warningLine ? [warningLine] : []),
             "",
             "---",
             "",
@@ -3349,7 +3445,7 @@ export default function AnsokanPage() {
           </div>
         ) : null}
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4">
           <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Komplett ansökningspaket</p>
@@ -3383,32 +3479,6 @@ export default function AnsokanPage() {
                 className={secondaryButtonClass}
               >
                 Ladda ner komplett paket DOCX
-              </button>
-            </div>
-          </article>
-
-          <article className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-            <p className="text-sm font-semibold text-[color:var(--ink)]">Endast godkända dokumentutkast</p>
-            <p className="mt-1 text-xs text-[color:var(--muted)]">
-              Exporterar bara utkast som är granskade och godkända.
-            </p>
-            <p className="mt-2 text-xs text-[color:var(--muted)]">Godkända dokument: {approvedDocumentDraftCount}.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void downloadApprovedDocumentPackage("pdf")}
-                disabled={approvedDocumentDraftCount === 0}
-                className={secondaryButtonClass}
-              >
-                Ladda ner dokumentpaket PDF
-              </button>
-              <button
-                type="button"
-                onClick={() => void downloadApprovedDocumentPackage("docx")}
-                disabled={approvedDocumentDraftCount === 0}
-                className={secondaryButtonClass}
-              >
-                Ladda ner dokumentpaket DOCX
               </button>
             </div>
           </article>

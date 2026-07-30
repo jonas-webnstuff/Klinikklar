@@ -4882,6 +4882,12 @@ function WorkspacePageContent() {
       {showSection("avvikelser") ? (
       <section id="avvikelser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">3. Avvikelser (Komplett/Drift/Premium)</h2>
+        {!hasHydratedWorkspace ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
+        ) : !canUseIncidentModule ? (
+          <PlanLockPanel moduleLabel="Avvikelser" />
+        ) : (
+          <>
         <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
           <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
           <p className="mt-1 text-sm text-[color:var(--muted)]">
@@ -4898,11 +4904,6 @@ function WorkspacePageContent() {
             Öppna avvikelsehanteringsrutin
           </a>
         </div>
-        {!hasHydratedWorkspace ? (
-          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
-        ) : !canUseIncidentModule ? (
-          <PlanLockPanel moduleLabel="Avvikelser" />
-        ) : (
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny avvikelse</p>
@@ -5052,6 +5053,7 @@ function WorkspacePageContent() {
               )}
             </div>
           </div>
+          </>
         )}
       </section>
       ) : null}
@@ -5059,6 +5061,12 @@ function WorkspacePageContent() {
       {showSection("riskanalyser") ? (
       <section id="riskanalyser" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">4. Riskanalyser (Komplett/Drift/Premium)</h2>
+        {!hasHydratedWorkspace ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
+        ) : !canUseRiskModule ? (
+          <PlanLockPanel moduleLabel="Riskanalyser" />
+        ) : (
+          <>
         <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
           <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
           <p className="mt-1 text-sm text-[color:var(--muted)]">
@@ -5075,11 +5083,6 @@ function WorkspacePageContent() {
             Öppna riskanalysrutin
           </a>
         </div>
-        {!hasHydratedWorkspace ? (
-          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
-        ) : !canUseRiskModule ? (
-          <PlanLockPanel moduleLabel="Riskanalyser" />
-        ) : (
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny risk</p>
@@ -5253,6 +5256,7 @@ function WorkspacePageContent() {
               )}
             </div>
           </div>
+          </>
         )}
       </section>
       ) : null}
@@ -5260,6 +5264,12 @@ function WorkspacePageContent() {
       {showSection("arshjul") ? (
       <section id="arshjul" className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
         <h2 className="text-xl font-semibold text-[color:var(--ink)]">5. Årshjul och kontroller (Komplett/Drift/Premium)</h2>
+        {!hasHydratedWorkspace ? (
+          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
+        ) : !canUseControlModule ? (
+          <PlanLockPanel moduleLabel="Årshjul och kontroller" />
+        ) : (
+          <>
         <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
           <p className="text-sm font-semibold text-[color:var(--ink)]">Dokumenterad rutin</p>
           <p className="mt-1 text-sm text-[color:var(--muted)]">
@@ -5276,11 +5286,6 @@ function WorkspacePageContent() {
             Öppna kontrollrutin
           </a>
         </div>
-        {!hasHydratedWorkspace ? (
-          <p className="mt-3 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
-        ) : !canUseControlModule ? (
-          <PlanLockPanel moduleLabel="Årshjul och kontroller" />
-        ) : (
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
               <p className="text-sm font-semibold text-[color:var(--ink)]">Ny kontrollpunkt</p>
@@ -5447,6 +5452,7 @@ function WorkspacePageContent() {
               )}
             </div>
           </div>
+          </>
         )}
       </section>
       ) : null}

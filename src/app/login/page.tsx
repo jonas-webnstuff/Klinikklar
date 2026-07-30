@@ -31,7 +31,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isOAuthLoading, setIsOAuthLoading] = useState(false);
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -84,6 +84,22 @@ export default function LoginPage() {
 
     const supabase = createSupabaseBrowserClient();
 
+    if (mode === "forgot") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      });
+
+      setIsLoading(false);
+
+      if (error) {
+        setMessage(formatAuthErrorMessage(error.message));
+        return;
+      }
+
+      setMessage("Om adressen finns hos oss har vi skickat en länk för att återställa lösenordet.");
+      return;
+    }
+
     if (mode === "signup") {
       const { error } = await supabase.auth.signUp({
         email,
@@ -125,10 +141,12 @@ export default function LoginPage() {
           Klinikklar konto
         </p>
         <h1 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-[color:var(--ink)]">
-          {mode === "login" ? "Logga in" : "Skapa konto"}
+          {mode === "login" ? "Logga in" : mode === "signup" ? "Skapa konto" : "Återställ lösenord"}
         </h1>
         <p className="mt-3 text-[color:var(--muted)]">
-          Logga in för att komma åt workspace, dokument och organisationens data.
+          {mode === "forgot"
+            ? "Ange din e-postadress så skickar vi en länk för att återställa lösenordet."
+            : "Logga in för att komma åt workspace, dokument och organisationens data."}
         </p>
 
         {selectedPlan ? (
@@ -137,51 +155,55 @@ export default function LoginPage() {
           </div>
         ) : null}
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => handleOAuth("google")}
-            disabled={isOAuthLoading || isLoading}
-            className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:border-[color:var(--line-strong)] disabled:cursor-not-allowed disabled:text-slate-400"
-          >
-            Fortsätt med Google
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOAuth("azure")}
-            disabled={isOAuthLoading || isLoading}
-            className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:border-[color:var(--line-strong)] disabled:cursor-not-allowed disabled:text-slate-400"
-          >
-            Fortsätt med Microsoft
-          </button>
-        </div>
+        {mode !== "forgot" ? (
+          <>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => handleOAuth("google")}
+                disabled={isOAuthLoading || isLoading}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:border-[color:var(--line-strong)] disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                Fortsätt med Google
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOAuth("azure")}
+                disabled={isOAuthLoading || isLoading}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:border-[color:var(--line-strong)] disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                Fortsätt med Microsoft
+              </button>
+            </div>
 
-        <p className="mt-3 text-xs text-[color:var(--muted)]">
-          Du kan aktivera dessa providers i Supabase när du vill.
-        </p>
+            <p className="mt-3 text-xs text-[color:var(--muted)]">
+              Du kan aktivera dessa providers i Supabase när du vill.
+            </p>
 
-        <div className="mt-6 inline-flex rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-1">
-          <button
-            onClick={() => setMode("login")}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-              mode === "login"
-                ? "bg-white text-[color:var(--ink)] shadow-[0_8px_20px_rgba(13,39,87,0.06)]"
-                : "text-[color:var(--muted)]"
-            }`}
-          >
-            Logga in
-          </button>
-          <button
-            onClick={() => setMode("signup")}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-              mode === "signup"
-                ? "bg-white text-[color:var(--ink)] shadow-[0_8px_20px_rgba(13,39,87,0.06)]"
-                : "text-[color:var(--muted)]"
-            }`}
-          >
-            Skapa konto
-          </button>
-        </div>
+            <div className="mt-6 inline-flex rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-1">
+              <button
+                onClick={() => setMode("login")}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  mode === "login"
+                    ? "bg-white text-[color:var(--ink)] shadow-[0_8px_20px_rgba(13,39,87,0.06)]"
+                    : "text-[color:var(--muted)]"
+                }`}
+              >
+                Logga in
+              </button>
+              <button
+                onClick={() => setMode("signup")}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  mode === "signup"
+                    ? "bg-white text-[color:var(--ink)] shadow-[0_8px_20px_rgba(13,39,87,0.06)]"
+                    : "text-[color:var(--muted)]"
+                }`}
+              >
+                Skapa konto
+              </button>
+            </div>
+          </>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <label className="block space-y-1 text-sm text-[color:var(--muted)]">
@@ -195,25 +217,60 @@ export default function LoginPage() {
             />
           </label>
 
-          <label className="block space-y-1 text-sm text-[color:var(--muted)]">
-            Lösenord
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              minLength={6}
-              className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-[color:var(--ink)]"
-            />
-          </label>
+          {mode !== "forgot" ? (
+            <div className="space-y-1">
+              <label className="block space-y-1 text-sm text-[color:var(--muted)]">
+                Lösenord
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-[color:var(--ink)]"
+                />
+              </label>
+              {mode === "login" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("forgot");
+                    setMessage("");
+                  }}
+                  className="text-sm font-semibold text-[color:var(--brand)] hover:underline"
+                >
+                  Glömt lösenord?
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <button
             type="submit"
             disabled={isLoading || isOAuthLoading}
             className="mt-2 w-full rounded-xl bg-[color:var(--brand)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-2)] disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isLoading ? "Väntar..." : mode === "login" ? "Logga in" : "Skapa konto"}
+            {isLoading
+              ? "Väntar..."
+              : mode === "login"
+                ? "Logga in"
+                : mode === "signup"
+                  ? "Skapa konto"
+                  : "Skicka återställningslänk"}
           </button>
+
+          {mode === "forgot" ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMode("login");
+                setMessage("");
+              }}
+              className="block text-sm font-semibold text-[color:var(--brand)] hover:underline"
+            >
+              Tillbaka till inloggning
+            </button>
+          ) : null}
 
           {message ? <p className="text-sm text-[color:var(--muted)]">{message}</p> : null}
         </form>

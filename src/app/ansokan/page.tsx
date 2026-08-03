@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import OrganizationProfileForm from "@/components/OrganizationProfileForm";
+import { ApplicationPreparationChecklist } from "@/components/ansokan/ApplicationPreparationChecklist";
+import { getOrganizationProfileError, type OrganizationProfileInput } from "@/lib/organization-profile";
 import {
   documentKindFromRequirementCode,
   documentKindLabel,
@@ -68,14 +70,7 @@ type RequirementSupportingDocument = {
   uploadedAt: string | null;
 };
 
-type ProfileState = {
-  clinicName: string;
-  orgNumber: string;
-  address: string;
-  postalCode: string;
-  municipality: string;
-  email: string;
-};
+type ProfileState = OrganizationProfileInput;
 
 type AnswersState = Record<string, { answer: string; followUpAnswer: string }>;
 
@@ -1566,33 +1561,10 @@ export default function AnsokanPage() {
   }
 
   async function saveGuide(successMessage: string, blockKey = "guide") {
-    if (!profile.clinicName.trim()) {
-      setStatusMessage("Ange klinikens namn innan du sparar.");
-      return;
-    }
+    const profileError = getOrganizationProfileError(profile);
 
-    if (!profile.orgNumber.trim()) {
-      setStatusMessage("Ange organisationsnummer innan du sparar.");
-      return;
-    }
-
-    if (!profile.address.trim()) {
-      setStatusMessage("Ange besöksadress innan du sparar.");
-      return;
-    }
-
-    if (!profile.postalCode.trim()) {
-      setStatusMessage("Ange postnummer innan du sparar.");
-      return;
-    }
-
-    if (!profile.municipality.trim()) {
-      setStatusMessage("Ange ort innan du sparar.");
-      return;
-    }
-
-    if (!profile.email.trim()) {
-      setStatusMessage("Ange e-post innan du sparar.");
+    if (profileError) {
+      setStatusMessage(profileError);
       return;
     }
 
@@ -2394,6 +2366,8 @@ export default function AnsokanPage() {
         </div>
         {statusMessage ? <p className="mt-3 text-sm text-[color:var(--muted)]">{statusMessage}</p> : null}
       </header>
+
+      <ApplicationPreparationChecklist />
 
       <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -3230,6 +3204,12 @@ export default function AnsokanPage() {
             )}
           </div>
         </div>
+
+        <p className="mt-6 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--muted)]">
+          Detta är ett komplement till dokumentutkasten ovan – här kan du länka befintligt material (filer, länkar,
+          referenser) som ytterligare stöd för vilket krav som helst, utöver R-01–R-05:s fullständiga
+          AI-genererade dokument.
+        </p>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
           <div className="space-y-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">

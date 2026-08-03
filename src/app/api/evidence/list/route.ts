@@ -32,7 +32,7 @@ export async function POST() {
     const requirementIds = (requirements || []).map((row) => row.id);
 
     if (requirementIds.length === 0) {
-      return NextResponse.json({ ok: true, evidence: [] });
+      return NextResponse.json({ ok: true, evidence: [], requirements: [] });
     }
 
     const { data: evidenceRows, error: evidenceError } = await supabase

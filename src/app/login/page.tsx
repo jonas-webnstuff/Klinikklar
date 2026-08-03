@@ -113,7 +113,9 @@ export default function LoginPage() {
         return;
       }
 
-      setMessage("Konto skapat. Du kan nu logga in.");
+      setMessage(
+        "Vi har skickat ett bekräftelsemail till din e-postadress. Klicka på länken i mejlet för att aktivera kontot – därefter kan du logga in.",
+      );
       setMode("login");
       return;
     }

@@ -5,7 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
   controlId: z.string().uuid(),
-  status: z.enum(["pending", "done", "overdue", "skipped"]),
+  status: z.enum(["pending", "done", "skipped"]),
 });
 
 async function resolveUserOrganizationId(

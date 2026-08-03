@@ -4,16 +4,15 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  attachmentChecklistRequirementItems,
   complianceRequirements,
   facilityRequirementItems,
   managementSystemRequirementItems,
-  ownershipRequirementItems,
   questionnaireItems,
-  responsiblePersonRequirementItems,
 } from "@/lib/requirements";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { callAiAssist } from "@/lib/ai/request-assistance";
+import OrganizationProfileForm from "@/components/OrganizationProfileForm";
+import { getOrganizationProfileError, type OrganizationProfileInput } from "@/lib/organization-profile";
 import type {
   ControlTaskFrequency,
   ControlTaskStatus,
@@ -22,14 +21,7 @@ import type {
   RiskStatus,
 } from "@/types/domain";
 
-type ProfileState = {
-  clinicName: string;
-  orgNumber: string;
-  address: string;
-  postalCode: string;
-  municipality: string;
-  email: string;
-};
+type ProfileState = OrganizationProfileInput;
 
 type AnswersState = Record<string, { answer: string; followUpAnswer: string }>;
 
@@ -440,11 +432,11 @@ const controlStatusLabels: Record<ControlTaskStatus, string> = {
   skipped: "Hoppad över",
 };
 
-// Derives the status actually shown/counted: control_tasks.status only flips to "overdue"
-// when someone clicks the manual button, so a control past its nextDueDate that nobody has
-// touched otherwise stays "pending" forever. This is display-only — it never writes back to
-// the database, so manually resetting a still-overdue control to "pending" just shows
-// "Försenad" again immediately rather than silently un-overdue something that's still late.
+// Derives the status actually shown/counted. "overdue" can never be stored directly in
+// control_tasks.status (there is no manual action for it, see updateControlStatus) — it is
+// purely a live comparison against nextDueDate, so it can never get stuck: a control that
+// falls behind shows "Försenad" automatically, and it clears the moment it's marked done/
+// skipped or its due date moves, with nothing left to manually reset.
 function getEffectiveControlStatus(control: ControlItem, todayIso: string): ControlTaskStatus {
   if (control.status === "done" || control.status === "skipped") {
     return control.status;
@@ -1720,25 +1712,31 @@ function WorkspacePageContent() {
           : { tone: "warn" as const, summary: `${ledningssystemMissingFields.length} punkter saknas` };
 
     const riskStatus =
-      riskSummary.highPriority > 0
-        ? { tone: "alert" as const, summary: `Hög prioritet: ${riskSummary.highPriority}` }
-        : riskSummary.open > 0
-          ? { tone: "warn" as const, summary: `Öppna risker: ${riskSummary.open}` }
-          : { tone: "ok" as const, summary: "Allt OK" };
+      riskSummary.total === 0
+        ? { tone: "empty" as const, summary: "Inget tillagt än" }
+        : riskSummary.highPriority > 0
+          ? { tone: "alert" as const, summary: `Hög prioritet: ${riskSummary.highPriority}` }
+          : riskSummary.open > 0
+            ? { tone: "warn" as const, summary: `Öppna risker: ${riskSummary.open}` }
+            : { tone: "ok" as const, summary: "Allt OK" };
 
     const controlStatus =
-      controlSummary.overdue > 0
-        ? { tone: "alert" as const, summary: `Försenade kontroller: ${controlSummary.overdue}` }
-        : controlSummary.pending > 0
-          ? { tone: "warn" as const, summary: `Planerade kontroller: ${controlSummary.pending}` }
-          : { tone: "ok" as const, summary: "Allt OK" };
+      controlSummary.total === 0
+        ? { tone: "empty" as const, summary: "Inget tillagt än" }
+        : controlSummary.overdue > 0
+          ? { tone: "alert" as const, summary: `Försenade kontroller: ${controlSummary.overdue}` }
+          : controlSummary.pending > 0
+            ? { tone: "warn" as const, summary: `Planerade kontroller: ${controlSummary.pending}` }
+            : { tone: "ok" as const, summary: "Allt OK" };
 
     const incidentStatus =
-      incidentSummary.criticalOrHigh > 0
-        ? { tone: "alert" as const, summary: `Hög/kritisk: ${incidentSummary.criticalOrHigh}` }
-        : incidentSummary.open > 0
-          ? { tone: "warn" as const, summary: `Öppna avvikelser: ${incidentSummary.open}` }
-          : { tone: "ok" as const, summary: "Allt OK" };
+      incidentSummary.total === 0
+        ? { tone: "empty" as const, summary: "Inget tillagt än" }
+        : incidentSummary.criticalOrHigh > 0
+          ? { tone: "alert" as const, summary: `Hög/kritisk: ${incidentSummary.criticalOrHigh}` }
+          : incidentSummary.open > 0
+            ? { tone: "warn" as const, summary: `Öppna avvikelser: ${incidentSummary.open}` }
+            : { tone: "ok" as const, summary: "Allt OK" };
 
     return {
       ledningssystem: ledningssystemStatus,
@@ -1748,10 +1746,13 @@ function WorkspacePageContent() {
     };
   }, [
     ledningssystemMissingFields,
+    riskSummary.total,
     riskSummary.highPriority,
     riskSummary.open,
+    controlSummary.total,
     controlSummary.overdue,
     controlSummary.pending,
+    incidentSummary.total,
     incidentSummary.criticalOrHigh,
     incidentSummary.open,
   ]);
@@ -1898,11 +1899,15 @@ function WorkspacePageContent() {
     routineCoverageMissingPoints.length,
   ]);
 
-  const overviewToneClass = (tone: "ok" | "warn" | "alert") => {
+  const overviewToneClass = (tone: "empty" | "ok" | "warn" | "alert") => {
     return "border-[color:var(--line)] bg-white";
   };
 
-  const overviewToneBadgeClass = (tone: "ok" | "warn" | "alert") => {
+  const overviewToneBadgeClass = (tone: "empty" | "ok" | "warn" | "alert") => {
+    if (tone === "empty") {
+      return "bg-slate-100 text-slate-700";
+    }
+
     if (tone === "ok") {
       return "bg-emerald-100 text-emerald-800";
     }
@@ -1914,7 +1919,11 @@ function WorkspacePageContent() {
     return "bg-red-100 text-red-800";
   };
 
-  const overviewToneLabel = (tone: "ok" | "warn" | "alert") => {
+  const overviewToneLabel = (tone: "empty" | "ok" | "warn" | "alert") => {
+    if (tone === "empty") {
+      return "Kom igång";
+    }
+
     if (tone === "ok") {
       return "Allt OK";
     }
@@ -1939,15 +1948,7 @@ function WorkspacePageContent() {
   };
 
   const riskCardClass = (tone: "ok" | "warn" | "alert") => {
-    if (tone === "ok") {
-      return "border-emerald-200 bg-emerald-50";
-    }
-
-    if (tone === "warn") {
-      return "border-amber-200 bg-amber-50";
-    }
-
-    return "border-red-200 bg-red-50";
+    return "border-[color:var(--line)] bg-white";
   };
 
   const getAnswerValue = (key: string) => answers[key]?.answer || "";
@@ -2596,38 +2597,6 @@ function WorkspacePageContent() {
     setControlMessage("AI-förslag infogat i kontrollpunkten.");
   }
 
-  async function suggestResponsiblePeople(options?: { manual?: boolean }) {
-    const suggestion = await requestAiAssistance("responsible_people", options);
-    if (!suggestion || suggestion.feature !== "responsible_people") {
-      return;
-    }
-
-    setAnswerValue("responsible_operations_manager_name", suggestion.operationsManagerName);
-    setAnswerValue("responsible_operations_manager_role", suggestion.operationsManagerRole);
-    setAnswerValue("responsible_operations_manager_license", suggestion.operationsManagerLicense);
-    setAnswerValue("responsible_medical_name", suggestion.medicalResponsibleName);
-    setAnswerValue("responsible_medical_role", suggestion.medicalResponsibleRole);
-    setAnswerValue("responsible_medical_license", suggestion.medicalResponsibleLicense);
-    setAnswerValue("responsible_quality_name", suggestion.qualityResponsibleName);
-    setAnswerValue("responsible_quality_role", suggestion.qualityResponsibleRole);
-    setAnswerValue("responsible_quality_competence", suggestion.qualityResponsibleCompetence);
-    setWorkspaceMessage("AI har fyllt i förslag för ansvariga personer.");
-  }
-
-  async function suggestOwnershipSuitability(options?: { manual?: boolean }) {
-    const suggestion = await requestAiAssistance("ownership_suitability", options);
-    if (!suggestion || suggestion.feature !== "ownership_suitability") {
-      return;
-    }
-
-    setAnswerValue("ownership_legal_entity_name", suggestion.legalEntityName);
-    setAnswerValue("ownership_legal_entity_org_number", suggestion.legalEntityOrgNumber);
-    setAnswerValue("ownership_representative_name", suggestion.representativeName);
-    setAnswerValue("ownership_structure_description", suggestion.ownershipStructureDescription);
-    setAnswerValue("ownership_suitability_statement", suggestion.suitabilityStatement);
-    setWorkspaceMessage("AI har fyllt i förslag för ägarbild och lämplighet.");
-  }
-
   async function suggestFacilityAndEquipment(options?: { manual?: boolean }) {
     const suggestion = await requestAiAssistance("facility_and_equipment", options);
     if (!suggestion || suggestion.feature !== "facility_and_equipment") {
@@ -2639,20 +2608,6 @@ function WorkspacePageContent() {
     setAnswerValue("facility_equipment_scope", suggestion.equipmentScope);
     setAnswerValue("facility_special_risks", suggestion.specialRisks);
     setWorkspaceMessage("AI har fyllt i förslag för lokaler och utrustning.");
-  }
-
-  async function suggestAttachmentChecklist(options?: { manual?: boolean }) {
-    const suggestion = await requestAiAssistance("attachment_checklist", options);
-    if (!suggestion || suggestion.feature !== "attachment_checklist") {
-      return;
-    }
-
-    setAnswerValue("attachment_cover_note", suggestion.coverNote);
-    setAnswerValue("attachment_business_description_ref", suggestion.businessDescriptionRef);
-    setAnswerValue("attachment_management_system_ref", suggestion.managementSystemRef);
-    setAnswerValue("attachment_staffing_ref", suggestion.staffingRef);
-    setAnswerValue("attachment_evidence_index_ref", suggestion.evidenceIndexRef);
-    setWorkspaceMessage("AI har fyllt i förslag för bilagechecklistan.");
   }
 
   async function suggestRegulationWatchAction(options?: { manual?: boolean }) {
@@ -3103,7 +3058,7 @@ function WorkspacePageContent() {
     setControlMessage(`Standardårskontroller skapade: ${created}. Fanns redan: ${skipped}.`);
   }
 
-  async function updateControlStatus(controlId: string, status: ControlTaskStatus) {
+  async function updateControlStatus(controlId: string, status: "pending" | "done" | "skipped") {
     const response = await fetch("/api/controls/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3176,33 +3131,10 @@ function WorkspacePageContent() {
   }, [hasHydratedWorkspace]);
 
   async function saveWorkspace() {
-    if (!profile.clinicName.trim()) {
-      setWorkspaceMessage("Ange klinikens namn innan du sparar.");
-      return;
-    }
+    const profileError = getOrganizationProfileError(profile);
 
-    if (!profile.orgNumber.trim()) {
-      setWorkspaceMessage("Ange organisationsnummer innan du sparar.");
-      return;
-    }
-
-    if (!profile.address.trim()) {
-      setWorkspaceMessage("Ange besöksadress innan du sparar.");
-      return;
-    }
-
-    if (!profile.postalCode.trim()) {
-      setWorkspaceMessage("Ange postnummer innan du sparar.");
-      return;
-    }
-
-    if (!profile.municipality.trim()) {
-      setWorkspaceMessage("Ange ort innan du sparar.");
-      return;
-    }
-
-    if (!profile.email.trim()) {
-      setWorkspaceMessage("Ange e-post innan du sparar.");
+    if (profileError) {
+      setWorkspaceMessage(profileError);
       return;
     }
 
@@ -3250,33 +3182,10 @@ function WorkspacePageContent() {
   }
 
   async function saveApplicationSection(successMessage: string) {
-    if (!profile.clinicName.trim()) {
-      setWorkspaceMessage("Ange klinikens namn innan du sparar.");
-      return;
-    }
+    const profileError = getOrganizationProfileError(profile);
 
-    if (!profile.orgNumber.trim()) {
-      setWorkspaceMessage("Ange organisationsnummer innan du sparar.");
-      return;
-    }
-
-    if (!profile.address.trim()) {
-      setWorkspaceMessage("Ange besöksadress innan du sparar.");
-      return;
-    }
-
-    if (!profile.postalCode.trim()) {
-      setWorkspaceMessage("Ange postnummer innan du sparar.");
-      return;
-    }
-
-    if (!profile.municipality.trim()) {
-      setWorkspaceMessage("Ange ort innan du sparar.");
-      return;
-    }
-
-    if (!profile.email.trim()) {
-      setWorkspaceMessage("Ange e-post innan du sparar.");
+    if (profileError) {
+      setWorkspaceMessage(profileError);
       return;
     }
 
@@ -3313,18 +3222,10 @@ function WorkspacePageContent() {
   }
 
   async function saveProfileOnly() {
-    if (!profile.clinicName.trim()) {
-      setWorkspaceMessage("Ange klinikens namn.");
-      return;
-    }
+    const profileError = getOrganizationProfileError(profile);
 
-    if (!profile.orgNumber.trim()) {
-      setWorkspaceMessage("Ange organisationsnummer.");
-      return;
-    }
-
-    if (!profile.postalCode.trim()) {
-      setWorkspaceMessage("Ange postnummer.");
+    if (profileError) {
+      setWorkspaceMessage(profileError);
       return;
     }
 
@@ -4835,7 +4736,7 @@ function WorkspacePageContent() {
                 href="/workspace/riskanalyser"
                 className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
               >
-                Öppna riskanalyser
+                {overviewStatusCards.risks.tone === "empty" ? "Lägg till första risken" : "Öppna riskanalyser"}
               </a>
             </div>
           </article>
@@ -4852,7 +4753,7 @@ function WorkspacePageContent() {
                 href="/workspace/arshjul"
                 className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
               >
-                Öppna årshjul
+                {overviewStatusCards.controls.tone === "empty" ? "Registrera första kontrollen" : "Öppna årshjul"}
               </a>
             </div>
           </article>
@@ -4871,7 +4772,7 @@ function WorkspacePageContent() {
                 href="/workspace/avvikelser"
                 className="inline-flex rounded-lg border border-[color:var(--line)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--ink)]"
               >
-                Öppna avvikelser
+                {overviewStatusCards.incidents.tone === "empty" ? "Registrera första avvikelsen" : "Öppna avvikelser"}
               </a>
             </div>
           </article>
@@ -5431,18 +5332,9 @@ function WorkspacePageContent() {
                         <button
                           type="button"
                           onClick={() => updateControlStatus(control.id, "done")}
-                          className="rounded-lg bg-[color:var(--brand)] px-3 py-1 text-xs font-semibold text-white"
+                          className="rounded-lg border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--ink)]"
                         >
                           Klar
-                        </button>
-                      ) : null}
-                      {effectiveStatus !== "overdue" ? (
-                        <button
-                          type="button"
-                          onClick={() => updateControlStatus(control.id, "overdue")}
-                          className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-semibold text-white"
-                        >
-                          Försenad
                         </button>
                       ) : null}
                     </div>
@@ -5472,45 +5364,11 @@ function WorkspacePageContent() {
         </div>
 
         <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <input
-              value={profile.clinicName}
-              onChange={(event) => setProfile((prev) => ({ ...prev, clinicName: event.target.value }))}
-              placeholder="Klinikens namn"
-              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-            />
-            <input
-              value={profile.orgNumber}
-              onChange={(event) => setProfile((prev) => ({ ...prev, orgNumber: event.target.value }))}
-              placeholder="Organisationsnummer"
-              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-            />
-            <input
-              value={profile.address}
-              onChange={(event) => setProfile((prev) => ({ ...prev, address: event.target.value }))}
-              placeholder="Besöksadress"
-              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-            />
-            <input
-              value={profile.postalCode}
-              onChange={(event) => setProfile((prev) => ({ ...prev, postalCode: event.target.value }))}
-              placeholder="Postnummer"
-              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-            />
-            <input
-              value={profile.municipality}
-              onChange={(event) => setProfile((prev) => ({ ...prev, municipality: event.target.value }))}
-              placeholder="Ort"
-              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="email"
-              value={profile.email}
-              onChange={(event) => setProfile((prev) => ({ ...prev, email: event.target.value }))}
-              placeholder="E-post"
-              className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-            />
-          </div>
+          <OrganizationProfileForm
+            value={profile}
+            onChange={(field, value) => setProfile((prev) => ({ ...prev, [field]: value }))}
+            disabled={isSaving}
+          />
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
@@ -5524,182 +5382,6 @@ function WorkspacePageContent() {
             {workspaceMessage ? (
               <p className="text-sm text-[color:var(--muted)]">{workspaceMessage}</p>
             ) : null}
-          </div>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-            Ansvar och legitimation
-          </p>
-          <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">
-            Ansvariga personer (historisk referens)
-          </h3>
-          <p className="mt-2 text-sm text-[color:var(--muted)]">
-            Dokumentera de personer och roller som ska stå för ledning, medicinskt ansvar och kvalitetsarbete i ansökningsunderlaget.
-          </p>
-          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Detta fält räknas INTE längre för er IVO-ansökan. Ansvariga personer hanteras numera som ett eget,
-            strukturerat krav (R-07) i Ansökan-flödet – med stöd för flera personer, legitimationsnummer och korrekt
-            koppling till ansökans readiness-status. Det här fältet är kvar för historisk referens men uppdaterar
-            inte ansökningsunderlaget.
-          </p>
-
-          {canUseAiSupport ? (
-            <button
-              type="button"
-              onClick={() => void suggestResponsiblePeople()}
-              disabled={aiAssistLoading.responsible_people}
-              className="mt-4 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-            >
-              {aiAssistLoading.responsible_people ? "AI arbetar..." : "AI: Föreslå ansvariga roller"}
-            </button>
-          ) : null}
-          {aiAssistFailed.responsible_people ? (
-            <button
-              type="button"
-              onClick={() => suggestResponsiblePeople({ manual: true })}
-              className="mt-2 rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
-            >
-              Fortsätt utan AI-hjälp (fyll i mall)
-            </button>
-          ) : null}
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
-              <p className="text-sm font-semibold text-[color:var(--ink)]">Verksamhetsansvarig</p>
-              <div className="mt-3 space-y-3">
-                {responsiblePersonRequirementItems.slice(0, 3).map((item) => (
-                  <input
-                    key={item.key}
-                    value={getAnswerValue(item.key)}
-                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
-                    placeholder={item.placeholder}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
-              <p className="text-sm font-semibold text-[color:var(--ink)]">Medicinskt ansvarig</p>
-              <div className="mt-3 space-y-3">
-                {responsiblePersonRequirementItems.slice(3, 6).map((item) => (
-                  <input
-                    key={item.key}
-                    value={getAnswerValue(item.key)}
-                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
-                    placeholder={item.placeholder}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
-              <p className="text-sm font-semibold text-[color:var(--ink)]">Kvalitetsansvarig</p>
-              <div className="mt-3 space-y-3">
-                {responsiblePersonRequirementItems.slice(6, 9).map((item) => (
-                  <input
-                    key={item.key}
-                    value={getAnswerValue(item.key)}
-                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
-                    placeholder={item.placeholder}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void saveApplicationSection("Ansvariga personer sparade.")}
-              disabled={isSaving}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-            >
-              {isSaving ? "Sparar..." : "Spara ansvariga personer"}
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-            Ägarbild och lämplighet
-          </p>
-          <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">
-            Huvudman och företrädare (historisk referens)
-          </h3>
-          <p className="mt-2 text-sm text-[color:var(--muted)]">
-            Samla den grundläggande information som beskriver juridisk huvudman, företrädare och varför ledning och ägare bedöms lämpliga.
-          </p>
-          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Detta fält räknas INTE längre för er IVO-ansökan. Ägarbild hanteras numera som ett eget, strukturerat
-            krav (R-08) i Ansökan-flödet – med stöd för flera ägare, ägarandelar i procent och korrekt koppling till
-            ansökans readiness-status. Det här fältet är kvar för historisk referens men uppdaterar inte
-            ansökningsunderlaget.
-          </p>
-
-          {canUseAiSupport ? (
-            <button
-              type="button"
-              onClick={() => void suggestOwnershipSuitability()}
-              disabled={aiAssistLoading.ownership_suitability}
-              className="mt-4 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-            >
-              {aiAssistLoading.ownership_suitability ? "AI arbetar..." : "AI: Föreslå ägarbild och lämplighet"}
-            </button>
-          ) : null}
-          {aiAssistFailed.ownership_suitability ? (
-            <button
-              type="button"
-              onClick={() => suggestOwnershipSuitability({ manual: true })}
-              className="mt-2 rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
-            >
-              Fortsätt utan AI-hjälp (fyll i mall)
-            </button>
-          ) : null}
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {ownershipRequirementItems.map((item) => {
-              const isLongField =
-                item.key === "ownership_structure_description" ||
-                item.key === "ownership_suitability_statement";
-
-              if (isLongField) {
-                return (
-                  <textarea
-                    key={item.key}
-                    value={getAnswerValue(item.key)}
-                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
-                    placeholder={item.placeholder}
-                    rows={4}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm md:col-span-2"
-                  />
-                );
-              }
-
-              return (
-                <input
-                  key={item.key}
-                  value={getAnswerValue(item.key)}
-                  onChange={(event) => setAnswerValue(item.key, event.target.value)}
-                  placeholder={item.placeholder}
-                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                />
-              );
-            })}
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void saveApplicationSection("Ägaruppgifter sparade.")}
-              disabled={isSaving}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-            >
-              {isSaving ? "Sparar..." : "Spara ägaruppgifter"}
-            </button>
           </div>
         </div>
 
@@ -5759,68 +5441,6 @@ function WorkspacePageContent() {
             <p className="text-sm text-[color:var(--muted)]">
               Readiness för IVO kräver nu även denna beskrivning.
             </p>
-          </div>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-            Bilagechecklista
-          </p>
-          <h3 className="mt-2 text-base font-semibold text-[color:var(--ink)]">
-            Bilagereferenser (historisk referens)
-          </h3>
-          <p className="mt-2 text-sm text-[color:var(--muted)]">
-            Tidigare användes detta fält för att lista vilka dokument eller versioner som skulle skickas med ansökan.
-          </p>
-          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Detta fält räknas INTE längre för er IVO-ansökan. Bilagechecklistan hanteras numera som ett eget,
-            strukturerat krav (R-09) i Ansökan-flödet – med stöd för uppladdade filer och korrekt koppling till
-            ansökans readiness-status. Det här fältet är kvar för historisk referens men uppdaterar inte
-            ansökningsunderlaget.
-          </p>
-
-          {canUseAiSupport ? (
-            <button
-              type="button"
-              onClick={() => void suggestAttachmentChecklist()}
-              disabled={aiAssistLoading.attachment_checklist}
-              className="mt-4 rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-            >
-              {aiAssistLoading.attachment_checklist ? "AI arbetar..." : "AI: Föreslå bilagechecklista"}
-            </button>
-          ) : null}
-          {aiAssistFailed.attachment_checklist ? (
-            <button
-              type="button"
-              onClick={() => suggestAttachmentChecklist({ manual: true })}
-              className="mt-2 rounded-xl border border-[color:var(--line)] px-3 py-2 text-sm font-semibold text-[color:var(--muted)]"
-            >
-              Fortsätt utan AI-hjälp (fyll i mall)
-            </button>
-          ) : null}
-
-          <div className="mt-4 grid gap-3">
-            {attachmentChecklistRequirementItems.map((item) => (
-              <textarea
-                key={item.key}
-                value={getAnswerValue(item.key)}
-                onChange={(event) => setAnswerValue(item.key, event.target.value)}
-                placeholder={item.placeholder}
-                rows={2}
-                className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-              />
-            ))}
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void saveApplicationSection("Bilagechecklistan sparad.")}
-              disabled={isSaving}
-              className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:cursor-not-allowed disabled:text-slate-400"
-            >
-              {isSaving ? "Sparar..." : "Spara bilagechecklista"}
-            </button>
           </div>
         </div>
 

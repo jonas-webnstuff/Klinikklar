@@ -132,6 +132,7 @@ const inputSchema = z.object({
     .optional(),
   currentRoutine: z
     .object({
+      requirementPoint: z.string().default(""),
       area: z.string().default(""),
       changeLog: z.string().default(""),
       owner: z.string().default(""),
@@ -357,6 +358,7 @@ function featureGuidance(feature: GenerateAssistanceInput["feature"]) {
     case "routine":
       return [
         "Formulera en faktisk rutinuppdatering, inte marknadstext.",
+        "Texten ska vara specifik för den angivna kravpunkten (requirementPoint) i indata, inte ett generiskt svar som skulle passa vilken punkt som helst.",
         "Beskriv vilket område som ändras, varför rutinen uppdateras och hur uppföljning ska ske.",
         "Föreslå en ansvarig roll som känns realistisk för en privat tandvårdsklinik.",
       ].join(" ");
@@ -452,16 +454,21 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
         ownerRole: input.currentRisk?.ownerRole || "Verksamhetschef",
         dueDate: input.currentRisk?.dueDate || isoDateAfter(30),
       };
-    case "routine":
+    case "routine": {
+      const requirementPoint = input.currentRoutine?.requirementPoint || "";
+
       return {
         feature: "routine",
-        area: input.currentRoutine?.area || "Steril och hygien",
+        area: input.currentRoutine?.area || requirementPoint || "Steril och hygien",
         changeLog:
           input.currentRoutine?.changeLog ||
-          "Rutinen uppdateras för att tydliggöra ansvar, kontrollpunkter och dokumentation vid avvikelser, egenkontroller och återkommande uppföljning.",
+          (requirementPoint
+            ? `Rutinen för "${requirementPoint}" uppdateras för att tydliggöra ansvar, kontrollpunkter och dokumentation vid avvikelser, egenkontroller och återkommande uppföljning.`
+            : "Rutinen uppdateras för att tydliggöra ansvar, kontrollpunkter och dokumentation vid avvikelser, egenkontroller och återkommande uppföljning."),
         owner: input.currentRoutine?.owner || "Kvalitetsansvarig",
         nextReview: input.currentRoutine?.nextReview || isoDateAfter(90),
       };
+    }
     case "incident_investigation":
       return {
         feature: "incident_investigation",

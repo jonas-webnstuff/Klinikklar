@@ -230,6 +230,77 @@ export const managementSystemRequirementItems: ManagementSystemRequirementItem[]
   { key: "management_system_next_review", label: "Nästa planerade uppföljning" },
 ];
 
+// Ongoing operational compliance gaps against SOSFS 2011:9 / patientsäkerhetslagen,
+// identified alongside R-01–R-05 but deliberately kept out of managementSystemRequirementItems
+// and complianceRequirements: none of these should affect R-02 completeness or IVO application
+// readiness — they are recurring drift requirements, not part of the tillståndsansökan.
+export interface OperationalComplianceItem {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+export const patientSafetyReportItems: OperationalComplianceItem[] = [
+  {
+    key: "patient_safety_report_summary",
+    label: "Sammanfattning av årets kvalitetsarbete",
+    placeholder: "Sammanfatta årets kvalitetsarbete och hur patientsäkerheten har utvecklats.",
+  },
+  {
+    key: "patient_safety_report_risks",
+    label: "Väsentliga risker som identifierats",
+    placeholder: "Beskriv de mest väsentliga riskerna som identifierats under året.",
+  },
+  {
+    key: "patient_safety_report_actions",
+    label: "Åtgärder som vidtagits",
+    placeholder: "Beskriv vilka åtgärder som vidtagits för att minska riskerna.",
+  },
+  {
+    key: "patient_safety_report_previous_results",
+    label: "Resultat av föregående års åtgärder",
+    placeholder: "Beskriv resultatet av åtgärder som beslutades i föregående års patientsäkerhetsberättelse.",
+  },
+];
+
+export const lexMariaRoutineItems: OperationalComplianceItem[] = [
+  {
+    key: "lex_maria_responsible_role",
+    label: "Ansvarig roll",
+    placeholder: "Vem ansvarar för att bedöma och anmäla enligt Lex Maria (ex. Verksamhetschef)?",
+  },
+  {
+    key: "lex_maria_process_description",
+    label: "Beskrivning av anmälningsprocessen",
+    placeholder: "Beskriv hur en allvarlig vårdskada eller risk för sådan identifieras, utreds och anmäls till IVO.",
+  },
+];
+
+export const patientFeedbackItems: OperationalComplianceItem[] = [
+  {
+    key: "patient_feedback_process",
+    label: "Hur patienter och närstående kan lämna synpunkter",
+    placeholder: "Beskriv hur patienter och närstående kan lämna synpunkter eller klagomål, och hur de hanteras.",
+  },
+];
+
+export const staffInvolvementItems: OperationalComplianceItem[] = [
+  {
+    key: "staff_involvement_process",
+    label: "Hur personalen görs delaktig i kvalitetsarbetet",
+    placeholder: "Beskriv t.ex. regelbundna kvalitetsmöten och hur förbättringsförslag samlas in från personalen.",
+  },
+];
+
+export const preChangeRiskAssessmentItems: OperationalComplianceItem[] = [
+  {
+    key: "pre_change_risk_assessment_process",
+    label: "Riskbedömning inför verksamhetsförändringar",
+    placeholder:
+      "Beskriv rutinen för att göra en ny riskbedömning inför konkreta förändringar (ny utrustning, ny personal, ändrat vårdutbud) – utöver den löpande riskanalysen.",
+  },
+];
+
 export const responsiblePersonRequirementItems: ResponsiblePersonRequirementItem[] = [
   {
     key: "responsible_operations_manager_name",

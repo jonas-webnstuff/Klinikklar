@@ -6,8 +6,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   complianceRequirements,
   facilityRequirementItems,
+  lexMariaRoutineItems,
   managementSystemRequirementItems,
+  patientFeedbackItems,
+  patientSafetyReportItems,
+  preChangeRiskAssessmentItems,
   questionnaireItems,
+  staffInvolvementItems,
 } from "@/lib/requirements";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { callAiAssist } from "@/lib/ai/request-assistance";
@@ -416,6 +421,15 @@ const annualControlTemplates = [
     description: "Granska risker med hög prioritet, ansvar, tidsfrister och effekten av riskreducerande åtgärder.",
   },
 ] as const;
+
+const patientSafetyReportControlTitle = "Patientsäkerhetsberättelse";
+
+// Patientsäkerhetsberättelsen ska vara upprättad senast 1 mars varje år (patientsäkerhetslagen).
+function nextMarchFirstIso(todayIso: string): string {
+  const year = Number(todayIso.slice(0, 4));
+  const marchFirstThisYear = `${year}-03-01`;
+  return todayIso <= marchFirstThisYear ? marchFirstThisYear : `${year + 1}-03-01`;
+}
 
 const controlFrequencyLabels: Record<ControlTaskFrequency, string> = {
   weekly: "Veckovis",
@@ -1367,6 +1381,14 @@ function WorkspacePageContent() {
     return summary;
   }, [controls, todayIso]);
 
+  const patientSafetyReportControl = useMemo(
+    () =>
+      controls.find(
+        (control) => control.title.trim().toLowerCase() === patientSafetyReportControlTitle.toLowerCase()
+      ) || null,
+    [controls]
+  );
+
   const supportSlaSummary = useMemo(() => {
     const now = Date.now();
     let answeredWithinSla = 0;
@@ -2216,12 +2238,6 @@ function WorkspacePageContent() {
     }
 
     setActiveRoutineRequirementKey(entry.requirementKey);
-    setRoutineForm({
-      area: entry.area,
-      changeLog: entry.changeLog,
-      owner: entry.owner,
-      nextReview: entry.nextReview,
-    });
     setWorkspaceMessage(`Rutin laddad för redigering: ${entry.requirementLabel}.`);
   }
 
@@ -2262,11 +2278,7 @@ function WorkspacePageContent() {
     if (entry) {
       editRoutineForPoint(requirementKey);
     } else {
-      const point = routineRequirementPoints.find((item) => item.key === requirementKey);
-      if (point) {
-        setActiveRoutineRequirementKey(point.key);
-        setRoutineForm({ ...initialRoutineForm, area: point.label });
-      }
+      setActiveRoutineRequirementKey(requirementKey);
     }
 
     const element = document.getElementById("routine-field-area") as HTMLInputElement | null;
@@ -2278,7 +2290,13 @@ function WorkspacePageContent() {
     element.focus();
   }
 
-  async function requestAiAssistance(feature: AiAssistFeature, options?: { manual?: boolean }) {
+  async function requestAiAssistance(
+    feature: AiAssistFeature,
+    options?: { manual?: boolean },
+    overrides?: {
+      routine?: { requirementPoint: string; area: string; changeLog: string; owner: string; nextReview: string };
+    }
+  ) {
     if (!canUseAiSupport) {
       return null;
     }
@@ -2335,7 +2353,7 @@ function WorkspacePageContent() {
           staffingRef: getAnswerValue("attachment_staffing_ref"),
           evidenceIndexRef: getAnswerValue("attachment_evidence_index_ref"),
         },
-        currentRoutine: {
+        currentRoutine: overrides?.routine || {
           requirementPoint: activeRoutineRequirement.label,
           area: routineForm.area,
           changeLog: routineForm.changeLog,
@@ -2400,9 +2418,18 @@ function WorkspacePageContent() {
 
   async function suggestRoutineUpdate(
     targetPoint: (typeof routineRequirementPoints)[number] = activeRoutineRequirement,
-    options?: { manual?: boolean }
+    options?: { manual?: boolean },
+    routineOverride?: { area: string; changeLog: string; owner: string; nextReview: string }
   ) {
-    const suggestion = await requestAiAssistance("routine", options);
+    const suggestion = await requestAiAssistance("routine", options, {
+      routine: {
+        requirementPoint: targetPoint.label,
+        area: routineOverride?.area ?? routineForm.area,
+        changeLog: routineOverride?.changeLog ?? routineForm.changeLog,
+        owner: routineOverride?.owner ?? routineForm.owner,
+        nextReview: routineOverride?.nextReview ?? routineForm.nextReview,
+      },
+    });
     if (!suggestion || suggestion.feature !== "routine") return;
 
     const area = suggestion.area?.trim() || targetPoint.label;
@@ -2434,9 +2461,18 @@ function WorkspacePageContent() {
       return;
     }
 
+    // Pass this point's own saved data (or blank) explicitly rather than relying on
+    // routineForm — during a bulk loop over multiple points, routineForm still reflects
+    // whichever point was active before the loop started, not the one being generated here.
+    const existingEntry = routines.find((item) => item.requirementKey === pointKey);
+
     setActiveRoutineRequirementKey(pointKey);
-    setRoutineForm((prev) => ({ ...prev, area: point.label }));
-    await suggestRoutineUpdate(point, options);
+    await suggestRoutineUpdate(point, options, {
+      area: existingEntry?.area || "",
+      changeLog: existingEntry?.changeLog || "",
+      owner: existingEntry?.owner || "",
+      nextReview: existingEntry?.nextReview || "",
+    });
   }
 
   async function suggestAllMissingRoutines() {
@@ -3058,6 +3094,27 @@ function WorkspacePageContent() {
     setControlMessage(`Standardårskontroller skapade: ${created}. Fanns redan: ${skipped}.`);
   }
 
+  async function ensurePatientSafetyReportControl() {
+    const response = await fetch("/api/controls/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: patientSafetyReportControlTitle,
+        description:
+          "Årlig patientsäkerhetsberättelse enligt patientsäkerhetslagen. Ska vara upprättad senast 1 mars.",
+        frequency: "yearly",
+        ownerRole: "Verksamhetschef",
+        nextDueDate: nextMarchFirstIso(todayIso),
+      }),
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    await loadControls();
+  }
+
   async function updateControlStatus(controlId: string, status: "pending" | "done" | "skipped") {
     const response = await fetch("/api/controls/status", {
       method: "POST",
@@ -3114,6 +3171,25 @@ function WorkspacePageContent() {
     loadControls();
   }, [activePlan, canUseControlModule, hasHydratedWorkspace, loadControls]);
 
+  // Ensures the recurring "Patientsäkerhetsberättelse" checkpoint exists in Årshjulet — this is
+  // a driftskrav, not part of the application, so it's created lazily here rather than requiring
+  // a manual button like the R-01–R-05 templates.
+  useEffect(() => {
+    if (!hasHydratedWorkspace || !canUseControlModule || isControlsLoading) {
+      return;
+    }
+
+    if (patientSafetyReportControl) {
+      return;
+    }
+
+    void ensurePatientSafetyReportControl();
+    // ensurePatientSafetyReportControl is intentionally omitted: it's redefined every render
+    // (not memoized), and including it would re-run this effect on every render instead of only
+    // when hydration/plan/loading state or the control's presence actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydratedWorkspace, canUseControlModule, isControlsLoading, patientSafetyReportControl]);
+
   useEffect(() => {
     if (!hasHydratedWorkspace) {
       return;
@@ -3121,6 +3197,27 @@ function WorkspacePageContent() {
 
     loadRoutines();
   }, [hasHydratedWorkspace, loadRoutines]);
+
+  // Single source of truth for the routine editor: whenever the selected point or the
+  // loaded routines change, derive the form from the saved entry (or reset it) instead of
+  // relying on every call site that changes activeRoutineRequirementKey to also remember to
+  // set routineForm itself — that scattered-update pattern is what let stale text from a
+  // previously selected point get saved onto a newly selected one.
+  useEffect(() => {
+    const entry = routines.find((item) => item.requirementKey === activeRoutineRequirementKey);
+    const point = routineRequirementPoints.find((item) => item.key === activeRoutineRequirementKey);
+
+    if (entry) {
+      setRoutineForm({
+        area: entry.area,
+        changeLog: entry.changeLog,
+        owner: entry.owner,
+        nextReview: entry.nextReview,
+      });
+    } else {
+      setRoutineForm({ ...initialRoutineForm, area: point?.label || "" });
+    }
+  }, [activeRoutineRequirementKey, routines]);
 
   useEffect(() => {
     if (!hasHydratedWorkspace) {
@@ -3919,6 +4016,161 @@ function WorkspacePageContent() {
                 </button>
               </div>
             </article>
+          </div>
+
+          <div className="mt-6 space-y-4 rounded-2xl border border-[color:var(--line)] bg-white p-6">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">
+                Löpande driftskrav
+              </p>
+              <h3 className="mt-1 text-lg font-semibold text-[color:var(--ink)]">
+                Utöver ansökan – påverkar inte R-01–R-10
+              </h3>
+              <p className="mt-2 text-sm text-[color:var(--muted)]">
+                Fem krav från SOSFS 2011:9 och patientsäkerhetslagen som gäller den löpande driften av
+                ledningssystemet, utöver det som redan täcks av R-01–R-05. Dessa fält räknas inte in i
+                ansökans readiness-status.
+              </p>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Patientsäkerhetsberättelse (årlig, senast 1 mars)
+              </p>
+              {patientSafetyReportItems.map((item) => (
+                <label
+                  key={item.key}
+                  className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
+                >
+                  {item.label}
+                  <textarea
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.placeholder}
+                    rows={2}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              ))}
+              <p className="text-xs text-[color:var(--muted)]">
+                {patientSafetyReportControl
+                  ? `Kopplad kontrollpunkt i årshjulet: ${
+                      controlStatusLabels[getEffectiveControlStatus(patientSafetyReportControl, todayIso)]
+                    }, förfaller ${patientSafetyReportControl.nextDueDate || "-"}.`
+                  : "Kontrollpunkt i årshjulet skapas automatiskt."}{" "}
+                <a
+                  href="/workspace/arshjul"
+                  className="font-semibold text-[color:var(--brand)] underline"
+                >
+                  Öppna årshjul
+                </a>
+              </p>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Lex Maria-rutin
+              </p>
+              {lexMariaRoutineItems.map((item) => (
+                <label
+                  key={item.key}
+                  className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
+                >
+                  {item.label}
+                  <textarea
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.placeholder}
+                    rows={2}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              ))}
+              <label className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]">
+                Senast uppdaterad
+                <input
+                  type="date"
+                  value={getAnswerValue("lex_maria_last_reviewed_date")}
+                  onChange={(event) => setAnswerValue("lex_maria_last_reviewed_date", event.target.value)}
+                  className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                />
+              </label>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Patienters och närståendes synpunkter
+              </p>
+              {patientFeedbackItems.map((item) => (
+                <label
+                  key={item.key}
+                  className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
+                >
+                  {item.label}
+                  <textarea
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.placeholder}
+                    rows={2}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Personalens delaktighet
+              </p>
+              {staffInvolvementItems.map((item) => (
+                <label
+                  key={item.key}
+                  className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
+                >
+                  {item.label}
+                  <textarea
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.placeholder}
+                    rows={2}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+                Riskanalys inför verksamhetsförändringar
+              </p>
+              <p className="text-xs text-[color:var(--muted)]">
+                Komplement till den löpande riskanalysen (R-03) – inte en ersättning.
+              </p>
+              {preChangeRiskAssessmentItems.map((item) => (
+                <label
+                  key={item.key}
+                  className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
+                >
+                  {item.label}
+                  <textarea
+                    value={getAnswerValue(item.key)}
+                    onChange={(event) => setAnswerValue(item.key, event.target.value)}
+                    placeholder={item.placeholder}
+                    rows={2}
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void saveWorkspace()}
+              disabled={isSaving}
+              className="w-full rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {isSaving ? "Sparar..." : "Spara"}
+            </button>
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">

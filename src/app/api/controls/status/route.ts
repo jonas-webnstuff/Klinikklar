@@ -24,6 +24,37 @@ async function resolveUserOrganizationId(
   return membership?.organization_id || null;
 }
 
+// Advances a recurring control to its next occurrence. control_tasks rows never regenerated
+// themselves before this — marking something "done" just stamped last_completed_at and left the
+// row stuck in "done" forever, so a yearly/monthly/etc. checkpoint had to be manually recreated
+// every cycle. This keeps the row itself as the single, ongoing recurring instance.
+function advanceDueDate(dueDateIso: string, frequency: string): string {
+  const date = new Date(`${dueDateIso}T00:00:00Z`);
+
+  if (frequency === "weekly") {
+    date.setUTCDate(date.getUTCDate() + 7);
+    return date.toISOString().slice(0, 10);
+  }
+
+  const monthsToAdd =
+    frequency === "monthly" ? 1 : frequency === "quarterly" ? 3 : frequency === "yearly" ? 12 : 0;
+
+  if (monthsToAdd === 0) {
+    return dueDateIso;
+  }
+
+  // Adding months naively (setUTCMonth on a day-31 date) overflows into the wrong month for
+  // shorter months (e.g. Jan 31 + 1 month becomes Mar 3, not Feb 28) — clamp to the target
+  // month's actual last day instead.
+  const originalDay = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + monthsToAdd);
+  const daysInTargetMonth = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(originalDay, daysInTargetMonth));
+
+  return date.toISOString().slice(0, 10);
+}
+
 export async function POST(request: Request) {
   try {
     const payload = bodySchema.parse(await request.json());
@@ -45,7 +76,7 @@ export async function POST(request: Request) {
 
     const { data: existing, error: readError } = await supabase
       .from("control_tasks")
-      .select("id")
+      .select("id, frequency, next_due_date")
       .eq("id", payload.controlId)
       .eq("organization_id", organizationId)
       .maybeSingle();
@@ -56,12 +87,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Kontrollpunkten hittades inte." }, { status: 404 });
     }
 
-    const updates: { status: string; last_completed_at?: string | null } = {
+    const updates: { status: string; last_completed_at?: string | null; next_due_date?: string } = {
       status: payload.status,
     };
 
     if (payload.status === "done") {
       updates.last_completed_at = new Date().toISOString();
+
+      if (existing.frequency !== "ad_hoc" && existing.next_due_date) {
+        updates.next_due_date = advanceDueDate(existing.next_due_date, existing.frequency);
+        updates.status = "pending";
+      }
     }
 
     const { error } = await supabase

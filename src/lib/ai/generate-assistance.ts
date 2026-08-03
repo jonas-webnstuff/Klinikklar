@@ -158,6 +158,24 @@ const inputSchema = z.object({
       revisionPercent: z.number().default(0),
     })
     .optional(),
+  // Fetched server-side (see /api/ai/assist) from the caller's own application/organization data —
+  // never client-supplied — so suggestions can reference the clinic's actual staffing, care scope
+  // and already-identified risks instead of generic tandvård boilerplate.
+  clinicContext: z
+    .object({
+      staffingRoles: z
+        .array(
+          z.object({
+            role: z.string().default(""),
+            headcount: z.string().default(""),
+            competenceNotes: z.string().default(""),
+          })
+        )
+        .default([]),
+      careScopeLabels: z.array(z.string()).default([]),
+      existingRiskTitles: z.array(z.string()).default([]),
+    })
+    .optional(),
 });
 
 const riskOutputSchema = z.object({
@@ -352,6 +370,8 @@ function featureGuidance(feature: GenerateAssistanceInput["feature"]) {
     case "risk_analysis":
       return [
         "Utgå från konkreta risker i tandvård, till exempel sterilhantering, journalföring, delegering, läkemedel, röntgen eller bemanningsbrist.",
+        "Ta hänsyn till klinikens faktiska bemanning och registrerade inriktningskoder (vårdutbud) i indata — undvik generiska risker som inte är relevanta för just den här verksamhetens storlek eller inriktning (t.ex. föreslå inte en röntgenrisk om ingen röntgenrelaterad inriktning eller utrustning framgår).",
+        "Föreslå inte en risk som redan finns med i listan över redan identifierade risker — välj ett annat, ännu inte täckt riskområde.",
         "Beskriv risk, möjlig orsak, möjlig konsekvens och vad som praktiskt bör följas upp.",
         "Välj sannolikhet och konsekvens på en rimlig nivå, inte alltid högsta värden.",
       ].join(" ");
@@ -360,12 +380,14 @@ function featureGuidance(feature: GenerateAssistanceInput["feature"]) {
         "Formulera en faktisk rutinuppdatering, inte marknadstext.",
         "Texten ska vara specifik för den angivna kravpunkten (requirementPoint) i indata, inte ett generiskt svar som skulle passa vilken punkt som helst.",
         "Beskriv vilket område som ändras, varför rutinen uppdateras och hur uppföljning ska ske.",
-        "Föreslå en ansvarig roll som känns realistisk för en privat tandvårdsklinik.",
+        "Föreslå en ansvarig roll som känns realistisk för just den här klinikens faktiska bemanning i indata, om sådan finns angiven — annars en roll som är realistisk för en privat tandvårdsklinik.",
+        "Om klinikens vårdutbud (inriktningskoder) framgår i indata, koppla gärna rutinen till det faktiska vårdutbudet istället för att skriva generiskt.",
       ].join(" ");
     case "incident_investigation":
       return [
         "Skriv som en saklig intern utredning efter en avvikelse.",
         "Beskriv händelse, troliga orsaker, påverkan på patient eller verksamhet och direkt åtgärd.",
+        "Om klinikens faktiska bemanning eller vårdutbud framgår i indata, låt utredningen och åtgärden kännas grundad i den — t.ex. vem som praktiskt bör kontaktas eller ansvara, snarare än en anonym roll.",
         "Undvik överdrifter och skriv inte att något är lagkrav om det inte uttryckligen framgår.",
       ].join(" ");
     case "management_system":
@@ -441,19 +463,24 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
   const isPremium = input.plan === "step3";
 
   switch (input.feature) {
-    case "risk_analysis":
+    case "risk_analysis": {
+      const careScopeLabel =
+        input.clinicContext?.careScopeLabels?.[0] || input.careScope || "verksamhetens huvudprocesser";
+      const staffingRole = input.clinicContext?.staffingRoles?.[0]?.role;
+      const focusLabel = staffingRole ? `${careScopeLabel} (bemanning: ${staffingRole})` : careScopeLabel;
+
       return {
         feature: "risk_analysis",
-        title:
-          input.currentRisk?.title || `Riskanalys för ${input.careScope || "verksamhetens huvudprocesser"}`,
+        title: input.currentRisk?.title || `Riskanalys för ${focusLabel}`,
         description:
           input.currentRisk?.description ||
-          `Risk kopplad till ${input.careScope || "vårdutbudet"}. Beskriv troliga orsaker, konsekvenser för patientsäkerheten samt vilka förebyggande kontroller och uppföljningar som ska minska risken över tid.`,
+          `Risk kopplad till ${focusLabel}. Beskriv troliga orsaker, konsekvenser för patientsäkerheten samt vilka förebyggande kontroller och uppföljningar som ska minska risken över tid.`,
         probability: input.currentRisk?.probability || 3,
         consequence: input.currentRisk?.consequence || 4,
         ownerRole: input.currentRisk?.ownerRole || "Verksamhetschef",
         dueDate: input.currentRisk?.dueDate || isoDateAfter(30),
       };
+    }
     case "routine": {
       const requirementPoint = input.currentRoutine?.requirementPoint || "";
 
@@ -469,7 +496,9 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
         nextReview: input.currentRoutine?.nextReview || isoDateAfter(90),
       };
     }
-    case "incident_investigation":
+    case "incident_investigation": {
+      const responsibleRole = input.clinicContext?.staffingRoles?.[0]?.role || "ansvarig roll";
+
       return {
         feature: "incident_investigation",
         description:
@@ -477,8 +506,9 @@ function fallbackOutput(input: GenerateAssistanceInput): GenerateAssistanceOutpu
           "Beskriv händelsen kronologiskt, möjliga orsaker, berörda processer, eventuell påverkan på patient eller arbetsflöde samt vad som behöver följas upp vidare.",
         immediateAction:
           input.currentIncident?.immediateAction ||
-          "Säkra omedelbart patientsäkerheten, informera ansvarig roll, dokumentera initial bedömning och starta utredning samma arbetsdag.",
+          `Säkra omedelbart patientsäkerheten, informera ${responsibleRole}, dokumentera initial bedömning och starta utredning samma arbetsdag.`,
       };
+    }
     case "management_system":
       return {
         feature: "management_system",
@@ -718,6 +748,33 @@ function outputInstructions(feature: GenerateAssistanceInput["feature"]) {
   }
 }
 
+function describeStaffingRoles(input: GenerateAssistanceInput): string {
+  const roles = input.clinicContext?.staffingRoles || [];
+
+  if (roles.length === 0) {
+    return "Ej angivet";
+  }
+
+  return roles
+    .map((role) => {
+      const parts = [role.role || "Ej angiven roll"];
+      if (role.headcount) parts.push(`${role.headcount} st`);
+      if (role.competenceNotes) parts.push(role.competenceNotes);
+      return parts.join(", ");
+    })
+    .join("; ");
+}
+
+function describeCareScopeLabels(input: GenerateAssistanceInput): string {
+  const labels = input.clinicContext?.careScopeLabels || [];
+  return labels.length > 0 ? labels.join(", ") : "Ej angivet";
+}
+
+function describeExistingRiskTitles(input: GenerateAssistanceInput): string {
+  const titles = input.clinicContext?.existingRiskTitles || [];
+  return titles.length > 0 ? titles.map((title) => `"${title}"`).join(", ") : "Inga ännu";
+}
+
 function buildPrompt(input: GenerateAssistanceInput) {
   return [
     "Du är en AI-assistent för svensk privat tandvård och ledningssystem.",
@@ -733,6 +790,9 @@ function buildPrompt(input: GenerateAssistanceInput) {
     `Vårdutbud: ${input.careScope}`,
     `Kvalitetsarbete: ${input.qualityProcess}`,
     `Bemanning: ${input.staffing}`,
+    `Klinikens faktiska bemanning (roll, antal, kompetenskrav): ${describeStaffingRoles(input)}`,
+    `Vårdutbud enligt registrerade inriktningskoder: ${describeCareScopeLabels(input)}`,
+    `Redan identifierade risker (föreslå inte dubbletter av dessa): ${describeExistingRiskTitles(input)}`,
     `Avvikelserutin: ${input.incidentRoutine}`,
     `Nuvarande riskdata: ${JSON.stringify(input.currentRisk || {})}`,
     `Nuvarande rutinutkast: ${JSON.stringify(input.currentRoutine || {})}`,

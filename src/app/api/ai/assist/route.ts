@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { AiAssistanceError, generateAssistance } from "@/lib/ai/generate-assistance";
+import { AiAssistanceError, generateAssistance, type GenerateAssistanceInput } from "@/lib/ai/generate-assistance";
+import { careScopeCodeDefinitions } from "@/lib/requirements";
+import { resolveUserApplicationContext } from "@/lib/application-status";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
   plan: z.enum(["ansokan", "step1", "step2", "step3"]),
@@ -116,7 +120,62 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await generateAssistance(payload);
+    const authSupabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await authSupabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
+    }
+
+    // risk_analysis, incident_investigation and routine use this (see generate-assistance.ts
+    // featureGuidance) — fetched here rather than trusting client-supplied data, since the client
+    // has no way to see another organization's rows anyway and this keeps the enrichment
+    // authoritative.
+    let clinicContext: GenerateAssistanceInput["clinicContext"];
+
+    if (
+      payload.feature === "risk_analysis" ||
+      payload.feature === "incident_investigation" ||
+      payload.feature === "routine"
+    ) {
+      const supabase = createSupabaseAdminClient();
+      const context = await resolveUserApplicationContext(supabase, user.id);
+
+      if (context) {
+        const [{ data: staffingRows }, { data: careScopeRows }, { data: riskRows }] = await Promise.all([
+          supabase
+            .from("structured_requirement_items")
+            .select("fields")
+            .eq("application_id", context.applicationId)
+            .eq("requirement_code", "R-06"),
+          supabase.from("care_scope_codes").select("code").eq("application_id", context.applicationId),
+          supabase
+            .from("risk_register_entries")
+            .select("title")
+            .eq("organization_id", context.organizationId)
+            .limit(50),
+        ]);
+
+        clinicContext = {
+          staffingRoles: (staffingRows || []).map((row) => {
+            const fields = (row.fields || {}) as Record<string, unknown>;
+            return {
+              role: String(fields.role || ""),
+              headcount: String(fields.headcount || ""),
+              competenceNotes: String(fields.competenceNotes || ""),
+            };
+          }),
+          careScopeLabels: (careScopeRows || [])
+            .map((row) => careScopeCodeDefinitions.find((def) => def.code === row.code)?.label)
+            .filter((label): label is string => Boolean(label)),
+          existingRiskTitles: (riskRows || []).map((row) => row.title),
+        };
+      }
+    }
+
+    const result = await generateAssistance({ ...payload, clinicContext });
     return NextResponse.json(result);
   } catch (error) {
     const reason = error instanceof AiAssistanceError ? error.reason : undefined;

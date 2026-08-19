@@ -55,7 +55,7 @@ export default function CookiepolicyPage() {
 
       <h2>4. Så hanterar du cookies</h2>
       <p>
-        Du kan när som helst se den här informationen igen via länken &quot;Cookieinställningar&quot;
+        Du kan när som helst se den här informationen igen via länken &quot;Cookieinformation&quot;
         i sidfoten. Du kan även blockera eller radera cookies i din webbläsares inställningar,
         men observera att inloggning då kan sluta fungera.
       </p>

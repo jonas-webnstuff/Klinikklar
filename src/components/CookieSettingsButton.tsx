@@ -9,7 +9,7 @@ export function CookieSettingsButton() {
       onClick={() => window.dispatchEvent(new Event(OPEN_COOKIE_SETTINGS_EVENT))}
       className="text-left text-sm font-semibold text-[color:var(--brand)] underline underline-offset-2 hover:text-[color:var(--brand-2)]"
     >
-      Cookieinställningar
+      Cookieinformation
     </button>
   );
 }

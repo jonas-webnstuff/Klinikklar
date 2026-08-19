@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LegalPageLayout } from "@/components/legal/LegalPageLayout";
+import { COMPANY_INFO } from "@/lib/legal/company-info";
 
 export const metadata: Metadata = {
   title: "Användarvillkor | Klinikklar",
@@ -18,7 +19,7 @@ export default function AnvandarvillkorPage() {
 
       <h2>2. Avtalspart och användare</h2>
       <p>
-        Avtalet ingås mellan [BOLAGSNAMN] och den organisation (klinik) som registrerar ett
+        Avtalet ingås mellan {COMPANY_INFO.name} och den organisation (klinik) som registrerar ett
         konto. Den fysiska person som skapar eller administrerar kontot ansvarar för att ha
         behörighet att företräda organisationen.
       </p>
@@ -39,7 +40,7 @@ export default function AnvandarvillkorPage() {
       <h2>5. Immateriella rättigheter</h2>
       <p>
         Klinikklar och dess innehåll (utom kundens egna uppladdade uppgifter och dokument) tillhör
-        [BOLAGSNAMN] eller dess licensgivare. Kunden behåller äganderätten till de uppgifter och
+        {COMPANY_INFO.name} eller dess licensgivare. Kunden behåller äganderätten till de uppgifter och
         dokument som laddas upp i tjänsten.
       </p>
 
@@ -64,7 +65,7 @@ export default function AnvandarvillkorPage() {
       <p>Vi kan komma att uppdatera dessa villkor. Väsentliga ändringar meddelas i tjänsten.</p>
 
       <h2>10. Kontakt</h2>
-      <p>[E-POST]</p>
+      <p>{COMPANY_INFO.email}</p>
     </LegalPageLayout>
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPageLayout } from "@/components/legal/LegalPageLayout";
+import { COMPANY_INFO } from "@/lib/legal/company-info";
 
 export const metadata: Metadata = {
   title: "Integritetspolicy | Klinikklar",
@@ -11,9 +12,9 @@ export default function IntegritetspolicyPage() {
     <LegalPageLayout title="Integritetspolicy" updated="30 juli 2026">
       <h2>1. Personuppgiftsansvarig</h2>
       <p>
-        [BOLAGSNAMN], org.nr [ORGANISATIONSNUMMER] (&quot;Klinikklar&quot;, &quot;vi&quot;), är
+        {COMPANY_INFO.name}, org.nr {COMPANY_INFO.orgNumber} (&quot;Klinikklar&quot;, &quot;vi&quot;), är
         personuppgiftsansvarig för behandlingen av personuppgifter som beskrivs i denna policy.
-        Frågor om vår personuppgiftsbehandling kan skickas till [E-POST].
+        Frågor om vår personuppgiftsbehandling kan skickas till {COMPANY_INFO.email}.
       </p>
 
       <h2>2. Vilka personuppgifter vi behandlar</h2>
@@ -101,7 +102,7 @@ export default function IntegritetspolicyPage() {
       <p>Vi kan komma att uppdatera denna policy. Väsentliga ändringar meddelas i tjänsten.</p>
 
       <h2>9. Kontakt</h2>
-      <p>[E-POST]</p>
+      <p>{COMPANY_INFO.email}</p>
     </LegalPageLayout>
   );
 }

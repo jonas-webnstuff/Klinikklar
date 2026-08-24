@@ -7,6 +7,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Klinikklar",
   description: "AI-driven complianceplattform för privat tandvård",
+  // Not launched yet — pull this once the real domain is connected and the site is ready
+  // for search engines (see also src/app/robots.ts).
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({

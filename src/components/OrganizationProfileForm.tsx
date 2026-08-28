@@ -15,7 +15,7 @@ const fields: Array<{
   type?: "text" | "email";
 }> = [
   { key: "clinicName", label: "Klinikens namn", placeholder: "Klinikens namn" },
-  { key: "orgNumber", label: "Organisationsnummer", placeholder: "Organisationsnummer" },
+  { key: "orgNumber", label: "Organisationsnummer", placeholder: "T.ex. 556677-8899" },
   { key: "address", label: "Besöksadress", placeholder: "Besöksadress" },
   { key: "postalCode", label: "Postnummer", placeholder: "Postnummer" },
   { key: "municipality", label: "Ort", placeholder: "Ort" },

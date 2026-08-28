@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { ContactForm } from "@/components/ContactForm";
 
 const heroBullets = [
   "Ledningssystem, egenkontroll och avvikelsehantering i samma arbetsyta",
@@ -422,15 +423,15 @@ export default function Home() {
             kvalitetssystem och dokumentation utan att bli ett journalsystem.
           </p>
         </article>
-        <article id="kunskapsbank" className="scroll-mt-28 rounded-[2rem] border border-[color:var(--line)] bg-white p-8 shadow-[0_16px_40px_rgba(13,39,87,0.05)]">
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">Kunskapsbank</p>
+        <article id="kontakt" className="scroll-mt-28 rounded-[2rem] border border-[color:var(--line)] bg-white p-8 shadow-[0_16px_40px_rgba(13,39,87,0.05)]">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[color:var(--brand)]">Kontakt</p>
           <h2 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-[color:var(--ink)]">
-            Mallar, regler och arbetsstöd på ett ställe
+            Har du frågor? Hör av dig
           </h2>
           <p className="mt-4 text-[17px] leading-8 text-[color:var(--muted)]">
-            Plattformen förbereds för en versionshanterad regel- och mallbank så att nya krav
-            kan rullas ut som en del av ett löpande compliance-abonnemang.
+            Skriv till oss så återkommer vi så snart vi kan.
           </p>
+          <ContactForm />
         </article>
       </section>
     </div>

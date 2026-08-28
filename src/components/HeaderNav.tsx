@@ -86,8 +86,8 @@ export function HeaderNav({ isAuthenticated, canAdminCustomers, activePlan }: He
           <Link href="/#om-oss" className={baseLinkClass}>
             Om oss
           </Link>
-          <Link href="/#kunskapsbank" className={baseLinkClass}>
-            Kunskapsbank
+          <Link href="/#kontakt" className={baseLinkClass}>
+            Kontakt
           </Link>
         </>
       )}

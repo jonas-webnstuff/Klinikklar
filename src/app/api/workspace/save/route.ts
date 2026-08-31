@@ -36,9 +36,12 @@ const bodySchema = z.object({
 
 async function getOrCreateOrganization(
   supabase: ReturnType<typeof createSupabaseAdminClient>,
-  profile: z.infer<typeof bodySchema>["profile"],
-  selectedPlan: z.infer<typeof bodySchema>["plan"]
+  profile: z.infer<typeof bodySchema>["profile"]
 ) {
+  // `plan` is deliberately never taken from this route's request body — it's client-controlled
+  // (mirrors the `?plan=` query param a visitor can set by hand) and would let anyone grant
+  // themselves a paid tier for free. Plans are only ever set by an admin (api/admin/customers)
+  // or, once wired up, a verified Stripe webhook.
   const { data: existing } = await supabase
     .from("organizations")
     .select("id, plan")
@@ -55,15 +58,6 @@ async function getOrCreateOrganization(
       })
       .eq("id", existing.id);
 
-    if (!existing.plan && selectedPlan) {
-      await supabase
-        .from("organizations")
-        .update({
-          plan: selectedPlan,
-        })
-        .eq("id", existing.id);
-    }
-
     return existing.id;
   }
 
@@ -73,7 +67,7 @@ async function getOrCreateOrganization(
       name: profile.clinicName,
       org_number: profile.orgNumber,
       email: profile.email,
-      plan: selectedPlan || null,
+      plan: null,
     })
     .select("id")
     .single();
@@ -221,9 +215,7 @@ export async function POST(request: Request) {
 
     const supabase = createSupabaseAdminClient();
 
-    const selectedPlan = payload.plan || null;
-
-    const organizationId = await getOrCreateOrganization(supabase, payload.profile, selectedPlan);
+    const organizationId = await getOrCreateOrganization(supabase, payload.profile);
 
     await ensureUserProfile(supabase, user.id, payload.profile);
     await ensureOrganizationMembership(supabase, user.id, organizationId);

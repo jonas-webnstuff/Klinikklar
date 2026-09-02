@@ -66,7 +66,7 @@ const pricingPlans = [
       "Dokumentgenomgång",
       "Kravtolkning",
       "Checklista",
-      "Rådgivning",
+      { text: "Rådgivning", comingSoon: true },
     ],
     ctaLabel: "Välj Ansökan",
     ctaHref: "#om-oss",
@@ -393,12 +393,25 @@ export default function Home() {
                   {plan.footerNote}
                 </p>
                 <ul className="mt-2 space-y-1.5 pb-5 text-xs text-[color:var(--ink)]">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[color:var(--brand)]" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
+                  {plan.features.map((feature) => {
+                    const isComingSoon = typeof feature !== "string" && feature.comingSoon;
+                    const text = typeof feature === "string" ? feature : feature.text;
+
+                    return (
+                      <li
+                        key={text}
+                        className={`flex items-start gap-2 ${isComingSoon ? "text-[color:var(--muted)]" : ""}`}
+                      >
+                        <span
+                          className={`mt-1 h-1.5 w-1.5 rounded-full ${isComingSoon ? "bg-[color:var(--muted)]" : "bg-[color:var(--brand)]"}`}
+                        />
+                        <span>
+                          {text}
+                          {isComingSoon ? " · Kommande" : ""}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
                 <Link
                   href={plan.ctaHref}

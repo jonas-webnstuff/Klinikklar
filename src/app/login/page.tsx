@@ -45,6 +45,9 @@ export default function LoginPage() {
 
     if (plan === "step1" || plan === "step2" || plan === "step3") {
       setSelectedPlan(plan);
+      // Arriving here via a pricing card CTA means "I want to buy this" — land on account
+      // creation, not the login form.
+      setMode("signup");
     }
   }, []);
 

@@ -114,7 +114,7 @@ export default function LoginPage() {
       }
 
       setMessage(
-        "Vi har skickat ett bekräftelsemail till din e-postadress. Klicka på länken i mejlet för att aktivera kontot – därefter kan du logga in.",
+        "Om adressen inte redan har ett konto har vi skickat ett bekräftelsemail – klicka på länken i mejlet för att aktivera kontot. Har du redan ett konto kan du logga in direkt.",
       );
       setMode("login");
       return;

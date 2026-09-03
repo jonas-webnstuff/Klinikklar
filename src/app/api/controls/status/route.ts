@@ -2,27 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireOrganizationWithPlan } from "@/lib/server/organization-access";
 
 const bodySchema = z.object({
   controlId: z.string().uuid(),
   status: z.enum(["pending", "done", "skipped"]),
 });
-
-async function resolveUserOrganizationId(
-  supabase: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string
-) {
-  const { data: membership, error } = await supabase
-    .from("organization_memberships")
-    .select("organization_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return membership?.organization_id || null;
-}
 
 // Advances a recurring control to its next occurrence. control_tasks rows never regenerated
 // themselves before this — marking something "done" just stamped last_completed_at and left the
@@ -68,17 +53,20 @@ export async function POST(request: Request) {
     }
 
     const supabase = createSupabaseAdminClient();
-    const organizationId = await resolveUserOrganizationId(supabase, user.id);
+    const organization = await requireOrganizationWithPlan(supabase, user.id, "step1");
 
-    if (!organizationId) {
-      return NextResponse.json({ ok: false, error: "Ingen organisation hittades." }, { status: 400 });
+    if (!organization) {
+      return NextResponse.json(
+        { ok: false, error: "Årshjul och kontroller ingår inte i din nuvarande plan." },
+        { status: 403 }
+      );
     }
 
     const { data: existing, error: readError } = await supabase
       .from("control_tasks")
       .select("id, frequency, next_due_date")
       .eq("id", payload.controlId)
-      .eq("organization_id", organizationId)
+      .eq("organization_id", organization.organizationId)
       .maybeSingle();
 
     if (readError) throw readError;
@@ -104,7 +92,7 @@ export async function POST(request: Request) {
       .from("control_tasks")
       .update(updates)
       .eq("id", payload.controlId)
-      .eq("organization_id", organizationId);
+      .eq("organization_id", organization.organizationId);
 
     if (error) throw error;
 

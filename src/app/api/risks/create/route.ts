@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireOrganizationWithPlan } from "@/lib/server/organization-access";
 
 const bodySchema = z.object({
   title: z.string().min(3),
@@ -11,22 +12,6 @@ const bodySchema = z.object({
   ownerRole: z.string().optional().default(""),
   dueDate: z.string().optional().default(""),
 });
-
-async function resolveUserOrganizationId(
-  supabase: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string
-) {
-  const { data: membership, error } = await supabase
-    .from("organization_memberships")
-    .select("organization_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return membership?.organization_id || null;
-}
 
 export async function POST(request: Request) {
   try {
@@ -41,19 +26,19 @@ export async function POST(request: Request) {
     }
 
     const supabase = createSupabaseAdminClient();
-    const organizationId = await resolveUserOrganizationId(supabase, user.id);
+    const organization = await requireOrganizationWithPlan(supabase, user.id, "step1");
 
-    if (!organizationId) {
+    if (!organization) {
       return NextResponse.json(
-        { ok: false, error: "Ingen organisation hittades. Spara workspace först." },
-        { status: 400 }
+        { ok: false, error: "Riskanalyser ingår inte i din nuvarande plan." },
+        { status: 403 }
       );
     }
 
     const { data, error } = await supabase
       .from("risk_register_entries")
       .insert({
-        organization_id: organizationId,
+        organization_id: organization.organizationId,
         title: payload.title,
         description: payload.description,
         probability: payload.probability,

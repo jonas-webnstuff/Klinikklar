@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireOrganizationWithPlan } from "@/lib/server/organization-access";
 
 const bodySchema = z.object({
   requirementKey: z.string().min(1),
@@ -11,22 +12,6 @@ const bodySchema = z.object({
   owner: z.string().min(1),
   nextReview: z.string().min(1),
 });
-
-async function resolveUserOrganizationId(
-  supabase: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string
-) {
-  const { data: membership, error } = await supabase
-    .from("organization_memberships")
-    .select("organization_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return membership?.organization_id || null;
-}
 
 export async function POST(request: Request) {
   try {
@@ -41,12 +26,15 @@ export async function POST(request: Request) {
     }
 
     const supabase = createSupabaseAdminClient();
-    const organizationId = await resolveUserOrganizationId(supabase, user.id);
+    // Matches the workspace UI's actual Rutiner page gate (step1), not the "step2" tag on
+    // this module in ledningssystemModules — that list disagrees with the real page lock and
+    // hasn't been reconciled; the page itself is the enforced boundary today.
+    const organization = await requireOrganizationWithPlan(supabase, user.id, "step1");
 
-    if (!organizationId) {
+    if (!organization) {
       return NextResponse.json(
-        { ok: false, error: "Ingen organisation hittades. Spara workspace först." },
-        { status: 400 }
+        { ok: false, error: "Rutiner ingår inte i din nuvarande plan." },
+        { status: 403 }
       );
     }
 
@@ -54,7 +42,7 @@ export async function POST(request: Request) {
       .from("routine_entries")
       .upsert(
         {
-          organization_id: organizationId,
+          organization_id: organization.organizationId,
           requirement_key: payload.requirementKey,
           requirement_label: payload.requirementLabel,
           area: payload.area,

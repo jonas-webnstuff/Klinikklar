@@ -6,8 +6,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   complianceRequirements,
   facilityRequirementItems,
+  lexMariaLastReviewedDateHelpText,
   lexMariaRoutineItems,
   managementSystemRequirementItems,
+  operationalComplianceItems,
   patientFeedbackItems,
   patientSafetyReportItems,
   preChangeRiskAssessmentItems,
@@ -17,7 +19,9 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { callAiAssist } from "@/lib/ai/request-assistance";
 import OrganizationProfileForm from "@/components/OrganizationProfileForm";
+import { FieldHelp } from "@/components/FieldHelp";
 import { getOrganizationProfileError, type OrganizationProfileInput } from "@/lib/organization-profile";
+import { hasPlanAccess, type PlanLevel } from "@/lib/plan-access";
 import type {
   ControlTaskFrequency,
   ControlTaskStatus,
@@ -40,7 +44,6 @@ type HelpEntry = {
   ivoUrl: string;
 };
 
-type PlanLevel = "ansokan" | "step1" | "step2" | "step3";
 type WorkspaceView =
   | "overview"
   | "ledningssystem"
@@ -297,13 +300,6 @@ const planFeatureMap: Record<PlanLevel, string[]> = {
   step1: ["IVO", "AI-stöd i Ansökan", "Ledningssystem", "Dokument", "AI", "Checklistor", "Riskanalyser"],
   step2: ["Uppdateringar", "Avvikelser", "Rutiner", "Riskanalyser", "Årshjul"],
   step3: ["AI Compliance Officer", "Regelbevakning", "AI-förslag", "Revision", "Internkontroll"],
-};
-
-const planAccessRank: Record<PlanLevel, number> = {
-  ansokan: 0,
-  step1: 1,
-  step2: 2,
-  step3: 3,
 };
 
 const initialProfile: ProfileState = {
@@ -703,7 +699,11 @@ function WorkspacePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const [activePlan, setActivePlan] = useState<PlanLevel>("step2");
+  // No plan by default — was "step2" (Klinikklar Drift), which meant every brand-new signup
+  // saw full Drift-tier UI/features unlocked before their real (paid) plan loaded, or forever
+  // if they never had one. Locked out until the load below confirms an actual paid plan.
+  const [activePlan, setActivePlan] = useState<PlanLevel | null>(null);
+  const hasWorkspacePlanAccess = (requiredPlan: PlanLevel) => hasPlanAccess(activePlan, requiredPlan);
   const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("draft");
   const [readiness, setReadiness] = useState<ReadinessChecklist>({
     canMoveToReady: false,
@@ -868,11 +868,14 @@ function WorkspacePageContent() {
       };
 
       if (!data.found) {
+        setActivePlan(null);
         if (data.userEmail) {
           setProfile((prev) => ({ ...prev, email: prev.email || data.userEmail || "" }));
         }
         return;
       }
+
+      setActivePlan(data.plan ?? null);
 
       // Ansökan is a one-time, application-only product with no Ledningssystem/Drift
       // access. Only the bare workspace landing ("startsidan") redirects to the
@@ -888,15 +891,6 @@ function WorkspacePageContent() {
           ...data.profile,
           email: data.profile.email || data.userEmail || "",
         });
-      }
-
-      if (
-        data.plan === "ansokan" ||
-        data.plan === "step1" ||
-        data.plan === "step2" ||
-        data.plan === "step3"
-      ) {
-        setActivePlan(data.plan);
       }
 
       if (data.answers) {
@@ -976,26 +970,23 @@ function WorkspacePageContent() {
   const completeRequirements = Array.from(completionMap.values()).filter(Boolean).length;
   const progressPercent = Math.round((completeRequirements / totalRequirements) * 100);
 
-  const availableModules = ledningssystemModules.filter(
-    (module) => planAccessRank[module.availableFrom] <= planAccessRank[activePlan]
+  const availableModules = ledningssystemModules.filter((module) =>
+    hasWorkspacePlanAccess(module.availableFrom)
   );
 
   const activePlanFeatures = useMemo(() => {
     const orderedPlans: PlanLevel[] = ["step1", "step2", "step3"];
 
     return orderedPlans
-      .filter((plan) => planAccessRank[plan] <= planAccessRank[activePlan])
+      .filter((plan) => hasPlanAccess(activePlan, plan))
       .flatMap((plan) => planFeatureMap[plan]);
   }, [activePlan]);
 
-  const hasPlanAccess = (requiredPlan: PlanLevel) =>
-    planAccessRank[activePlan] >= planAccessRank[requiredPlan];
-
-  const canUseIncidentModule = hasPlanAccess("step1");
-  const canUseRiskModule = hasPlanAccess("step1");
-  const canUseControlModule = hasPlanAccess("step1");
+  const canUseIncidentModule = hasWorkspacePlanAccess("step1");
+  const canUseRiskModule = hasWorkspacePlanAccess("step1");
+  const canUseControlModule = hasWorkspacePlanAccess("step1");
   const canUseAiSupport = activePlan === "step1" || activePlan === "step3";
-  const canUsePremiumAi = hasPlanAccess("step3");
+  const canUsePremiumAi = hasWorkspacePlanAccess("step3");
   const regulationWatchEntries = useMemo<RegulationWatchEntry[]>(() => {
     const raw = answers.regulation_watch_entries?.answer;
 
@@ -1205,12 +1196,27 @@ function WorkspacePageContent() {
     () => routines.find((entry) => entry.requirementKey === activeRoutineRequirementKey) || null,
     [activeRoutineRequirementKey, routines]
   );
+  // R-02 only — this exact set drives submissionBlockers/canSubmitApplication below and
+  // computeReadinessChecklist server-side. Do not add the operational compliance fields here;
+  // use workspaceLedningssystemMissingFields (display-only) for anything that should include them.
   const ledningssystemMissingFields = useMemo(
     () =>
       managementSystemRequirementItems
         .filter(({ key }) => !answers[key]?.answer?.trim())
         .map(({ label }) => label),
     [answers]
+  );
+  // Display-only superset for the Startsida overview card — adds the operational compliance
+  // fields (patientsäkerhetsberättelse, Lex Maria, m.fl.) on top of R-02, but must never be used
+  // for submissionBlockers/canSubmitApplication or anything that gates the IVO application.
+  const workspaceLedningssystemMissingFields = useMemo(
+    () => [
+      ...ledningssystemMissingFields,
+      ...operationalComplianceItems
+        .filter(({ key }) => !answers[key]?.answer?.trim())
+        .map(({ label }) => label),
+    ],
+    [ledningssystemMissingFields, answers]
   );
   const nextMissingManagementField = useMemo(
     () => managementSystemRequirementItems.find(({ key }) => !answers[key]?.answer?.trim()) || null,
@@ -1252,6 +1258,7 @@ function WorkspacePageContent() {
     const questionnaireRatio = filledRatio(questionnaireItems);
     const managementRatio = filledRatio(managementSystemRequirementItems);
     const facilityRatio = filledRatio(facilityRequirementItems);
+    const operationalRatio = filledRatio(operationalComplianceItems);
     const routineRatio =
       routineRequirementPoints.length > 0
         ? completedRoutineCount / routineRequirementPoints.length
@@ -1268,6 +1275,7 @@ function WorkspacePageContent() {
       questionnaireRatio,
       managementRatio,
       facilityRatio,
+      operationalRatio,
       routineRatio,
       requirementRatio,
     ];
@@ -1661,9 +1669,9 @@ function WorkspacePageContent() {
       severity: "alert" | "warn";
     }> = [];
 
-    if (ledningssystemMissingFields.length > 0) {
-      const labels = ledningssystemMissingFields.slice(0, 2).join(", ");
-      const suffix = ledningssystemMissingFields.length > 2 ? " ..." : "";
+    if (workspaceLedningssystemMissingFields.length > 0) {
+      const labels = workspaceLedningssystemMissingFields.slice(0, 2).join(", ");
+      const suffix = workspaceLedningssystemMissingFields.length > 2 ? " ..." : "";
       actions.push({
         id: "ledningssystem",
         text: `Komplettera ledningssystem (${labels}${suffix})`,
@@ -1716,7 +1724,7 @@ function WorkspacePageContent() {
       return a.severity === "alert" ? -1 : 1;
     });
   }, [
-    ledningssystemMissingFields,
+    workspaceLedningssystemMissingFields,
     canUseIncidentModule,
     routineCoverageMissingPoints,
     canUseRiskModule,
@@ -1727,11 +1735,11 @@ function WorkspacePageContent() {
   ]);
   const overviewStatusCards = useMemo(() => {
     const ledningssystemStatus =
-      ledningssystemMissingFields.length === 0
+      workspaceLedningssystemMissingFields.length === 0
         ? { tone: "ok" as const, summary: "Alla grundfält ifyllda" }
-        : ledningssystemMissingFields.length >= 3
-          ? { tone: "alert" as const, summary: `${ledningssystemMissingFields.length} punkter saknas` }
-          : { tone: "warn" as const, summary: `${ledningssystemMissingFields.length} punkter saknas` };
+        : workspaceLedningssystemMissingFields.length >= 3
+          ? { tone: "alert" as const, summary: `${workspaceLedningssystemMissingFields.length} punkter saknas` }
+          : { tone: "warn" as const, summary: `${workspaceLedningssystemMissingFields.length} punkter saknas` };
 
     const riskStatus =
       riskSummary.total === 0
@@ -1767,7 +1775,7 @@ function WorkspacePageContent() {
       incidents: incidentStatus,
     };
   }, [
-    ledningssystemMissingFields,
+    workspaceLedningssystemMissingFields,
     riskSummary.total,
     riskSummary.highPriority,
     riskSummary.open,
@@ -1883,7 +1891,7 @@ function WorkspacePageContent() {
       incidentSummary.open === 0 &&
       riskSummary.open === 0 &&
       controlSummary.overdue === 0 &&
-      ledningssystemMissingFields.length === 0 &&
+      workspaceLedningssystemMissingFields.length === 0 &&
       routineCoverageMissingPoints.length === 0;
 
     if (stableState) {
@@ -1917,7 +1925,7 @@ function WorkspacePageContent() {
     incidentSummary.criticalOrHigh,
     riskSummary.open,
     controlSummary.overdue,
-    ledningssystemMissingFields.length,
+    workspaceLedningssystemMissingFields.length,
     routineCoverageMissingPoints.length,
   ]);
 
@@ -3383,6 +3391,7 @@ function WorkspacePageContent() {
     };
 
     if (!data.found) {
+      setActivePlan(null);
       setWorkspaceMessage("Inga sparade uppgifter hittades för organisationsnumret.");
       return;
     }
@@ -3391,9 +3400,7 @@ function WorkspacePageContent() {
       setProfile(data.profile);
     }
 
-    if (data.plan === "step1" || data.plan === "step2" || data.plan === "step3") {
-      setActivePlan(data.plan);
-    }
+    setActivePlan(data.plan ?? null);
 
     if (data.answers) {
       setAnswers((prev) => ({
@@ -3576,7 +3583,7 @@ function WorkspacePageContent() {
             : "Arbeta löpande med kvalitet, risk, avvikelse och egenkontroll i samma flöde."}
         </p>
         <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-          Aktiv nivå: {planLabels[activePlan]}
+          Aktiv nivå: {activePlan ? planLabels[activePlan] : "Ingen aktiv plan"}
         </p>
       </header>
 
@@ -3596,7 +3603,7 @@ function WorkspacePageContent() {
 
           {!hasHydratedWorkspace ? (
           <p className="mt-4 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
-          ) : !hasPlanAccess("step1") ? (
+          ) : !hasWorkspacePlanAccess("step1") ? (
           <PlanLockPanel moduleLabel="Ledningssystem" />
           ) : (
           <>
@@ -3845,29 +3852,47 @@ function WorkspacePageContent() {
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
                     1. Grund och ansvar
                   </p>
-                  <textarea
-                    id="management-field-management_system_purpose"
-                    value={getAnswerValue("management_system_purpose")}
-                    onChange={(event) => setAnswerValue("management_system_purpose", event.target.value)}
-                    placeholder="Syfte med ledningssystemet (ex. säkerställa lagkrav och systematiskt kvalitetsarbete)"
-                    rows={2}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
-                  <textarea
-                    id="management-field-management_system_scope"
-                    value={getAnswerValue("management_system_scope")}
-                    onChange={(event) => setAnswerValue("management_system_scope", event.target.value)}
-                    placeholder="Omfattning (ex. patientmottagning, journalföring, steril, röntgen, personal, läkemedel)"
-                    rows={2}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
-                  <input
-                    id="management-field-management_system_owner"
-                    value={getAnswerValue("management_system_owner")}
-                    onChange={(event) => setAnswerValue("management_system_owner", event.target.value)}
-                    placeholder="Ansvarig roll (ex. Verksamhetschef)"
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
+                  <label className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5">
+                      Syfte
+                      <FieldHelp text="Varför finns ledningssystemet – vad ska det säkerställa? En till två meningar räcker." />
+                    </span>
+                    <textarea
+                      id="management-field-management_system_purpose"
+                      value={getAnswerValue("management_system_purpose")}
+                      onChange={(event) => setAnswerValue("management_system_purpose", event.target.value)}
+                      placeholder="Syfte med ledningssystemet (ex. säkerställa lagkrav och systematiskt kvalitetsarbete)"
+                      rows={2}
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                    />
+                  </label>
+                  <label className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5">
+                      Omfattning
+                      <FieldHelp text="Vilka delar av verksamheten täcker ledningssystemet – t.ex. patientmottagning, journalföring, hygien, bemanning." />
+                    </span>
+                    <textarea
+                      id="management-field-management_system_scope"
+                      value={getAnswerValue("management_system_scope")}
+                      onChange={(event) => setAnswerValue("management_system_scope", event.target.value)}
+                      placeholder="Omfattning (ex. patientmottagning, journalföring, steril, röntgen, personal, läkemedel)"
+                      rows={2}
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                    />
+                  </label>
+                  <label className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5">
+                      Ansvarig
+                      <FieldHelp text="Vem äger/ansvarar för att ledningssystemet hålls uppdaterat – normalt verksamhetschefen." />
+                    </span>
+                    <input
+                      id="management-field-management_system_owner"
+                      value={getAnswerValue("management_system_owner")}
+                      onChange={(event) => setAnswerValue("management_system_owner", event.target.value)}
+                      placeholder="Ansvarig roll (ex. Verksamhetschef)"
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                    />
+                  </label>
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
@@ -3883,26 +3908,38 @@ function WorkspacePageContent() {
                     rows={2}
                     className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                   />
-                  <textarea
-                    id="management-field-management_system_processes"
-                    value={getAnswerValue("management_system_processes")}
-                    onChange={(event) =>
-                      setAnswerValue("management_system_processes", event.target.value)
-                    }
-                    placeholder="Beskriv huvudprocesser och hur de följs upp"
-                    rows={3}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
-                  <textarea
-                    id="management-field-management_system_documents"
-                    value={getAnswerValue("management_system_documents")}
-                    onChange={(event) =>
-                      setAnswerValue("management_system_documents", event.target.value)
-                    }
-                    placeholder="Styrande dokument (rutiner, policyer, riktlinjer)"
-                    rows={3}
-                    className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                  />
+                  <label className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5">
+                      Processer och uppföljning
+                      <FieldHelp text="Vilka huvudprocesser ingår och hur följs de upp – t.ex. avvikelsehantering, riskanalys, egenkontroll." />
+                    </span>
+                    <textarea
+                      id="management-field-management_system_processes"
+                      value={getAnswerValue("management_system_processes")}
+                      onChange={(event) =>
+                        setAnswerValue("management_system_processes", event.target.value)
+                      }
+                      placeholder="Beskriv huvudprocesser och hur de följs upp"
+                      rows={3}
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                    />
+                  </label>
+                  <label className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5">
+                      Styrande dokument
+                      <FieldHelp text="Lista de dokument som styr verksamheten – rutiner, policyer, riktlinjer – gärna med version/datum." />
+                    </span>
+                    <textarea
+                      id="management-field-management_system_documents"
+                      value={getAnswerValue("management_system_documents")}
+                      onChange={(event) =>
+                        setAnswerValue("management_system_documents", event.target.value)
+                      }
+                      placeholder="Styrande dokument (rutiner, policyer, riktlinjer)"
+                      rows={3}
+                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                    />
+                  </label>
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-[color:var(--line)] bg-white p-3">
@@ -3919,15 +3956,21 @@ function WorkspacePageContent() {
                       placeholder="Version (ex. 1.0, 1.1, 1.2)"
                       className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
                     />
-                    <input
-                      id="management-field-management_system_approved_by"
-                      value={getAnswerValue("management_system_approved_by")}
-                      onChange={(event) =>
-                        setAnswerValue("management_system_approved_by", event.target.value)
-                      }
-                      placeholder="Godkänd av (ex. Verksamhetschef, styrelse)"
-                      className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm"
-                    />
+                    <label className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]">
+                      <span className="inline-flex items-center gap-1.5">
+                        Godkänd av
+                        <FieldHelp text="Vem har formellt godkänt/fastställt den senaste versionen av ledningssystemet." />
+                      </span>
+                      <input
+                        id="management-field-management_system_approved_by"
+                        value={getAnswerValue("management_system_approved_by")}
+                        onChange={(event) =>
+                          setAnswerValue("management_system_approved_by", event.target.value)
+                        }
+                        placeholder="Godkänd av (ex. Verksamhetschef, styrelse)"
+                        className="w-full rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-normal"
+                      />
+                    </label>
                   </div>
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
@@ -3962,7 +4005,10 @@ function WorkspacePageContent() {
                   </button>
                 </div>
                 <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                  Uppföljningslogg drift
+                  <span className="inline-flex items-center gap-1.5">
+                    Uppföljningslogg drift
+                    <FieldHelp text="Logg över faktiskt genomförda uppföljningar – fylls i via knapparna 'Registrera uppföljning' ovan, inte fritt." />
+                  </span>
                   <textarea
                     id="management-field-management_system_followup_log"
                     value={getAnswerValue("management_system_followup_log")}
@@ -3982,7 +4028,10 @@ function WorkspacePageContent() {
                   Fastställ och versionssätt ledningssystem
                 </button>
                 <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                  Besluts- och versionslogg
+                  <span className="inline-flex items-center gap-1.5">
+                    Besluts- och versionslogg
+                    <FieldHelp text="Logg över när och av vem ledningssystemet formellt fastställts – fylls i via knappen 'Fastställ och versionssätt' ovan." />
+                  </span>
                   <textarea
                     id="management-field-management_system_decision_log"
                     value={getAnswerValue("management_system_decision_log")}
@@ -3995,7 +4044,10 @@ function WorkspacePageContent() {
                   />
                 </label>
                 <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                  Nästa planerade uppföljning
+                  <span className="inline-flex items-center gap-1.5">
+                    Nästa planerade uppföljning
+                    <FieldHelp text="Datum för nästa gång ledningssystemet ska gås igenom och uppdateras." />
+                  </span>
                   <input
                     id="management-field-management_system_next_review"
                     type="date"
@@ -4042,7 +4094,10 @@ function WorkspacePageContent() {
                   key={item.key}
                   className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.label}
+                    <FieldHelp text={item.helpText} />
+                  </span>
                   <textarea
                     value={getAnswerValue(item.key)}
                     onChange={(event) => setAnswerValue(item.key, event.target.value)}
@@ -4076,7 +4131,10 @@ function WorkspacePageContent() {
                   key={item.key}
                   className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.label}
+                    <FieldHelp text={item.helpText} />
+                  </span>
                   <textarea
                     value={getAnswerValue(item.key)}
                     onChange={(event) => setAnswerValue(item.key, event.target.value)}
@@ -4087,7 +4145,10 @@ function WorkspacePageContent() {
                 </label>
               ))}
               <label className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]">
-                Senast uppdaterad
+                <span className="inline-flex items-center gap-1.5">
+                  Senast uppdaterad
+                  <FieldHelp text={lexMariaLastReviewedDateHelpText} />
+                </span>
                 <input
                   type="date"
                   value={getAnswerValue("lex_maria_last_reviewed_date")}
@@ -4106,7 +4167,10 @@ function WorkspacePageContent() {
                   key={item.key}
                   className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.label}
+                    <FieldHelp text={item.helpText} />
+                  </span>
                   <textarea
                     value={getAnswerValue(item.key)}
                     onChange={(event) => setAnswerValue(item.key, event.target.value)}
@@ -4127,7 +4191,10 @@ function WorkspacePageContent() {
                   key={item.key}
                   className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.label}
+                    <FieldHelp text={item.helpText} />
+                  </span>
                   <textarea
                     value={getAnswerValue(item.key)}
                     onChange={(event) => setAnswerValue(item.key, event.target.value)}
@@ -4151,7 +4218,10 @@ function WorkspacePageContent() {
                   key={item.key}
                   className="block space-y-1 text-xs font-semibold text-[color:var(--muted)]"
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.label}
+                    <FieldHelp text={item.helpText} />
+                  </span>
                   <textarea
                     value={getAnswerValue(item.key)}
                     onChange={(event) => setAnswerValue(item.key, event.target.value)}
@@ -4676,7 +4746,7 @@ function WorkspacePageContent() {
 
         {!hasHydratedWorkspace ? (
         <p className="mt-4 text-sm text-[color:var(--muted)]">Hämtar behörighet...</p>
-        ) : !hasPlanAccess("step1") ? (
+        ) : !hasWorkspacePlanAccess("step1") ? (
         <PlanLockPanel moduleLabel="Rutiner" />
         ) : (
         <>

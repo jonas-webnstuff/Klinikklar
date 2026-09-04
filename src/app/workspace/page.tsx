@@ -22,6 +22,7 @@ import OrganizationProfileForm from "@/components/OrganizationProfileForm";
 import { FieldHelp } from "@/components/FieldHelp";
 import { getOrganizationProfileError, type OrganizationProfileInput } from "@/lib/organization-profile";
 import { hasPlanAccess, type PlanLevel } from "@/lib/plan-access";
+import { isPurchasablePlan, type PurchasablePlan } from "@/lib/stripe/prices";
 import type {
   ControlTaskFrequency,
   ControlTaskStatus,
@@ -704,6 +705,13 @@ function WorkspacePageContent() {
   // if they never had one. Locked out until the load below confirms an actual paid plan.
   const [activePlan, setActivePlan] = useState<PlanLevel | null>(null);
   const hasWorkspacePlanAccess = (requiredPlan: PlanLevel) => hasPlanAccess(activePlan, requiredPlan);
+  // Which plan the visitor clicked through from the pricing page — a purchase intent, not a
+  // grant. Only ever used to target the "Fortsätt till betalning" CTA below; never feeds into
+  // activePlan (that caused the exact bypass this file already had to fix once).
+  const [intendedPlan, setIntendedPlan] = useState<PurchasablePlan | null>(null);
+  // Whether a clinic profile has actually been saved — /api/stripe/checkout requires an
+  // existing organization, so the payment CTA only makes sense to show once this is true.
+  const [hasSavedOrganization, setHasSavedOrganization] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("draft");
   const [readiness, setReadiness] = useState<ReadinessChecklist>({
     canMoveToReady: false,
@@ -767,8 +775,8 @@ function WorkspacePageContent() {
   useEffect(() => {
     const plan = searchParams.get("plan");
 
-    if (plan === "step1" || plan === "step2" || plan === "step3") {
-      setActivePlan(plan);
+    if (isPurchasablePlan(plan)) {
+      setIntendedPlan(plan);
     }
   }, [searchParams]);
 
@@ -869,6 +877,7 @@ function WorkspacePageContent() {
 
       if (!data.found) {
         setActivePlan(null);
+        setHasSavedOrganization(false);
         if (data.userEmail) {
           setProfile((prev) => ({ ...prev, email: prev.email || data.userEmail || "" }));
         }
@@ -876,6 +885,7 @@ function WorkspacePageContent() {
       }
 
       setActivePlan(data.plan ?? null);
+      setHasSavedOrganization(true);
 
       // Ansökan is a one-time, application-only product with no Ledningssystem/Drift
       // access. Only the bare workspace landing ("startsidan") redirects to the
@@ -3279,6 +3289,7 @@ function WorkspacePageContent() {
     }
 
     setWorkspaceMessage("Uppgifter sparade.");
+    setHasSavedOrganization(true);
     void loadApplicationReadiness();
     void loadIncidents();
     void loadRisks();
@@ -3323,6 +3334,7 @@ function WorkspacePageContent() {
     }
 
     setWorkspaceMessage(successMessage);
+    setHasSavedOrganization(true);
     void loadApplicationReadiness();
   }
 
@@ -3357,6 +3369,7 @@ function WorkspacePageContent() {
     }
 
     setWorkspaceMessage("Grunduppgifter sparade.");
+    setHasSavedOrganization(true);
     void loadApplicationReadiness();
   }
 
@@ -3392,6 +3405,7 @@ function WorkspacePageContent() {
 
     if (!data.found) {
       setActivePlan(null);
+      setHasSavedOrganization(false);
       setWorkspaceMessage("Inga sparade uppgifter hittades för organisationsnumret.");
       return;
     }
@@ -3401,6 +3415,7 @@ function WorkspacePageContent() {
     }
 
     setActivePlan(data.plan ?? null);
+    setHasSavedOrganization(true);
 
     if (data.answers) {
       setAnswers((prev) => ({
@@ -3585,6 +3600,31 @@ function WorkspacePageContent() {
         <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
           Aktiv nivå: {activePlan ? planLabels[activePlan] : "Ingen aktiv plan"}
         </p>
+
+        {hasHydratedWorkspace && hasSavedOrganization && !activePlan ? (
+          <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">
+              {intendedPlan
+                ? `Slutför köpet av ${planLabels[intendedPlan]} för att låsa upp funktionerna.`
+                : "Inget aktivt abonnemang än — grunduppgifterna är sparade, men Ledningssystem-funktionerna kräver en betald plan."}
+            </p>
+            {intendedPlan ? (
+              <a
+                href={`/api/stripe/checkout?plan=${intendedPlan}`}
+                className="mt-3 inline-flex rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-2)]"
+              >
+                Fortsätt till betalning
+              </a>
+            ) : (
+              <Link
+                href="/#priser"
+                className="mt-3 inline-flex rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-2)]"
+              >
+                Se priser →
+              </Link>
+            )}
+          </div>
+        ) : null}
       </header>
 
       {showSection("ledningssystem") ? (

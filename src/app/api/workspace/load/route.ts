@@ -29,13 +29,14 @@ export async function POST(request: Request) {
           org_number: string;
           email: string;
           plan: string | null;
+          intended_plan: string | null;
         }
       | null = null;
 
     if (orgNumber) {
       const { data } = await supabase
         .from("organizations")
-        .select("id, name, org_number, email, plan")
+        .select("id, name, org_number, email, plan, intended_plan")
         .eq("org_number", orgNumber)
         .limit(1)
         .maybeSingle();
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
       if (targetOrganizationId) {
         const { data } = await supabase
           .from("organizations")
-          .select("id, name, org_number, email, plan")
+          .select("id, name, org_number, email, plan, intended_plan")
           .eq("id", targetOrganizationId)
           .limit(1)
           .maybeSingle();
@@ -118,6 +119,7 @@ export async function POST(request: Request) {
           email: organization.email,
         },
         plan: organization.plan,
+        intendedPlan: organization.intended_plan,
         answers: {},
       });
     }
@@ -152,6 +154,7 @@ export async function POST(request: Request) {
         email: organization.email,
       },
       plan: organization.plan,
+      intendedPlan: organization.intended_plan,
       answers,
     });
   } catch (error) {

@@ -15,7 +15,11 @@ const answerSchema = z.object({
 });
 
 const bodySchema = z.object({
+  // Never used to grant real access (see getOrCreateOrganization) — kept for older clients.
   plan: z.enum(["ansokan", "step1", "step2", "step3"]).optional().nullable(),
+  // The plan the visitor picked before paying — a UI hint for the "Aktivera konto" CTA, not a
+  // grant. Freely settable/updatable by the client, unlike `plan`.
+  intendedPlan: z.enum(["ansokan", "step1", "step2"]).optional().nullable(),
   profile: z.object({
     clinicName: z.string().min(1),
     orgNumber: z.string().min(1),
@@ -36,12 +40,14 @@ const bodySchema = z.object({
 
 async function getOrCreateOrganization(
   supabase: ReturnType<typeof createSupabaseAdminClient>,
-  profile: z.infer<typeof bodySchema>["profile"]
+  profile: z.infer<typeof bodySchema>["profile"],
+  intendedPlan: z.infer<typeof bodySchema>["intendedPlan"]
 ) {
   // `plan` is deliberately never taken from this route's request body — it's client-controlled
   // (mirrors the `?plan=` query param a visitor can set by hand) and would let anyone grant
   // themselves a paid tier for free. Plans are only ever set by an admin (api/admin/customers)
-  // or, once wired up, a verified Stripe webhook.
+  // or, once wired up, a verified Stripe webhook. `intended_plan` is just a UI hint, so it's
+  // fine to take straight from the client and update freely.
   const { data: existing } = await supabase
     .from("organizations")
     .select("id, plan")
@@ -55,6 +61,7 @@ async function getOrCreateOrganization(
       .update({
         name: profile.clinicName,
         email: profile.email,
+        ...(intendedPlan ? { intended_plan: intendedPlan } : {}),
       })
       .eq("id", existing.id);
 
@@ -68,6 +75,7 @@ async function getOrCreateOrganization(
       org_number: profile.orgNumber,
       email: profile.email,
       plan: null,
+      intended_plan: intendedPlan || null,
     })
     .select("id")
     .single();
@@ -215,7 +223,7 @@ export async function POST(request: Request) {
 
     const supabase = createSupabaseAdminClient();
 
-    const organizationId = await getOrCreateOrganization(supabase, payload.profile);
+    const organizationId = await getOrCreateOrganization(supabase, payload.profile, payload.intendedPlan);
 
     await ensureUserProfile(supabase, user.id, payload.profile);
     await ensureOrganizationMembership(supabase, user.id, organizationId);

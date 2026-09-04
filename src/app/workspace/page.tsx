@@ -19,6 +19,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { callAiAssist } from "@/lib/ai/request-assistance";
 import OrganizationProfileForm from "@/components/OrganizationProfileForm";
+import { PlanComparisonPicker } from "@/components/PlanComparisonPicker";
 import { FieldHelp } from "@/components/FieldHelp";
 import { getOrganizationProfileError, type OrganizationProfileInput } from "@/lib/organization-profile";
 import { hasPlanAccess, type PlanLevel } from "@/lib/plan-access";
@@ -706,7 +707,7 @@ function WorkspacePageContent() {
   const [activePlan, setActivePlan] = useState<PlanLevel | null>(null);
   const hasWorkspacePlanAccess = (requiredPlan: PlanLevel) => hasPlanAccess(activePlan, requiredPlan);
   // Which plan the visitor clicked through from the pricing page — a purchase intent, not a
-  // grant. Only ever used to target the "Fortsätt till betalning" CTA below; never feeds into
+  // grant. Only ever used to target the "Aktivera konto" CTA below; never feeds into
   // activePlan (that caused the exact bypass this file already had to fix once).
   const [intendedPlan, setIntendedPlan] = useState<PurchasablePlan | null>(null);
   // Whether a clinic profile has actually been saved — /api/stripe/checkout requires an
@@ -873,11 +874,18 @@ function WorkspacePageContent() {
         profile?: ProfileState;
         answers?: AnswersState;
         plan?: PlanLevel | null;
+        intendedPlan?: string | null;
       };
+      // A plan already captured this visit (from ?plan= on the URL, see the effect above) wins
+      // — it's a fresh, explicit choice. Otherwise fall back to whatever's saved on the
+      // organization from an earlier visit.
+      const rawIntendedPlan = data.intendedPlan ?? null;
+      const loadedIntendedPlan = isPurchasablePlan(rawIntendedPlan) ? rawIntendedPlan : null;
 
       if (!data.found) {
         setActivePlan(null);
         setHasSavedOrganization(false);
+        setIntendedPlan((prev) => prev ?? loadedIntendedPlan);
         if (data.userEmail) {
           setProfile((prev) => ({ ...prev, email: prev.email || data.userEmail || "" }));
         }
@@ -886,6 +894,7 @@ function WorkspacePageContent() {
 
       setActivePlan(data.plan ?? null);
       setHasSavedOrganization(true);
+      setIntendedPlan((prev) => prev ?? loadedIntendedPlan);
 
       // Ansökan is a one-time, application-only product with no Ledningssystem/Drift
       // access. Only the bare workspace landing ("startsidan") redirects to the
@@ -3274,6 +3283,7 @@ function WorkspacePageContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         plan: activePlan,
+        intendedPlan,
         profile,
         answers,
         requirements,
@@ -3319,6 +3329,7 @@ function WorkspacePageContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         plan: activePlan,
+        intendedPlan,
         profile,
         answers,
         requirements,
@@ -3354,6 +3365,7 @@ function WorkspacePageContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         plan: activePlan,
+        intendedPlan,
         profile,
         answers,
         requirements: [],
@@ -3401,6 +3413,7 @@ function WorkspacePageContent() {
       profile?: ProfileState;
       answers?: AnswersState;
       plan?: PlanLevel | null;
+      intendedPlan?: string | null;
     };
 
     if (!data.found) {
@@ -3416,6 +3429,8 @@ function WorkspacePageContent() {
 
     setActivePlan(data.plan ?? null);
     setHasSavedOrganization(true);
+    const rawIntendedPlan = data.intendedPlan ?? null;
+    setIntendedPlan(isPurchasablePlan(rawIntendedPlan) ? rawIntendedPlan : null);
 
     if (data.answers) {
       setAnswers((prev) => ({
@@ -3613,7 +3628,7 @@ function WorkspacePageContent() {
                 href={`/api/stripe/checkout?plan=${intendedPlan}`}
                 className="mt-3 inline-flex rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[color:var(--brand-2)]"
               >
-                Fortsätt till betalning
+                Aktivera konto
               </a>
             ) : (
               <Link
@@ -5731,6 +5746,16 @@ function WorkspacePageContent() {
             onChange={(field, value) => setProfile((prev) => ({ ...prev, [field]: value }))}
             disabled={isSaving}
           />
+
+          {!activePlan && !intendedPlan ? (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-[color:var(--ink)]">Välj en plan</p>
+              <p className="mt-1 text-xs text-[color:var(--muted)]">
+                Ingen plan vald från startsidan — välj vilken som passar er innan ni sparar.
+              </p>
+              <PlanComparisonPicker selected={intendedPlan} onSelect={setIntendedPlan} />
+            </div>
+          ) : null}
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button

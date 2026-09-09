@@ -730,6 +730,10 @@ function WorkspacePageContent() {
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
   const [hasHydratedWorkspace, setHasHydratedWorkspace] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState<string>("");
+  // A failed save (e.g. a silently-invalid field elsewhere in the form) used to show as the
+  // same muted grey text as a success message — easy to miss entirely, which made a plan
+  // choice look like it "didn't save" when really the save never went through.
+  const [workspaceMessageIsError, setWorkspaceMessageIsError] = useState(false);
   const [incidents, setIncidents] = useState<IncidentItem[]>([]);
   const [incidentForm, setIncidentForm] = useState<IncidentFormState>(initialIncidentForm);
   const [isIncidentsLoading, setIsIncidentsLoading] = useState(false);
@@ -3263,11 +3267,13 @@ function WorkspacePageContent() {
 
     if (profileError) {
       setWorkspaceMessage(profileError);
+      setWorkspaceMessageIsError(true);
       return;
     }
 
     if (!getAnswerValue("management_system_approved_by").trim()) {
       setWorkspaceMessage("Ange Godkänd av i Ledningssystem innan du sparar.");
+      setWorkspaceMessageIsError(true);
       router.push("/workspace/ledningssystem");
       focusManagementField("management_system_approved_by");
       return;
@@ -3275,6 +3281,7 @@ function WorkspacePageContent() {
 
     setIsSaving(true);
     setWorkspaceMessage("");
+    setWorkspaceMessageIsError(false);
 
     const requirements = complianceRequirements.map((item) => ({
       code: item.code,
@@ -3299,10 +3306,12 @@ function WorkspacePageContent() {
     if (!response.ok) {
       const data = (await response.json()) as { error?: string };
       setWorkspaceMessage(data.error || "Kunde inte spara uppgifter.");
+      setWorkspaceMessageIsError(true);
       return;
     }
 
     setWorkspaceMessage("Uppgifter sparade.");
+    setWorkspaceMessageIsError(false);
     setHasSavedOrganization(true);
     void loadApplicationReadiness();
     void loadIncidents();
@@ -3316,11 +3325,13 @@ function WorkspacePageContent() {
 
     if (profileError) {
       setWorkspaceMessage(profileError);
+      setWorkspaceMessageIsError(true);
       return;
     }
 
     setIsSaving(true);
     setWorkspaceMessage("");
+    setWorkspaceMessageIsError(false);
 
     const requirements = complianceRequirements.map((item) => ({
       code: item.code,
@@ -3345,10 +3356,12 @@ function WorkspacePageContent() {
     if (!response.ok) {
       const data = (await response.json()) as { error?: string };
       setWorkspaceMessage(data.error || "Kunde inte spara uppgifter.");
+      setWorkspaceMessageIsError(true);
       return;
     }
 
     setWorkspaceMessage(successMessage);
+    setWorkspaceMessageIsError(false);
     setHasSavedOrganization(true);
     void loadApplicationReadiness();
   }
@@ -3358,11 +3371,13 @@ function WorkspacePageContent() {
 
     if (profileError) {
       setWorkspaceMessage(profileError);
+      setWorkspaceMessageIsError(true);
       return;
     }
 
     setIsSaving(true);
     setWorkspaceMessage("");
+    setWorkspaceMessageIsError(false);
 
     const response = await fetch("/api/workspace/save", {
       method: "POST",
@@ -3381,10 +3396,12 @@ function WorkspacePageContent() {
     if (!response.ok) {
       const data = (await response.json()) as { error?: string };
       setWorkspaceMessage(data.error || "Kunde inte spara uppgifter.");
+      setWorkspaceMessageIsError(true);
       return;
     }
 
     setWorkspaceMessage("Grunduppgifter sparade.");
+    setWorkspaceMessageIsError(false);
     setHasSavedOrganization(true);
     setIsEditingProfile(false);
     void loadApplicationReadiness();
@@ -5796,10 +5813,15 @@ function WorkspacePageContent() {
                 >
                   {isSaving ? "Sparar..." : "Spara grunduppgifter"}
                 </button>
-                {workspaceMessage ? (
+                {workspaceMessage && !workspaceMessageIsError ? (
                   <p className="text-sm text-[color:var(--muted)]">{workspaceMessage}</p>
                 ) : null}
               </div>
+              {workspaceMessage && workspaceMessageIsError ? (
+                <p className="mt-3 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                  {workspaceMessage}
+                </p>
+              ) : null}
             </>
           )}
         </div>
@@ -5962,7 +5984,7 @@ function WorkspacePageContent() {
         </div>
       ) : null}
 
-      {showSection("dokument") ? (
+      {showSection("dokument") && hasSavedOrganization ? (
         <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

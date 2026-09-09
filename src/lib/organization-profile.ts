@@ -5,7 +5,7 @@ import { z } from "zod";
 // accepts personnummer-shaped numbers too: an enskild firma's organisationsnummer *is* its
 // owner's personnummer, so we can't require the "group digit >= 2" rule that only holds for
 // aktiebolag/handelsbolag.
-function isValidSwedishOrgNumber(value: string): boolean {
+export function isValidSwedishOrgNumber(value: string): boolean {
   if (!/^\d{6}-?\d{4}$/.test(value)) return false;
 
   const digits = value.replace("-", "");

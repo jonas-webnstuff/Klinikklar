@@ -713,6 +713,10 @@ function WorkspacePageContent() {
   // Whether a clinic profile has actually been saved — /api/stripe/checkout requires an
   // existing organization, so the payment CTA only makes sense to show once this is true.
   const [hasSavedOrganization, setHasSavedOrganization] = useState(false);
+  // Grunduppgifter collapses to a summary line once saved, so it doesn't compete for attention
+  // with the "Aktivera konto" banner (or just clutter the page once there's nothing left to do
+  // here) — this lets someone reopen the full form to make changes.
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("draft");
   const [readiness, setReadiness] = useState<ReadinessChecklist>({
     canMoveToReady: false,
@@ -3382,6 +3386,7 @@ function WorkspacePageContent() {
 
     setWorkspaceMessage("Grunduppgifter sparade.");
     setHasSavedOrganization(true);
+    setIsEditingProfile(false);
     void loadApplicationReadiness();
   }
 
@@ -5002,6 +5007,11 @@ function WorkspacePageContent() {
             <p className="mt-2 text-sm text-[color:var(--muted)]">
               Innan du kan spara eller använda arbetsytan behöver du fylla i klinikens grunduppgifter — namn, organisationsnummer, adress och kontaktuppgifter.
             </p>
+            {intendedPlan ? (
+              <p className="mt-2 text-sm font-semibold text-[color:var(--brand-2)]">
+                Valt paket: {planLabels[intendedPlan]}
+              </p>
+            ) : null}
             <a
               href="/workspace?view=dokument"
               className="mt-4 inline-flex rounded-xl bg-[color:var(--brand)] px-5 py-2.5 text-sm font-semibold text-white"
@@ -5741,37 +5751,61 @@ function WorkspacePageContent() {
         </div>
 
         <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4">
-          <OrganizationProfileForm
-            value={profile}
-            onChange={(field, value) => setProfile((prev) => ({ ...prev, [field]: value }))}
-            disabled={isSaving}
-          />
-
-          {!activePlan && !intendedPlan ? (
-            <div className="mt-4">
-              <p className="text-sm font-semibold text-[color:var(--ink)]">Välj en plan</p>
-              <p className="mt-1 text-xs text-[color:var(--muted)]">
-                Ingen plan vald från startsidan — välj vilken som passar er innan ni sparar.
+          {hasSavedOrganization && !isEditingProfile ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-[color:var(--ink)]">
+                <span className="font-semibold">{profile.clinicName}</span>
+                <span className="text-[color:var(--muted)]"> · {profile.orgNumber}</span>
               </p>
-              <PlanComparisonPicker selected={intendedPlan} onSelect={setIntendedPlan} />
+              <button
+                type="button"
+                onClick={() => setIsEditingProfile(true)}
+                className="rounded-xl border border-[color:var(--line)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"
+              >
+                Ändra uppgifter
+              </button>
             </div>
-          ) : null}
+          ) : (
+            <>
+              <OrganizationProfileForm
+                value={profile}
+                onChange={(field, value) => setProfile((prev) => ({ ...prev, [field]: value }))}
+                disabled={isSaving}
+              />
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void saveProfileOnly()}
-              disabled={isSaving}
-              className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-            >
-              {isSaving ? "Sparar..." : "Spara grunduppgifter"}
-            </button>
-            {workspaceMessage ? (
-              <p className="text-sm text-[color:var(--muted)]">{workspaceMessage}</p>
-            ) : null}
-          </div>
+              {!activePlan ? (
+                <div className="mt-4">
+                  <p className="text-sm font-semibold text-[color:var(--ink)]">
+                    {intendedPlan ? `Valt paket: ${planLabels[intendedPlan]}` : "Välj en plan"}
+                  </p>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">
+                    {intendedPlan
+                      ? "Du kan byta här om du ångrar dig."
+                      : "Ingen plan vald från startsidan — välj vilken som passar er innan ni sparar."}
+                  </p>
+                  <PlanComparisonPicker selected={intendedPlan} onSelect={setIntendedPlan} />
+                </div>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void saveProfileOnly()}
+                  disabled={isSaving}
+                  className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {isSaving ? "Sparar..." : "Spara grunduppgifter"}
+                </button>
+                {workspaceMessage ? (
+                  <p className="text-sm text-[color:var(--muted)]">{workspaceMessage}</p>
+                ) : null}
+              </div>
+            </>
+          )}
         </div>
 
+        {hasSavedOrganization ? (
+        <>
         <div className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
             Lokaler och utrustning
@@ -5848,6 +5882,8 @@ function WorkspacePageContent() {
             Öppna ansökan →
           </a>
         </div>
+        </>
+        ) : null}
       </section>
       ) : null}
 

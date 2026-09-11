@@ -3634,9 +3634,22 @@ function WorkspacePageContent() {
             ? "Arbeta med frågeguiden, granska dokument och förbered underlag för inskick."
             : "Arbeta löpande med kvalitet, risk, avvikelse och egenkontroll i samma flöde."}
         </p>
-        <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-          Aktiv nivå: {activePlan ? planLabels[activePlan] : "Ingen aktiv plan"}
-        </p>
+        {activePlan ? (
+          <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+            Aktiv nivå: {planLabels[activePlan]}
+          </p>
+        ) : intendedPlan ? (
+          <a
+            href={hasSavedOrganization ? `/api/stripe/checkout?plan=${intendedPlan}` : "/workspace?view=dokument"}
+            className="mt-3 inline-flex items-center rounded-full border border-[color:var(--brand)] bg-[color:var(--brand-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)] transition hover:bg-[color:var(--brand)] hover:text-white"
+          >
+            Vald plan: {planLabels[intendedPlan]} — klicka för att aktivera
+          </a>
+        ) : (
+          <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+            Ingen aktiv plan
+          </p>
+        )}
 
         {hasHydratedWorkspace && hasSavedOrganization && !activePlan ? (
           <div className="mt-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">

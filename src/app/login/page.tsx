@@ -104,9 +104,15 @@ export default function LoginPage() {
     }
 
     if (mode === "signup") {
+      // Without this, the confirmation email falls back to Supabase's default site URL —
+      // landing the confirmation-link tab on a bare homepage with no memory of ?plan=, even
+      // though the original signup tab still had it. Same redirect target OAuth already uses.
       const { error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(destinationPath)}`,
+        },
       });
 
       setIsLoading(false);

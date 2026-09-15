@@ -290,6 +290,14 @@ type AiAssistResponse =
       nextReviewDate: string;
     };
 
+const INTENDED_PLAN_STORAGE_KEY = "klinikklar_intended_plan";
+
+// Once a save succeeds, the choice lives on organizations.intended_plan — durable per account.
+// Clearing the local copy avoids it leaking into an unrelated future signup on this browser.
+function clearStoredIntendedPlan() {
+  window.localStorage.removeItem(INTENDED_PLAN_STORAGE_KEY);
+}
+
 const planLabels: Record<PlanLevel, string> = {
   ansokan: "Klinikklar Ansökan",
   step1: "Klinikklar Komplett",
@@ -786,8 +794,25 @@ function WorkspacePageContent() {
 
     if (isPurchasablePlan(plan)) {
       setIntendedPlan(plan);
+      return;
+    }
+
+    // The URL doesn't always carry ?plan= through internal navigation (e.g. the "Kom igång"
+    // card, or a fresh page load) — localStorage is the durable fallback so a choice made once
+    // survives regardless of which link got clicked to get here.
+    const stored = window.localStorage.getItem(INTENDED_PLAN_STORAGE_KEY);
+    if (isPurchasablePlan(stored)) {
+      setIntendedPlan((prev) => prev ?? stored);
     }
   }, [searchParams]);
+
+  // Keep localStorage in sync with whatever intendedPlan becomes (from the URL, the picker, or
+  // this effect itself) so it's available on the next navigation/reload/tab too.
+  useEffect(() => {
+    if (intendedPlan) {
+      window.localStorage.setItem(INTENDED_PLAN_STORAGE_KEY, intendedPlan);
+    }
+  }, [intendedPlan]);
 
   const activeView: WorkspaceView = useMemo(() => {
     const pathView = pathname.split("/")[2];
@@ -3313,6 +3338,7 @@ function WorkspacePageContent() {
     setWorkspaceMessage("Uppgifter sparade.");
     setWorkspaceMessageIsError(false);
     setHasSavedOrganization(true);
+    clearStoredIntendedPlan();
     void loadApplicationReadiness();
     void loadIncidents();
     void loadRisks();
@@ -3363,6 +3389,7 @@ function WorkspacePageContent() {
     setWorkspaceMessage(successMessage);
     setWorkspaceMessageIsError(false);
     setHasSavedOrganization(true);
+    clearStoredIntendedPlan();
     void loadApplicationReadiness();
   }
 
@@ -3404,6 +3431,7 @@ function WorkspacePageContent() {
     setWorkspaceMessageIsError(false);
     setHasSavedOrganization(true);
     setIsEditingProfile(false);
+    clearStoredIntendedPlan();
     void loadApplicationReadiness();
   }
 

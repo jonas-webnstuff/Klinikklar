@@ -5867,7 +5867,7 @@ function WorkspacePageContent() {
           )}
         </div>
 
-        {hasSavedOrganization ? (
+        {activePlan ? (
         <>
         <div className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
@@ -6025,7 +6025,7 @@ function WorkspacePageContent() {
         </div>
       ) : null}
 
-      {showSection("dokument") && hasSavedOrganization ? (
+      {showSection("dokument") && activePlan ? (
         <section className="rounded-3xl border border-[color:var(--line)] bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

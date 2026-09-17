@@ -25,7 +25,7 @@ function formatAuthErrorMessage(rawMessage: string) {
 export default function LoginPage() {
   const router = useRouter();
   const [nextPath, setNextPath] = useState("/workspace");
-  const [selectedPlan, setSelectedPlan] = useState<"step1" | "step2" | "step3" | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<"ansokan" | "step1" | "step2" | "step3" | null>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,7 +44,7 @@ export default function LoginPage() {
       setNextPath(next);
     }
 
-    if (plan === "step1" || plan === "step2" || plan === "step3") {
+    if (plan === "ansokan" || plan === "step1" || plan === "step2" || plan === "step3") {
       setSelectedPlan(plan);
       // Arriving here via a pricing card CTA means "I want to buy this" — land on account
       // creation, not the login form.
@@ -52,7 +52,8 @@ export default function LoginPage() {
     }
   }, []);
 
-  const planLabelMap: Record<"step1" | "step2" | "step3", string> = {
+  const planLabelMap: Record<"ansokan" | "step1" | "step2" | "step3", string> = {
+    ansokan: "Klinikklar Ansökan",
     step1: "Klinikklar Komplett",
     step2: "Klinikklar Drift",
     step3: "Klinikklar Premium",

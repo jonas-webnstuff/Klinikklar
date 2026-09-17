@@ -69,7 +69,7 @@ const pricingPlans = [
       { text: "Rådgivning", comingSoon: true },
     ],
     ctaLabel: "Välj Ansökan",
-    ctaHref: "#om-oss",
+    ctaHref: "/login?next=/workspace&plan=ansokan",
   },
   {
     id: "step2",

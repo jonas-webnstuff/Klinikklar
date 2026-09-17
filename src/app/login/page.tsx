@@ -29,6 +29,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isOAuthLoading, setIsOAuthLoading] = useState(false);
   const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
@@ -104,6 +105,12 @@ export default function LoginPage() {
     }
 
     if (mode === "signup") {
+      if (password !== confirmPassword) {
+        setIsLoading(false);
+        setMessage("Lösenorden matchar inte.");
+        return;
+      }
+
       // Without this, the confirmation email falls back to Supabase's default site URL —
       // landing the confirmation-link tab on a bare homepage with no memory of ?plan=, even
       // though the original signup tab still had it. Same redirect target OAuth already uses.
@@ -241,6 +248,19 @@ export default function LoginPage() {
                   className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-[color:var(--ink)]"
                 />
               </label>
+              {mode === "signup" ? (
+                <label className="block space-y-1 text-sm text-[color:var(--muted)]">
+                  Bekräfta lösenord
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full rounded-xl border border-[color:var(--line)] px-4 py-3 text-[color:var(--ink)]"
+                  />
+                </label>
+              ) : null}
               {mode === "login" ? (
                 <button
                   type="button"

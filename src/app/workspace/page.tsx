@@ -3667,12 +3667,21 @@ function WorkspacePageContent() {
             Aktiv nivå: {planLabels[activePlan]}
           </p>
         ) : intendedPlan ? (
-          <a
-            href={hasSavedOrganization ? `/api/stripe/checkout?plan=${intendedPlan}` : "/workspace?view=dokument"}
-            className="mt-3 inline-flex items-center rounded-full border border-[color:var(--brand)] bg-[color:var(--brand-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)] transition hover:bg-[color:var(--brand)] hover:text-white"
-          >
-            Vald plan: {planLabels[intendedPlan]} — klicka för att aktivera
-          </a>
+          <>
+            <a
+              href={hasSavedOrganization ? `/api/stripe/checkout?plan=${intendedPlan}` : "/workspace?view=dokument"}
+              className="mt-3 inline-flex items-center rounded-full border border-[color:var(--brand)] bg-[color:var(--brand-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)] transition hover:bg-[color:var(--brand)] hover:text-white"
+            >
+              {hasSavedOrganization
+                ? `Vald plan: ${planLabels[intendedPlan]} — klicka för att aktivera`
+                : `Vald plan: ${planLabels[intendedPlan]} — klicka för att fylla i företagsuppgifter`}
+            </a>
+            {!hasSavedOrganization ? (
+              <p className="mt-2 text-xs text-[color:var(--muted)]">
+                Klinikens grunduppgifter måste sparas innan betalningen kan aktiveras.
+              </p>
+            ) : null}
+          </>
         ) : (
           <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
             Ingen aktiv plan
@@ -5067,7 +5076,8 @@ function WorkspacePageContent() {
             </p>
             {intendedPlan ? (
               <p className="mt-2 text-sm font-semibold text-[color:var(--brand-2)]">
-                Valt paket: {planLabels[intendedPlan]}
+                Valt paket: {planLabels[intendedPlan]} — när grunduppgifterna är sparade kan ni
+                aktivera planen med betalning via Stripe.
               </p>
             ) : null}
             <a
@@ -5838,7 +5848,7 @@ function WorkspacePageContent() {
                   </p>
                   <p className="mt-1 text-xs text-[color:var(--muted)]">
                     {intendedPlan
-                      ? "Du kan byta här om du ångrar dig."
+                      ? "Du kan byta här om du ångrar dig. Spara grunduppgifterna nedan — sen kan ni aktivera planen med betalning via Stripe."
                       : "Ingen plan vald från startsidan — välj vilken som passar er innan ni sparar."}
                   </p>
                   <PlanComparisonPicker selected={intendedPlan} onSelect={setIntendedPlan} />

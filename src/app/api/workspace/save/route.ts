@@ -38,16 +38,18 @@ const bodySchema = z.object({
   ),
 });
 
+// Matching purely on org_number used to mean anyone who typed in a real clinic's (often
+// public) organisationsnummer got silently added as full "owner" of that clinic's entire
+// workspace via ensureOrganizationMembership — no invitation, no verification. Closed
+// deliberately for now rather than building a real invite flow speculatively: a colleague
+// joining an existing organization needs an explicit, controlled path (e.g. via
+// OrganizationMembersManager) whenever that's actually needed, not an open door by default.
 async function getOrCreateOrganization(
   supabase: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
   profile: z.infer<typeof bodySchema>["profile"],
   intendedPlan: z.infer<typeof bodySchema>["intendedPlan"]
-) {
-  // `plan` is deliberately never taken from this route's request body — it's client-controlled
-  // (mirrors the `?plan=` query param a visitor can set by hand) and would let anyone grant
-  // themselves a paid tier for free. Plans are only ever set by an admin (api/admin/customers)
-  // or, once wired up, a verified Stripe webhook. `intended_plan` is just a UI hint, so it's
-  // fine to take straight from the client and update freely.
+): Promise<{ ok: true; organizationId: string } | { ok: false; error: string }> {
   const { data: existing } = await supabase
     .from("organizations")
     .select("id, plan")
@@ -56,6 +58,21 @@ async function getOrCreateOrganization(
     .maybeSingle();
 
   if (existing?.id) {
+    const { data: membership } = await supabase
+      .from("organization_memberships")
+      .select("id")
+      .eq("organization_id", existing.id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!membership) {
+      return {
+        ok: false,
+        error:
+          "Det här organisationsnumret är redan registrerat hos oss. Kontakta den som administrerar kontot om du ska ha åtkomst.",
+      };
+    }
+
     await supabase
       .from("organizations")
       .update({
@@ -65,7 +82,7 @@ async function getOrCreateOrganization(
       })
       .eq("id", existing.id);
 
-    return existing.id;
+    return { ok: true, organizationId: existing.id };
   }
 
   const { data, error } = await supabase
@@ -81,7 +98,7 @@ async function getOrCreateOrganization(
     .single();
 
   if (error) throw error;
-  return data.id;
+  return { ok: true, organizationId: data.id };
 }
 
 async function getOrCreateClinic(
@@ -223,7 +240,13 @@ export async function POST(request: Request) {
 
     const supabase = createSupabaseAdminClient();
 
-    const organizationId = await getOrCreateOrganization(supabase, payload.profile, payload.intendedPlan);
+    const orgResult = await getOrCreateOrganization(supabase, user.id, payload.profile, payload.intendedPlan);
+
+    if (!orgResult.ok) {
+      return NextResponse.json({ ok: false, error: orgResult.error }, { status: 403 });
+    }
+
+    const organizationId = orgResult.organizationId;
 
     await ensureUserProfile(supabase, user.id, payload.profile);
     await ensureOrganizationMembership(supabase, user.id, organizationId);

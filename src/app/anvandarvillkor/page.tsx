@@ -33,8 +33,18 @@ export default function AnvandarvillkorPage() {
 
       <h2>4. Betalning och abonnemang</h2>
       <p>
-        [Betalnings- och uppsägningsvillkor per plan – engångsinsats respektive löpande
-        abonnemang med eventuell startavgift – ska specificeras och granskas innan publicering.]
+        Klinikklar Ansökan betalas som en engångsavgift i samband med beställning och innebär
+        ingen löpande kostnad.
+      </p>
+      <p>
+        Klinikklar Drift, Komplett och Premium innebär en startavgift som betalas i samband med
+        beställning, samt en löpande månadsavgift som debiteras automatiskt tills abonnemanget
+        sägs upp. Betalning sker via vår betaltjänstleverantör Stripe. Aktuella priser för
+        respektive nivå framgår av vår prissida.
+      </p>
+      <p>
+        Vi kan komma att ändra priserna för framtida betalperioder. Väsentliga prisändringar
+        meddelas i god tid innan de träder i kraft.
       </p>
 
       <h2>5. Immateriella rättigheter</h2>
@@ -54,12 +64,22 @@ export default function AnvandarvillkorPage() {
 
       <h2>7. Uppsägning</h2>
       <p>
-        [Villkor för uppsägning av abonnemang och eventuell radering/export av uppgifter vid
-        avslut ska specificeras.]
+        Abonnemangen (Drift, Komplett och Premium) löper tills vidare utan bindningstid.
+        Uppsägning sker genom att kontakta oss på {COMPANY_INFO.email} och gäller från och med
+        nästa betalperiod – redan betald avgift för innevarande period återbetalas inte. Klinikklar
+        Ansökan är en engångsprodukt och omfattas inte av uppsägning.
+      </p>
+      <p>
+        Vid avslutat konto hanteras era uppgifter enligt vår integritetspolicy. Ni kan när som
+        helst begära export eller radering av era uppgifter i enlighet med GDPR.
       </p>
 
       <h2>8. Tillämplig lag och tvist</h2>
-      <p>Svensk lag ska tillämpas på dessa villkor. [Forum/tvistlösning att fastställa.]</p>
+      <p>
+        Svensk lag ska tillämpas på dessa villkor. Tvist med anledning av villkoren ska i första
+        hand lösas genom överenskommelse mellan parterna. Kan parterna inte enas ska tvisten
+        avgöras av svensk allmän domstol.
+      </p>
 
       <h2>9. Ändringar av villkoren</h2>
       <p>Vi kan komma att uppdatera dessa villkor. Väsentliga ändringar meddelas i tjänsten.</p>

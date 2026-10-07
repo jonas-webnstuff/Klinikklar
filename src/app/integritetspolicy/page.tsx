@@ -68,9 +68,13 @@ export default function IntegritetspolicyPage() {
 
       <h2>4. Var uppgifterna lagras</h2>
       <p>
-        Uppgifterna lagras hos vår databas- och lagringsleverantör Supabase [region att bekräfta,
-        t.ex. EU/EES]. Uppgifterna sparas så länge du har ett aktivt konto eller så länge det krävs
-        enligt tillämplig lagstiftning [exakt lagringstid per kategori att fastställa].
+        Uppgifterna lagras hos vår databas- och lagringsleverantör Supabase, i deras datacenter
+        inom EU/EES (Irland). Uppgifterna sparas så länge du har ett aktivt konto. Bokförings- och
+        betalningsrelaterade uppgifter sparas i minst sju år efter utgången av det kalenderår
+        bokföringsskyldigheten avser, enligt bokföringslagen. Övriga uppgifter raderas normalt
+        inom tolv månader efter att kontot avslutats, om inte längre lagring krävs enligt
+        tillämplig lagstiftning (t.ex. patientsäkerhetslagen) eller för att hantera en pågående
+        tvist.
       </p>
 
       <h2>5. Vilka vi delar uppgifter med</h2>

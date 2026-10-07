@@ -238,6 +238,7 @@ export interface OperationalComplianceItem {
   key: string;
   label: string;
   placeholder: string;
+  helpText: string;
 }
 
 export const patientSafetyReportItems: OperationalComplianceItem[] = [
@@ -245,21 +246,29 @@ export const patientSafetyReportItems: OperationalComplianceItem[] = [
     key: "patient_safety_report_summary",
     label: "Sammanfattning av årets kvalitetsarbete",
     placeholder: "Sammanfatta årets kvalitetsarbete och hur patientsäkerheten har utvecklats.",
+    helpText:
+      "Kort sammanfattning av vad ni gjort för kvalitets- och patientsäkerhetsarbete under året – inte en fullständig rapport, bara huvuddragen.",
   },
   {
     key: "patient_safety_report_risks",
     label: "Väsentliga risker som identifierats",
     placeholder: "Beskriv de mest väsentliga riskerna som identifierats under året.",
+    helpText:
+      "Beskriv kort de risker som identifierats under året, t.ex. via avvikelser eller riskanalyser – inte en fullständig riskanalys, bara en sammanfattning för året.",
   },
   {
     key: "patient_safety_report_actions",
     label: "Åtgärder som vidtagits",
     placeholder: "Beskriv vilka åtgärder som vidtagits för att minska riskerna.",
+    helpText:
+      "Vilka konkreta åtgärder har genomförts för att hantera de identifierade riskerna? Ange vad som gjordes, inte bara vad som planerades.",
   },
   {
     key: "patient_safety_report_previous_results",
     label: "Resultat av föregående års åtgärder",
     placeholder: "Beskriv resultatet av åtgärder som beslutades i föregående års patientsäkerhetsberättelse.",
+    helpText:
+      "Följ upp: gav förra årets åtgärder önskad effekt? Om det här är första året ni fyller i berättelsen, skriv det.",
   },
 ];
 
@@ -268,19 +277,28 @@ export const lexMariaRoutineItems: OperationalComplianceItem[] = [
     key: "lex_maria_responsible_role",
     label: "Ansvarig roll",
     placeholder: "Vem ansvarar för att bedöma och anmäla enligt Lex Maria (ex. Verksamhetschef)?",
+    helpText:
+      "Vem på kliniken avgör om en händelse ska bedömas enligt Lex Maria och driver anmälan till IVO – oftast verksamhetschefen.",
   },
   {
     key: "lex_maria_process_description",
     label: "Beskrivning av anmälningsprocessen",
     placeholder: "Beskriv hur en allvarlig vårdskada eller risk för sådan identifieras, utreds och anmäls till IVO.",
+    helpText:
+      "Kortfattat: hur upptäcks en allvarlig vårdskada, vem bedömer den, och hur/när anmäls den till IVO? Inte en fullständig rutinmanual, bara huvudstegen.",
   },
 ];
+
+export const lexMariaLastReviewedDateHelpText =
+  "Datum då rutinen senast lästes igenom och bekräftades vara aktuell.";
 
 export const patientFeedbackItems: OperationalComplianceItem[] = [
   {
     key: "patient_feedback_process",
     label: "Hur patienter och närstående kan lämna synpunkter",
     placeholder: "Beskriv hur patienter och närstående kan lämna synpunkter eller klagomål, och hur de hanteras.",
+    helpText:
+      "Beskriv den faktiska kanalen – t.ex. blankett i väntrummet, e-post eller telefon – och vem som tar emot och hanterar synpunkten.",
   },
 ];
 
@@ -289,6 +307,8 @@ export const staffInvolvementItems: OperationalComplianceItem[] = [
     key: "staff_involvement_process",
     label: "Hur personalen görs delaktig i kvalitetsarbetet",
     placeholder: "Beskriv t.ex. regelbundna kvalitetsmöten och hur förbättringsförslag samlas in från personalen.",
+    helpText:
+      "Ett konkret exempel räcker, t.ex. återkommande kvalitetsmöten eller hur personalen kan lämna förbättringsförslag – inte en policy-text.",
   },
 ];
 
@@ -298,7 +318,28 @@ export const preChangeRiskAssessmentItems: OperationalComplianceItem[] = [
     label: "Riskbedömning inför verksamhetsförändringar",
     placeholder:
       "Beskriv rutinen för att göra en ny riskbedömning inför konkreta förändringar (ny utrustning, ny personal, ändrat vårdutbud) – utöver den löpande riskanalysen.",
+    helpText:
+      "Beskriv rutinen för att göra en NY riskbedömning specifikt när något förändras (ny utrustning, ny personal, nytt vårdutbud) – separat från den återkommande riskanalysen i R-03.",
   },
+];
+
+// Used only for workspace-internal completeness (Startsidans Ledningssystem-kort och
+// "Ifyllnadsgrad i workspace") — deliberately never referenced by managementSystemRequiredKeys,
+// complianceRequirements or computeReadinessChecklist, so it can never affect R-01–R-10 / IVO
+// application readiness. lex_maria_last_reviewed_date is a standalone date field (not part of
+// lexMariaRoutineItems, which only covers its two text fields) so it's added here directly.
+export const operationalComplianceItems: OperationalComplianceItem[] = [
+  ...patientSafetyReportItems,
+  ...lexMariaRoutineItems,
+  {
+    key: "lex_maria_last_reviewed_date",
+    label: "Lex Maria – Senast uppdaterad",
+    placeholder: "",
+    helpText: lexMariaLastReviewedDateHelpText,
+  },
+  ...patientFeedbackItems,
+  ...staffInvolvementItems,
+  ...preChangeRiskAssessmentItems,
 ];
 
 export const responsiblePersonRequirementItems: ResponsiblePersonRequirementItem[] = [

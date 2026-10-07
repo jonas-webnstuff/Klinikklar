@@ -3,6 +3,7 @@ import { computeReadinessChecklist } from "@/lib/application-status";
 import {
   facilityRequirementItems,
   managementSystemRequirementItems,
+  operationalComplianceItems,
   type StructuredRequirementCode,
 } from "@/lib/requirements";
 import { createFakeSupabase, type FakeTables } from "@/lib/testing/fakeSupabase";
@@ -200,6 +201,49 @@ describe("computeReadinessChecklist", () => {
       "R-08: styrkande handling (t.ex. aktiebok eller registreringsbevis) saknas"
     );
     expect(result.missingStructuredRequirementFields).not.toContain("R-08: minst en ägare måste läggas till");
+  });
+
+  describe("test #11: operational compliance fields (patientsäkerhetsberättelse, Lex Maria, m.fl.) are isolated from R-02/IVO readiness", () => {
+    it("filling in every operational field does not make an otherwise-incomplete R-02 read as done", async () => {
+      const managementKeys = new Set(managementSystemRequirementItems.map((item) => item.key));
+      const tables = cloneTables(buildGoldenPathTables());
+
+      tables.questionnaire_responses = tables.questionnaire_responses.filter(
+        (row) => !managementKeys.has(row.question_key as string)
+      );
+      tables.questionnaire_responses.push(
+        ...operationalComplianceItems.map((item) => ({
+          application_id: TEST_APPLICATION_ID,
+          question_key: item.key,
+          answer: `Svar för ${item.key}`,
+          follow_up_answer: "",
+        }))
+      );
+
+      const supabase = createFakeSupabase(tables);
+      const result = await computeReadinessChecklist(supabase, TEST_APPLICATION_ID);
+
+      const managementItem = result.ivoChecklistItems.find((item) => item.key === "management_system");
+      expect(managementItem?.done, "operational fields alone must not satisfy R-02").toBe(false);
+      expect(result.canSubmit).toBe(false);
+    });
+
+    it("sanity: operational fields alongside a genuinely complete R-02 still report ready to submit", async () => {
+      const tables = buildGoldenPathTables();
+      tables.questionnaire_responses.push(
+        ...operationalComplianceItems.map((item) => ({
+          application_id: TEST_APPLICATION_ID,
+          question_key: item.key,
+          answer: `Svar för ${item.key}`,
+          follow_up_answer: "",
+        }))
+      );
+
+      const supabase = createFakeSupabase(tables);
+      const result = await computeReadinessChecklist(supabase, TEST_APPLICATION_ID);
+
+      expect(result.canSubmit).toBe(true);
+    });
   });
 
   describe("test #6: a broken query throws instead of silently reporting an all-false checklist", () => {

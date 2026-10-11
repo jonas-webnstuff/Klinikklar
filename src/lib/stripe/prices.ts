@@ -10,25 +10,25 @@ type PlanPriceConfig = {
 export const STRIPE_PLAN_PRICES: Record<PurchasablePlan, PlanPriceConfig> = {
   ansokan: {
     mode: "payment",
-    priceIds: ["price_1UAvfeEmbzXQIQUUFB4Uq8XZ"],
+    priceIds: ["price_1UPQonRBRRb7RNjZ58HZKJgE"],
   },
   step2: {
-    // Klinikklar Drift: 995 kr/mån + 4 995 kr startavgift
+    // Klinikklar Drift: månad + startavgift
     mode: "subscription",
-    priceIds: ["price_1UAvgGEmbzXQIQUUQIXzRaIH", "price_1UAvhJEmbzXQIQUUgF0T699U"],
+    priceIds: ["price_1UPQomRBRRb7RNjZpqXQIv7A", "price_1UPQomRBRRb7RNjZkHY7QG0f"],
   },
   step1: {
-    // Klinikklar Komplett: 995 kr/mån + 19 900 kr startavgift
+    // Klinikklar Komplett: månad + startavgift
     mode: "subscription",
-    priceIds: ["price_1UAvhnEmbzXQIQUUysqQll3O", "price_1UAvi6EmbzXQIQUURYIHOzLc"],
+    priceIds: ["price_1UPQojRBRRb7RNjZuX9Z8p78", "price_1UPQojRBRRb7RNjZdJWm2Ybk"],
   },
 };
 
 // Klinikklar Premium (step3) prices — created in Stripe, not wired into STRIPE_PLAN_PRICES yet.
 // Add "step3" to PurchasablePlan and move these in once "Prioriterad support" actually works
 // (src/app/api/support/create/route.ts).
-// step3 month: price_1UAvibEmbzXQIQUUfj3XiOcC
-// step3 setup fee: price_1UAvizEmbzXQIQUUjQSVKLd8
+// step3 month: price_1UPQofRBRRb7RNjZxmb20mz5
+// step3 setup fee: price_1UPQofRBRRb7RNjZDzNKFSxS
 
 export function isPurchasablePlan(value: string | null): value is PurchasablePlan {
   return value === "ansokan" || value === "step1" || value === "step2";

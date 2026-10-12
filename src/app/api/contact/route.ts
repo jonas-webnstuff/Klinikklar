@@ -32,10 +32,29 @@ async function notifyByEmail(payload: z.infer<typeof bodySchema>) {
   }
 }
 
+const RATE_LIMIT_WINDOW_MINUTES = 10;
+const RATE_LIMIT_MAX_MESSAGES = 3;
+
 export async function POST(request: Request) {
   try {
     const payload = bodySchema.parse(await request.json());
     const supabase = createSupabaseAdminClient();
+
+    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60 * 1000).toISOString();
+    const { count: recentCount, error: rateLimitError } = await supabase
+      .from("contact_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("email", payload.email)
+      .gte("created_at", windowStart);
+
+    if (rateLimitError) throw rateLimitError;
+
+    if ((recentCount ?? 0) >= RATE_LIMIT_MAX_MESSAGES) {
+      return NextResponse.json(
+        { ok: false, error: "Du har skickat flera meddelanden nyligen. Vänta en stund och försök igen." },
+        { status: 429 }
+      );
+    }
 
     const { error } = await supabase.from("contact_messages").insert({
       name: payload.name,

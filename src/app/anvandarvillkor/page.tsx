@@ -64,10 +64,11 @@ export default function AnvandarvillkorPage() {
 
       <h2>7. Uppsägning</h2>
       <p>
-        Abonnemangen (Drift, Komplett och Premium) löper tills vidare utan bindningstid.
-        Uppsägning sker genom att kontakta oss på {COMPANY_INFO.email} och gäller från och med
-        nästa betalperiod – redan betald avgift för innevarande period återbetalas inte. Klinikklar
-        Ansökan är en engångsprodukt och omfattas inte av uppsägning.
+        Abonnemangen (Drift, Komplett och Premium) löper tills vidare utan bindningstid. Ni kan
+        säga upp abonnemanget själva via &quot;Hantera abonnemang&quot; i arbetsytan, eller genom
+        att kontakta oss på {COMPANY_INFO.email}. Uppsägning gäller från och med nästa betalperiod –
+        redan betald avgift för innevarande period återbetalas inte. Klinikklar Ansökan är en
+        engångsprodukt och omfattas inte av uppsägning.
       </p>
       <p>
         Vid avslutat konto hanteras era uppgifter enligt vår integritetspolicy. Ni kan när som

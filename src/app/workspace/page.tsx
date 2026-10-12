@@ -3663,9 +3663,19 @@ function WorkspacePageContent() {
             : "Arbeta löpande med kvalitet, risk, avvikelse och egenkontroll i samma flöde."}
         </p>
         {activePlan ? (
-          <p className="mt-3 inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
-            Aktiv nivå: {planLabels[activePlan]}
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <p className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--brand)]">
+              Aktiv nivå: {planLabels[activePlan]}
+            </p>
+            {activePlan !== "ansokan" ? (
+              <a
+                href="/api/stripe/portal"
+                className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--muted)] transition hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+              >
+                Hantera abonnemang
+              </a>
+            ) : null}
+          </div>
         ) : intendedPlan ? (
           <>
             <a

@@ -32,7 +32,15 @@ export async function POST(request: Request) {
     // actually sell, same as the old bypass this replaces.
     if (organizationId && isPurchasablePlan(plan) && session.payment_status === "paid") {
       const supabase = createSupabaseAdminClient();
-      await supabase.from("organizations").update({ plan }).eq("id", organizationId);
+      const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+
+      await supabase
+        .from("organizations")
+        .update({
+          plan,
+          ...(customerId ? { stripe_customer_id: customerId } : {}),
+        })
+        .eq("id", organizationId);
     }
   }
 

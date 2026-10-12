@@ -12,23 +12,37 @@ const bodySchema = z.object({
 
 async function notifyByEmail(payload: z.infer<typeof bodySchema>) {
   const resend = getResendClient();
-  if (!resend) return;
+  if (!resend) {
+    console.error("[contact] Skipping email notification: RESEND_API_KEY is not set.");
+    return;
+  }
 
   const fromAddress = process.env.RESEND_FROM_EMAIL;
-  if (!fromAddress) return;
+  if (!fromAddress) {
+    console.error("[contact] Skipping email notification: RESEND_FROM_EMAIL is not set.");
+    return;
+  }
 
   // Best-effort — the message is already safely stored in contact_messages regardless of
   // whether this notification goes out, so a Resend hiccup shouldn't fail the whole request.
+  // The error is logged (not swallowed silently) so a misconfiguration is visible in Vercel's
+  // Function Logs instead of just... nothing arriving.
   try {
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: fromAddress,
       to: COMPANY_INFO.email,
       replyTo: payload.email,
       subject: `Nytt meddelande från ${payload.name}`,
       text: `${payload.message}\n\n— ${payload.name} (${payload.email})`,
     });
-  } catch {
-    // Swallowed deliberately; see comment above.
+
+    if (result.error) {
+      console.error("[contact] Resend returned an error:", result.error);
+    } else {
+      console.log("[contact] Email sent via Resend, id:", result.data?.id);
+    }
+  } catch (error) {
+    console.error("[contact] Resend threw an exception:", error);
   }
 }
 

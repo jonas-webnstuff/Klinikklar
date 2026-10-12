@@ -1,9 +1,16 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import type { OrganizationProfileInput } from "@/lib/organization-profile";
 import OrganizationMembersManager from "./OrganizationMembersManager";
 import OrganizationProfileEditor from "./OrganizationProfileEditor";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export const metadata: Metadata = {
+  title: "Min profil | Klinikklar",
+  description: "Hantera din profil, organisation och medlemmar.",
+  robots: { index: false, follow: false },
+};
 
 type MembershipRole = "owner" | "admin" | "editor" | "viewer";
 

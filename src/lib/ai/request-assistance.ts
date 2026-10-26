@@ -1,7 +1,7 @@
 export type AiAssistCallResult<T> = { ok: true; data: T } | { ok: false; error: string; reason?: string };
 
 export async function callAiAssist<T = unknown>(
-  endpoint: "/api/ai/assist" | "/api/ai/generate" | "/api/documents/draft",
+  endpoint: "/api/ai/assist" | "/api/documents/draft",
   body: Record<string, unknown>
 ): Promise<AiAssistCallResult<T>> {
   const response = await fetch(endpoint, {

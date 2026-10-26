@@ -5,9 +5,11 @@ import { careScopeCodeDefinitions } from "@/lib/requirements";
 import { resolveUserApplicationContext } from "@/lib/application-status";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getOrganizationForUser } from "@/lib/server/organization-access";
 
 const bodySchema = z.object({
-  plan: z.enum(["ansokan", "step1", "step2", "step3"]),
+  // Ignored — the plan is read server-side (see below). Still accepted so older clients don't 400.
+  plan: z.enum(["ansokan", "step1", "step2", "step3"]).nullish(),
   mode: z.enum(["ai", "manual"]).default("ai"),
   feature: z.enum([
     "risk_analysis",
@@ -99,7 +101,27 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const payload = bodySchema.parse(await request.json());
+    const parsed = bodySchema.parse(await request.json());
+
+    const authSupabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await authSupabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
+    }
+
+    // The plan the client sends only reflects its own UI state — gate on the organization's
+    // actual paid plan instead, otherwise anyone logged in could claim "step3" and get AI for free.
+    const supabase = createSupabaseAdminClient();
+    const organization = await getOrganizationForUser(supabase, user.id);
+
+    if (!organization?.plan) {
+      return NextResponse.json({ error: "AI-stöd kräver en aktiv plan." }, { status: 403 });
+    }
+
+    const payload = { ...parsed, plan: organization.plan };
 
     if (payload.plan === "step2") {
       return NextResponse.json(
@@ -120,15 +142,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const authSupabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await authSupabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
-    }
-
     // risk_analysis, incident_investigation and routine use this (see generate-assistance.ts
     // featureGuidance) — fetched here rather than trusting client-supplied data, since the client
     // has no way to see another organization's rows anyway and this keeps the enrichment
@@ -140,7 +153,6 @@ export async function POST(request: Request) {
       payload.feature === "incident_investigation" ||
       payload.feature === "routine"
     ) {
-      const supabase = createSupabaseAdminClient();
       const context = await resolveUserApplicationContext(supabase, user.id);
 
       if (context) {

@@ -51,10 +51,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Ogiltigt krav för aktiv ansökan." }, { status: 400 });
     }
 
+    // Dokument och granskning is gated on activePlan in the UI, but that's client state — without
+    // this, an organization with no paid plan could still generate AI drafts by calling us directly.
+    if (!organization?.plan) {
+      return NextResponse.json({ ok: false, error: "Dokumentutkast kräver en aktiv plan." }, { status: 403 });
+    }
+
     const kind = documentKindFromRequirementCode(requirement.code);
 
     const assistance = await generateAssistance({
-      plan: (organization?.plan as "ansokan" | "step1" | "step2" | "step3") || "ansokan",
+      plan: organization.plan as "ansokan" | "step1" | "step2" | "step3",
       feature: "document_draft",
       mode: payload.mode,
       clinicName: clinic?.name || organization?.name || "",

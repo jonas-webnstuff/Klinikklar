@@ -54,6 +54,10 @@ export async function GET(request: Request) {
   const session = await stripe.checkout.sessions.create({
     mode: priceConfig.mode,
     line_items: priceConfig.priceIds.map((price) => ({ price, quantity: 1 })),
+    // Lets beta customers enter a code (e.g. a reduced test-phase price) in Stripe's own
+    // checkout. The codes and their terms live entirely in the Stripe Dashboard (Products →
+    // Coupons) — nothing here needs to change when a code is added, altered or retired.
+    allow_promotion_codes: true,
     client_reference_id: user.id,
     customer_email: user.email ?? undefined,
     metadata: {
